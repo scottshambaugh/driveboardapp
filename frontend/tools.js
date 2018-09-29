@@ -165,6 +165,18 @@ function tools_tjog_init() {
   //   new paper.Point(jobview_width*0.3,0),
   //   new paper.Point(jobview_width*0.7,jobview_height*0.3))
   // group.addChild(rec_up)
+  var arrow_up_sm = new paper.Path()
+  ref = [0.5*jobview_width,jobview_height*0.1-30]
+  arrow_up_sm.add(
+    ref,
+    [ref[0]-15,ref[1]+15],
+    [ref[0]-7.5,ref[1]+15],
+    [ref[0]-7.5,ref[1]+20],
+    [ref[0]+7.5,ref[1]+20],
+    [ref[0]+7.5,ref[1]+15],
+    [ref[0]+15,ref[1]+15],
+    ref)
+  group.addChild(arrow_up_sm)
   var arrow_up = new paper.Path()
   ref = [0.5*jobview_width,jobview_height*0.1]
   arrow_up.add(
@@ -194,6 +206,18 @@ function tools_tjog_init() {
   //   new paper.Point(jobview_width*0.3,jobview_height*0.7),
   //   new paper.Point(jobview_width*0.7,jobview_height))
   // group.addChild(rec_down)
+  var arrow_down_sm = new paper.Path()
+  ref = [0.5*jobview_width,jobview_height*0.9+30]
+  arrow_down_sm.add(
+    ref,
+    [ref[0]-15,ref[1]-15],
+    [ref[0]-7.5,ref[1]-15],
+    [ref[0]-7.5,ref[1]-20],
+    [ref[0]+7.5,ref[1]-20],
+    [ref[0]+7.5,ref[1]-15],
+    [ref[0]+15,ref[1]-15],
+    ref)
+  group.addChild(arrow_down_sm)
   var arrow_down = new paper.Path()
   ref = [0.5*jobview_width,jobview_height*0.9]
   arrow_down.add(
@@ -223,6 +247,18 @@ function tools_tjog_init() {
   //   new paper.Point(0,jobview_height*0.3),
   //   new paper.Point(jobview_width*0.3,jobview_height*0.7))
   // group.addChild(rec_left)
+  var arrow_left_sm = new paper.Path()
+  ref = [0.1*jobview_width-30,0.5*jobview_height]
+  arrow_left_sm.add(
+    ref,
+    [ref[0]+15,ref[1]-15],
+    [ref[0]+15,ref[1]-7.5],
+    [ref[0]+20,ref[1]-7.5],
+    [ref[0]+20,ref[1]+7.5],
+    [ref[0]+15,ref[1]+7.5],
+    [ref[0]+15,ref[1]+15],
+    ref)
+  group.addChild(arrow_left_sm)
   var arrow_left = new paper.Path()
   ref = [0.1*jobview_width,0.5*jobview_height]
   arrow_left.add(
@@ -252,6 +288,18 @@ function tools_tjog_init() {
   //   new paper.Point(jobview_width*0.7,jobview_height*0.3),
   //   new paper.Point(jobview_width,jobview_height*0.7))
   // group.addChild(rec_right)
+  var arrow_right_sm = new paper.Path()
+  ref = [0.9*jobview_width+30,0.5*jobview_height]
+  arrow_right_sm.add(
+    ref,
+    [ref[0]-15,ref[1]-15],
+    [ref[0]-15,ref[1]-7.5],
+    [ref[0]-20,ref[1]-7.5],
+    [ref[0]-20,ref[1]+7.5],
+    [ref[0]-15,ref[1]+7.5],
+    [ref[0]-15,ref[1]+15],
+    ref)
+  group.addChild(arrow_right_sm)
   var arrow_right = new paper.Path()
   ref = [0.9*jobview_width,0.5*jobview_height]
   arrow_right.add(
@@ -278,12 +326,16 @@ function tools_tjog_init() {
   group.addChild(arrow_right_lg)
   // properties
   group.fillColor = '#000000'
+  arrow_up_sm.opacity = 0.7
   arrow_up.opacity = 0.7
   arrow_up_lg.opacity = 0.7
+  arrow_down_sm.opacity = 0.7
   arrow_down.opacity = 0.7
   arrow_down_lg.opacity = 0.7
+  arrow_left_sm.opacity = 0.7
   arrow_left.opacity = 0.7
   arrow_left_lg.opacity = 0.7
+  arrow_right_sm.opacity = 0.7
   arrow_right.opacity = 0.7
   arrow_right_lg.opacity = 0.7
   // create tool
@@ -291,18 +343,26 @@ function tools_tjog_init() {
   tools_tjog.onMouseDown = function(event) {
     var hit = jobview_jogLayer.hitTest(event.point)
     if (hit) {
-      if (hit.item === arrow_up) {
+      if (hit.item === arrow_up_sm) {
+        request_relative_move(0, -1, 0, app_config_main.seekrate, "jogging up 1mm")
+	  } else if (hit.item === arrow_up) {
         request_relative_move(0, -10, 0, app_config_main.seekrate, "jogging up 10mm")
       } else if (hit.item === arrow_up_lg) {
         request_relative_move(0, -50, 0, app_config_main.seekrate, "jogging up 50mm")
+	  } else if (hit.item === arrow_down_sm) {
+        request_relative_move(0, 1, 0, app_config_main.seekrate, "jogging down 1mm")
       } else if (hit.item === arrow_down) {
         request_relative_move(0, 10, 0, app_config_main.seekrate, "jogging down 10mm")
       } else if (hit.item === arrow_down_lg) {
         request_relative_move(0, 50, 0, app_config_main.seekrate, "jogging down 50mm")
+	  } else if (hit.item === arrow_left_sm) {
+        request_relative_move(-1, 0, 0, app_config_main.seekrate, "jogging left 1mm")
       } else if (hit.item === arrow_left) {
         request_relative_move(-10, 0, 0, app_config_main.seekrate, "jogging left 10mm")
       } else if (hit.item === arrow_left_lg) {
         request_relative_move(-50, 0, 0, app_config_main.seekrate, "jogging left 50mm")
+	  } else if (hit.item === arrow_right_sm) {
+        request_relative_move(1, 0, 0, app_config_main.seekrate, "jogging right 1mm")
       } else if (hit.item === arrow_right) {
         request_relative_move(10, 0, 0, app_config_main.seekrate, "jogging right 10mm")
       } else if (hit.item === arrow_right_lg) {
