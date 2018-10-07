@@ -269,6 +269,9 @@ var status_handlers = {
       left: Math.round((status.pos[0]+status.offset[0])*jobview_mm2px-10),
       top: Math.round((status.pos[1]+status.offset[1])*jobview_mm2px-10),
     }, status_every, 'linear' )
+    // set values in X/Y 'input' fields
+    document.getElementById("x_input").value = status.pos[0]
+    document.getElementById("y_input").value = status.pos[1]
   },
   'underruns': function (status) {},
   'stackclear': function (status) {

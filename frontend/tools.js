@@ -64,7 +64,6 @@ function tools_addfill_init() {
   })
 }
 
-
 function tools_toffset_init() {
   // create layer
   jobview_offsetLayer = new paper.Layer()
@@ -102,6 +101,23 @@ function tools_toffset_init() {
       jobview_offsetLayer.visible = true
       jobview_offsetLayer.position = event.point
     }
+  }
+  tools_toffset.makeOffset = function(e) {
+    // makeOffset is called when the user presses the makeOffset_btn. Sets the
+    // current position of the head as the new offset.
+    var x = status_cache.pos[0]
+    var y = status_cache.pos[1]
+    request_get({
+      url:'/offset/'+x+'/'+y+'/0',
+      success: function (data) {
+        $().uxmessage('notice', "Offset set to current position: "+x+","+y)
+        //jobview_offsetLayer.position = new paper.Point(x,y)
+        //request_absolute_move(x, y, 0, app_config_main.seekrate, "Moving to "+x+","+y)
+      },
+      error: function (data) {
+        $().uxmessage('error', "Setting current position as offset not possible!")
+      }
+    })
   }
 }
 

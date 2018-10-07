@@ -299,6 +299,27 @@ function controls_ready() {
     }
   })
 
+  $("#makeOffset_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
+  $("#makeOffset_btn").click(function(e){
+    if (!$(this).hasClass('disabled')) {
+      jobview_jogLayer.visible = false
+      $(".tool_extra_btn").hide()
+      var x_in = Math.round(parseFloat(document.getElementById("x_input").value)*1000)/1000
+      var y_in = Math.round(parseFloat(document.getElementById("y_input").value)*1000)/1000
+      tools_toffset.makeOffset()
+      $("#offset_reset_btn").show()
+      jobview_moveLayer.visible = false
+    } else {
+      setTimeout(function(){
+        $('#select_btn').trigger('click')
+      },500)
+    }
+    // the head should be at the origin of the new offset, but there might be a
+    // mismatch between actual head position and the position stored in internal
+    // variables.
+    //request_absolute_move(0, 0, 0, app_config_main.seekrate, "Moving to Origin.")
+    return true
+  })
 
   $("#offset_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
   $("#offset_btn").click(function(e){
@@ -344,6 +365,23 @@ function controls_ready() {
     return true
   })
 
+  $("#moveTo_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
+  $("#moveTo_btn").click(function(e){
+    if (!$(this).hasClass('disabled')) {
+      jobview_jogLayer.visible = false
+      $(".tool_extra_btn").hide()
+      var x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*1000)/1000
+      var y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*1000)/1000
+      request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving to "+x_mm+","+y_mm)
+      status_cache.ready = undefined  // force status update
+    } else {
+      setTimeout(function(){
+        $('#select_btn').trigger('click')
+      },500)
+    }
+    return true
+  })
+
 
   $("#jog_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
   $("#jog_btn").click(function(e){
@@ -359,6 +397,28 @@ function controls_ready() {
       },500)
     }
     return true
+  })
+
+  $("#x_input").keyup(function(e){
+    // make sure 'value' has less than 4 decimals, is positive and smaller than the
+    // workspace size
+    var x_mm = Math.abs(Math.round(parseFloat(document.getElementById("x_input").value)*1000)/1000)
+    if (x_mm > app_config_main.workspace[0]) {
+      document.getElementById("x_input").value = app_config_main.workspace[0]
+    } else {
+      document.getElementById("x_input").value = x_mm
+    }
+  })
+
+  $("#y_input").keyup(function(e){
+    // make sure 'value' has less than 4 decimals, is positive and smaller than the
+    // workspace size
+    var y_mm = Math.abs(Math.round(parseFloat(document.getElementById("y_input").value)*1000)/1000)
+    if (y_mm > app_config_main.workspace[1]) {
+      document.getElementById("y_input").value = app_config_main.workspace[1]
+    } else {
+      document.getElementById("y_input").value = y_mm
+    }
   })
 
 
