@@ -27,6 +27,23 @@ a, a:active, a:focus {
 -------------------------------------------------- */
 /* Not required for template or sticky footer method. */
 
+/* remove 'spinners' from input number element */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    /* display: none; <- Crashes Chrome on hover */
+    -webkit-appearance: none;
+    margin: 0; /* <-- Apparently some margin are still there even though it's hidden */
+}
+
+/*
+.moveTo_icon {
+  background: url(../img/moveTo_simple.svg);
+  position: relative;
+  top: 1px;
+  display: inline-block;
+}
+*/
+
 #main_navbar {
     margin:0;
     border:0;
