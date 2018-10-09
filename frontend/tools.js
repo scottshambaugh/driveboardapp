@@ -3,6 +3,8 @@ var tools_tselect = undefined
 var tools_toffset = undefined
 var tools_tmove = undefined
 var tools_tjog = undefined
+var tools_tpos = undefined
+var posText = undefined
 
 
 function tools_tselect_init() {
@@ -392,4 +394,25 @@ function tools_tjog_init() {
     //   jobview_jogLayer.position = event.point
     // }
   }
+}
+
+function tools_tpos_init() {
+  // create layer
+  jobview_posLayer = new paper.Layer()
+  jobview_posLayer.transformContent = false
+  jobview_posLayer.pivot = new paper.Point(0,0)
+  jobview_posLayer.visible = false
+  jobview_posLayer.activate()
+  // create group
+  var group = new paper.Group()
+  var xPoint = jobview_width-5;
+  var yPoint = jobview_height*0.025;
+  posText = new paper.PointText(new paper.Point(xPoint, yPoint));
+  posText.justification = 'right';
+  posText.fillColor = 'black';
+  posText.opacity = 0.5
+  posText.fontSize = jobview_height*0.025;
+  posText.content = '(XXX,xxx; YYY,yyyy)';
+  group.addChild(posText)
+  jobview_posLayer.visible = true
 }

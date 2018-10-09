@@ -169,6 +169,7 @@ function jobview_ready() {
   tools_toffset_init()
   tools_tmove_init()
   tools_tjog_init()
+  tools_tpos_init()
   tools_tselect.activate()
 
   // // some test paths
