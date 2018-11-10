@@ -189,7 +189,7 @@ function passes_add_widget() {
 
   // bind pass_add_btn
   $('#pass_add_btn').click(function(e) {
-    passes_add(1500, 100, app_config_main.pxsize, [])
+    passes_add(2000, 20, app_config_main.pxsize, [])
     return false
   })
 
@@ -230,9 +230,9 @@ function passes_set_assignments() {
       passes_add(pass.feedrate, pass.intensity, pass.pxsize, items)
     })
   } else {
-    passes_add(1500, 100, app_config_main.pxsize, [])
-    passes_add(1500, 100, app_config_main.pxsize, [])
-    passes_add(1500, 100, app_config_main.pxsize, [])
+    passes_add(2000, 20, app_config_main.pxsize, [])
+    passes_add(2000, 20, app_config_main.pxsize, [])
+    passes_add(2000, 20, app_config_main.pxsize, [])
   }
   passes_add_widget()
 }
