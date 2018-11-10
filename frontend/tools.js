@@ -108,10 +108,10 @@ function tools_toffset_init() {
   tools_toffset.makeOffset = function(e) {
     // makeOffset is called when the user presses the makeOffset_btn. Sets the
     // current position of the head as the new offset.
-    var x = status_cache.pos[0]
-    var y = status_cache.pos[1]
+    var x = status_cache.pos[0] + status_cache.offset[0]
+    var y = status_cache.pos[1] + status_cache.offset[1]
     request_get({
-      url:'/offset/'+x+'/'+y+'/0',
+      url:'/absoffset/'+x+'/'+y+'/0',
       success: function (data) {
         $().uxmessage('notice', "Offset set to current position: "+x+","+y)
         //jobview_offsetLayer.position = new paper.Point(x,y)
@@ -413,7 +413,7 @@ function tools_tpos_init() {
   posText.fillColor = 'black';
   posText.opacity = 0.5
   posText.fontSize = jobview_height*0.025;
-  posText.content = '(XXX,xxx; YYY,yyyy)';
+  posText.content = '(X: XXX,x; Y: YYY,y';
   group.addChild(posText)
   jobview_posLayer.visible = true
 }

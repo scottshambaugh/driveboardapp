@@ -18,6 +18,7 @@ function status_init() {
     'firmver': undefined,
     'paused': false,
     'pos':[0.0, 0.0, 0.0],
+	'offset':[0.0, 0.0, 0.0],
     'underruns': 0,          // how many times machine is waiting for serial data
     'stackclear': Infinity,  // minimal stack clearance (must stay above 0)
     'progress': 1.0,
@@ -275,7 +276,7 @@ var status_handlers = {
     y_pos = status.pos[1] + status.offset[1]
     //document.getElementById("x_input").value = status.pos[0]
     //document.getElementById("y_input").value = status.pos[1]
-    posText.content = "("+x_pos.toString()+"; "+y_pos.toString()+")"
+    posText.content = "(X: "+x_pos.toFixed(1)+"; Y: "+y_pos.toFixed(1)+")"
   },
   'underruns': function (status) {},
   'stackclear': function (status) {

@@ -327,19 +327,19 @@
         </div>
 
         <div class="btn-group footer_btn">
-          <button id="moveTo_btn" class="btn btn-default" type="submit" title="move to specfied X/Y-position">
+          <button id="moveTo_btn" class="btn btn-default" type="submit" title="relative move by dx, dy">
             <!--<img src="img/moveTo_simple.svg">-->
-            ->(x,y)
+            ->(dx,dy)
           </button>
           <!-- x-field -->
-          <span id="x_span" title="x-coordinate" class="btn btn-default">X:</span>
-          <input type="number" id="x_input" class="btn btn-default" maxlength=4 size=4 value="0" style="width: 6em">
+          <span id="x_span" title="x-coordinate" class="btn btn-default">dx:</span>
+          <input type="text" id="x_input" class="btn btn-default" maxlength=4 size=4 value="0" style="width: 6em">
           <!-- y-field -->
-          <span id="y_span" title="y-coordinate" class="btn btn-default">Y:</span>
-          <input type="number" id="y_input" class="btn btn-default" maxlength=4 size=4 value="0" style="width: 6em">
+          <span id="y_span" title="y-coordinate" class="btn btn-default">dy:</span>
+          <input type="text" id="y_input" class="btn btn-default" maxlength=4 size=4 value="0" style="width: 6em">
           <!-- 'make current position the offset' button -->
           <button id="makeOffset_btn" class="btn btn-default" type="submit" title="set offset to current position">
-            (x,y)->(0,0)
+            (X,Y)->(0,0)
           </button>
         </div>
 

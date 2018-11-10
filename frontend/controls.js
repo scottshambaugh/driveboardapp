@@ -400,9 +400,9 @@ function controls_ready() {
   })
 
   $("#x_input").keyup(function(e){
-    // make sure 'value' has less than 4 decimals, is positive and smaller than the
-    // workspace size
-    var x_mm = Math.abs(Math.round(parseFloat(document.getElementById("x_input").value)*1000)/1000)
+    // make sure 'value' is digit only, by using a regexp and make sure its smaller than the workspace
+    value = document.getElementById("x_input").value.replace(/\D/g,'');
+    var x_mm = Math.abs(Math.round(parseFloat(value)*10)/10);
     if (x_mm > app_config_main.workspace[0]) {
       document.getElementById("x_input").value = app_config_main.workspace[0]
     } else {
@@ -413,7 +413,8 @@ function controls_ready() {
   $("#y_input").keyup(function(e){
     // make sure 'value' has less than 4 decimals, is positive and smaller than the
     // workspace size
-    var y_mm = Math.abs(Math.round(parseFloat(document.getElementById("y_input").value)*1000)/1000)
+    value = document.getElementById("y_input").value.replace(/\D/g,'');
+    var y_mm = Math.abs(Math.round(parseFloat(value)*10)/10)
     if (y_mm > app_config_main.workspace[1]) {
       document.getElementById("y_input").value = app_config_main.workspace[1]
     } else {
