@@ -362,45 +362,30 @@ function tools_tjog_init() {
   tools_tjog.onMouseDown = function(event) {
     var hit = jobview_jogLayer.hitTest(event.point)
     if (hit) {
-<<<<<<< HEAD
       if (hit.item === arrow_up) {
         request_jog(0, -10, 0, "jogging up 10mm")
       } else if (hit.item === arrow_up_lg) {
         request_jog(0, -50, 0, "jogging up 50mm")
-=======
-      if (hit.item === arrow_up_sm) {
-        request_relative_move(0, -1, 0, app_config_main.seekrate, "jogging up 1mm")
-	  } else if (hit.item === arrow_up) {
-        request_relative_move(0, -10, 0, app_config_main.seekrate, "jogging up 10mm")
-      } else if (hit.item === arrow_up_lg) {
-        request_relative_move(0, -50, 0, app_config_main.seekrate, "jogging up 50mm")
-	  } else if (hit.item === arrow_down_sm) {
-        request_relative_move(0, 1, 0, app_config_main.seekrate, "jogging down 1mm")
->>>>>>> UI
+      } else if (hit.item === arrow_up_sm) {
+        request_jog(0, -1, 0, "jogging up 1mm")
       } else if (hit.item === arrow_down) {
         request_jog(0, 10, 0, "jogging down 10mm")
       } else if (hit.item === arrow_down_lg) {
-<<<<<<< HEAD
         request_jog(0, 50, 0, "jogging down 50mm")
-=======
-        request_relative_move(0, 50, 0, app_config_main.seekrate, "jogging down 50mm")
-	  } else if (hit.item === arrow_left_sm) {
-        request_relative_move(-1, 0, 0, app_config_main.seekrate, "jogging left 1mm")
->>>>>>> UI
+      } else if (hit.item === arrow_down_sm) {
+        request_jog(0, 1, 0, "jogging down 1mm")
       } else if (hit.item === arrow_left) {
         request_jog(-10, 0, 0, "jogging left 10mm")
       } else if (hit.item === arrow_left_lg) {
-<<<<<<< HEAD
         request_jog(-50, 0, 0, "jogging left 50mm")
-=======
-        request_relative_move(-50, 0, 0, app_config_main.seekrate, "jogging left 50mm")
-	  } else if (hit.item === arrow_right_sm) {
-        request_relative_move(1, 0, 0, app_config_main.seekrate, "jogging right 1mm")
->>>>>>> UI
+      } else if (hit.item === arrow_left_sm) {
+        request_jog(-1, 0, 0, "jogging left 1mm")
       } else if (hit.item === arrow_right) {
         request_jog(10, 0, 0, "jogging right 10mm")
       } else if (hit.item === arrow_right_lg) {
         request_jog(50, 0, 0, "jogging right 50mm")
+      } else if (hit.item === arrow_right_sm) {
+        request_jog(1, 0, 0, "jogging right 1mm")
       }
     }
   }
