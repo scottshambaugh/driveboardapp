@@ -217,7 +217,9 @@ var status_handlers = {
       $('#boundary_btn').prop('disabled', false) // required
       $('#origin_btn').removeClass('disabled')
       $('#homing_btn').removeClass('disabled')
-      $('#offset_btn').removeClass('disabled')
+	  $('#moveTo_btn').removeClass('disabled')
+      $('#makeOffset_btn').removeClass('disabled')
+	  $('#offset_reset_btn').removeClass('disabled')
       $('#motion_btn').removeClass('disabled')
       $('#jog_btn').removeClass('disabled')
     } else {
@@ -225,7 +227,9 @@ var status_handlers = {
       $('#boundary_btn').addClass('disabled')
       $('#origin_btn').addClass('disabled')
       $('#homing_btn').addClass('disabled')
-      $('#offset_btn').addClass('disabled')
+	  $('#moveTo_btn').addClass('disabled')
+      $('#makeOffset_btn').addClass('disabled')
+	  $('#offset_reset_btn').addClass('disabled')
       $('#motion_btn').addClass('disabled')
       $('#jog_btn').addClass('disabled')
     }

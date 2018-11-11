@@ -303,24 +303,19 @@ function controls_ready() {
   $("#makeOffset_btn").click(function(e){
     if (!$(this).hasClass('disabled')) {
       jobview_jogLayer.visible = false
+	  jobview_moveLayer.visible = false
       $(".tool_extra_btn").hide()
-      var x_in = Math.round(parseFloat(document.getElementById("x_input").value)*1000)/1000
-      var y_in = Math.round(parseFloat(document.getElementById("y_input").value)*1000)/1000
       tools_toffset.makeOffset()
-      $("#offset_reset_btn").show()
-      jobview_moveLayer.visible = false
+	  $().uxmessage('notice', "Back in control.s")
     } else {
       setTimeout(function(){
         $('#select_btn').trigger('click')
       },500)
     }
-    // the head should be at the origin of the new offset, but there might be a
-    // mismatch between actual head position and the position stored in internal
-    // variables.
-    //request_absolute_move(0, 0, 0, app_config_main.seekrate, "Moving to Origin.")
     return true
   })
 
+  /*
   $("#offset_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
   $("#offset_btn").click(function(e){
     if (!$(this).hasClass('disabled')) {
@@ -336,6 +331,7 @@ function controls_ready() {
     }
     return true
   })
+  */
 
   $("#offset_reset_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
   $("#offset_reset_btn").click(function(e){
@@ -343,7 +339,6 @@ function controls_ready() {
       url:'/absoffset/0/0/0',
       success: function (data) {
         $().uxmessage('notice', "Offset cleared.")
-        $("#offset_reset_btn").hide()
         $('#select_btn').trigger('click')
       }
     })
@@ -370,9 +365,10 @@ function controls_ready() {
     if (!$(this).hasClass('disabled')) {
       jobview_jogLayer.visible = false
       $(".tool_extra_btn").hide()
-      var x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*1000)/1000
-      var y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*1000)/1000
-      request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving to "+x_mm+","+y_mm)
+      var x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*10)/10
+      var y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*10)/10
+	  $().uxmessage('notice', "target x: "+x_mm+" y: "+y_mm)
+      //request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving to "+x_mm+","+y_mm)
       status_cache.ready = undefined  // force status update
     } else {
       setTimeout(function(){
@@ -509,7 +505,7 @@ function controls_ready() {
   })
 
   Mousetrap.bind(['o'], function(e) {
-      $('#offset_btn').trigger('click')
+      $('#makeOffset_btn').trigger('click')
       return false;
   })
 
@@ -519,7 +515,7 @@ function controls_ready() {
   })
 
   Mousetrap.bind(['ctrl+up'], function(e) {
-      request_relative_move(0, -1, 0, app_config_main.seekrate, "jogging up 1mm")
+      request_jog(0, -1, 0, "jogging up 1mm")
       return false;
   })
   Mousetrap.bind(['up'], function(e) {
@@ -531,7 +527,7 @@ function controls_ready() {
       return false;
   })
   Mousetrap.bind(['ctrl+down'], function(e) {
-      request_relative_move(0, 1, 0, app_config_main.seekrate, "jogging down 1mm")
+      request_jog(0, 1, 0, "jogging down 1mm")
       return false;
   })
   Mousetrap.bind(['down'], function(e) {
@@ -543,7 +539,7 @@ function controls_ready() {
       return false;
   })
   Mousetrap.bind(['ctrl+left'], function(e) {
-      request_relative_move(-1, 0, 0, app_config_main.seekrate, "jogging left 1mm")
+      request_jog(-1, 0, 0, "jogging left 1mm")
       return false;
   })
   Mousetrap.bind(['left'], function(e) {
@@ -555,7 +551,7 @@ function controls_ready() {
       return false;
   })
   Mousetrap.bind(['ctrl+right'], function(e) {
-      request_relative_move(1, 0, 0, app_config_main.seekrate, "jogging right 1mm")
+      request_jog(1, 0, 0, "jogging right 1mm")
       return false;
   })
   Mousetrap.bind(['right'], function(e) {

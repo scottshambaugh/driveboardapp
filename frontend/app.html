@@ -326,34 +326,36 @@
           </button>
         </div>
 
-        <div class="btn-group footer_btn">
-          <button id="moveTo_btn" class="btn btn-default" type="submit" title="relative move by dx, dy">
-            <!--<img src="img/moveTo_simple.svg">-->
-            ->(dx,dy)
-          </button>
-          <!-- x-field -->
-          <span id="x_span" title="x-coordinate" class="btn btn-default">dx:</span>
-          <input type="text" id="x_input" class="btn btn-default" maxlength=4 size=4 value="0" style="width: 6em">
-          <!-- y-field -->
-          <span id="y_span" title="y-coordinate" class="btn btn-default">dy:</span>
-          <input type="text" id="y_input" class="btn btn-default" maxlength=4 size=4 value="0" style="width: 6em">
-          <!-- 'make current position the offset' button -->
-          <button id="makeOffset_btn" class="btn btn-default" type="submit" title="set offset to current position">
-            (X,Y)->(0,0)
-          </button>
-        </div>
+		<!-- input fields and button to perform relative move-->
+        <form class="form-inline" style="display: inline-block">
+			<div class="input-group"  style="margin-right:1px">
+				<!-- dx-field -->
+				<span id="x_span" title="x-movement" class="input-group-addon">dx:</span>
+				<input type="text" id="x_input" class="form-control input-sm" maxlength=4 size=4 value="0" style="width: 5em">
+				<!-- dy-field -->
+				<span id="y_span" title="y-movement" class="input-group-addon">dy:</span>
+				<input type="text" id="y_input" class="form-control input-sm" maxlength=4 size=4 value="0" style="width: 5em">
+			</div>
+			<div class="input-group">
+				<!-- move button -->
+				<button class="btn btn-default" type="submit" id="moveTo_btn" title="relative move by dx, dy">-> (dx,dy)</button>
+			</div>
+		</form>
 
         <div class="btn-group footer_btn" data-toggle="buttons">
-          <label id="select_btn" class="btn btn-default active">
+          <label id="select_btn" class="btn btn-default active" title="select paths">
             <input type="radio" name="options" autocomplete="off" checked> Select
           </label>
-          <label id="offset_btn" class="btn btn-default">
-            <input type="radio" name="options" autocomplete="off"> Offset
+          <label id="makeOffset_btn" class="btn btn-default" title="set offset to current position [o]">
+            <input type="radio" name="options" autocomplete="off"> Set Offset
           </label>
-          <label id="motion_btn" class="btn btn-default">
+		  <label id="offset_reset_btn" class="btn btn-default" title="reset offset to (0,0)">
+            <input type="radio" name="options" autocomplete="off"> Reset Offset
+          </label>
+          <label id="motion_btn" class="btn btn-default" title="move laser head [m]">
             <input type="radio" name="options" autocomplete="off"> Move
           </label>
-          <label id="jog_btn" class="btn btn-default">
+          <label id="jog_btn" class="btn btn-default" title="jog laser head [j]">
             <input type="radio" name="options" autocomplete="off"> Jog
           </label>
         </div>
@@ -370,15 +372,10 @@
               No job loaded.
             </ul>
           </div>
-          <!-- offset reset button -->
-          <button id="offset_reset_btn" class="btn btn-default tool_extra_btn" type="submit" style="display:none" title="reset offset [SHIFT-O]">
-            Reset Offset
-          </button>
+		  
         </div>
 
         <span id="jog_hotkey_hint" class="tool_extra_btn" style="display:none">Also arrow and shift-arrow keys.</span>
-
-        <!-- <button id="jog_btn" class="btn btn-default" type="submit" title="[J]">Jog</button> -->
 
       </div>
     </footer>
