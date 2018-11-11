@@ -264,6 +264,7 @@ function controls_ready() {
       url:'/homing',
       success: function (data) {
         $().uxmessage('notice', "Homing ...")
+		$('#offset_reset_btn').trigger('click')
       }
     })
     return false
@@ -306,7 +307,6 @@ function controls_ready() {
 	  jobview_moveLayer.visible = false
       $(".tool_extra_btn").hide()
       tools_toffset.makeOffset()
-	  $().uxmessage('notice', "Back in control.s")
     } else {
       setTimeout(function(){
         $('#select_btn').trigger('click')
