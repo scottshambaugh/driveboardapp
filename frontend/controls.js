@@ -360,15 +360,14 @@ function controls_ready() {
     return true
   })
 
-  $("#moveTo_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
-  $("#moveTo_btn").click(function(e){
+  $("#moveBy_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
+  $("#moveBy_btn").click(function(e){
     if (!$(this).hasClass('disabled')) {
-      jobview_jogLayer.visible = false
+	  jobview_jogLayer.visible = false
       $(".tool_extra_btn").hide()
       var x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*10)/10
       var y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*10)/10
-	  $().uxmessage('notice', "target x: "+x_mm+" y: "+y_mm)
-      //request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving to "+x_mm+","+y_mm)
+      request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving by "+x_mm+","+y_mm)
       status_cache.ready = undefined  // force status update
     } else {
       setTimeout(function(){
@@ -377,7 +376,6 @@ function controls_ready() {
     }
     return true
   })
-
 
   $("#jog_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
   $("#jog_btn").click(function(e){
@@ -396,9 +394,13 @@ function controls_ready() {
   })
 
   $("#x_input").keyup(function(e){
-    // make sure 'value' is digit only, by using a regexp and make sure its smaller than the workspace
-    value = document.getElementById("x_input").value.replace(/\D/g,'');
-    var x_mm = Math.abs(Math.round(parseFloat(value)*10)/10);
+    // make sure 'value' is a float with at most one decial point and always smaller than the workspace
+	value = document.getElementById("x_input").value;
+	x_mm = value.match(/[-+]?[0-9]+[\.|,]?[0-9]?/);
+	x_mm = x_mm.toString().replace(/,/,'.')
+	if (isNaN(x_mm)) {
+		x_mm = 0;
+	}
     if (x_mm > app_config_main.workspace[0]) {
       document.getElementById("x_input").value = app_config_main.workspace[0]
     } else {
@@ -407,16 +409,21 @@ function controls_ready() {
   })
 
   $("#y_input").keyup(function(e){
-    // make sure 'value' has less than 4 decimals, is positive and smaller than the
-    // workspace size
-    value = document.getElementById("y_input").value.replace(/\D/g,'');
-    var y_mm = Math.abs(Math.round(parseFloat(value)*10)/10)
+    // make sure 'value' is a float with at most one decial point and always smaller than the workspace
+	value = document.getElementById("y_input").value;
+	y_mm = value.match(/[-+]?[0-9]+[\.|,]?[0-9]?/);
+	y_mm = y_mm.toString().replace(/,/,'.')
+	if (isNaN(y_mm)) {
+		y_mm = 0;
+	}
     if (y_mm > app_config_main.workspace[1]) {
       document.getElementById("y_input").value = app_config_main.workspace[1]
     } else {
       document.getElementById("y_input").value = y_mm
     }
   })
+  
+  
 
 
 

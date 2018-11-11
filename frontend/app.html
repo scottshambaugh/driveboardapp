@@ -331,16 +331,20 @@
 			<div class="input-group"  style="margin-right:1px">
 				<!-- dx-field -->
 				<span id="x_span" title="x-movement" class="input-group-addon">dx:</span>
-				<input type="text" id="x_input" class="form-control input-sm" maxlength=4 size=4 value="0" style="width: 5em">
+				<input type="text" id="x_input" class="form-control input-sm" maxlength=6 size=6 value="0" style="width: 5em">
 				<!-- dy-field -->
 				<span id="y_span" title="y-movement" class="input-group-addon">dy:</span>
-				<input type="text" id="y_input" class="form-control input-sm" maxlength=4 size=4 value="0" style="width: 5em">
+				<input type="text" id="y_input" class="form-control input-sm" maxlength=6 size=6 value="0" style="width: 5em">
 			</div>
-			<div class="input-group">
-				<!-- move button -->
-				<button class="btn btn-default" type="submit" id="moveTo_btn" title="relative move by dx, dy">-> (dx,dy)</button>
+			<!-- move button
+			<div class="input-group">				
+				<button class="btn btn-default" type="button" id="moveBy_btn" title="relative move by dx, dy">-> (dx,dy)</button>
 			</div>
+			-->
 		</form>
+		
+		<!-- it might look better if the button is in the input form, but then the page refreshes on button click...somebody with more knowledge and time might be able to fix it. -->
+		<button class="btn btn-default" type="button" id="moveBy_btn" title="relative move by dx, dy">-> (dx,dy)</button>
 
         <div class="btn-group footer_btn" data-toggle="buttons">
           <label id="select_btn" class="btn btn-default active" title="select paths">
