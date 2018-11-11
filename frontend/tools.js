@@ -105,8 +105,8 @@ function tools_toffset_init() {
       jobview_offsetLayer.position = event.point
     }
   }
-  tools_toffset.makeOffset = function(e) {
-    // makeOffset is called when the user presses the makeOffset_btn. Sets the
+  tools_toffset.offset_set = function(e) {
+    // offset_set is called when the user presses the offset_set_btn. Sets the
     // current position of the head as the new offset.
     var x = status_cache.pos[0] + status_cache.offset[0]
     var y = status_cache.pos[1] + status_cache.offset[1]

@@ -300,13 +300,13 @@ function controls_ready() {
     }
   })
 
-  $("#makeOffset_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
-  $("#makeOffset_btn").click(function(e){
+  $("#offset_set_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
+  $("#offset_set_btn").click(function(e){
     if (!$(this).hasClass('disabled')) {
       jobview_jogLayer.visible = false
 	  jobview_moveLayer.visible = false
       $(".tool_extra_btn").hide()
-      tools_toffset.makeOffset()
+      tools_toffset.offset_set()
     } else {
       setTimeout(function(){
         $('#select_btn').trigger('click')
@@ -512,7 +512,7 @@ function controls_ready() {
   })
 
   Mousetrap.bind(['o'], function(e) {
-      $('#makeOffset_btn').trigger('click')
+      $('#offset_set_btn').trigger('click')
       return false;
   })
 
