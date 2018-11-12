@@ -367,7 +367,7 @@ function controls_ready() {
       $(".tool_extra_btn").hide()
       var x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*10)/10
       var y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*10)/10
-      request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving by "+x_mm+","+y_mm)
+      request_relative_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving by "+x_mm+","+y_mm)
       status_cache.ready = undefined  // force status update
     } else {
       setTimeout(function(){
@@ -394,33 +394,45 @@ function controls_ready() {
   })
 
   $("#x_input").keyup(function(e){
-    // make sure 'value' is a float with at most one decial point and always smaller than the workspace
+    // make sure 'value' is a float with at most one decimal point and always smaller than the workspace
 	value = document.getElementById("x_input").value;
 	x_mm = value.match(/[-+]?[0-9]+[\.|,]?[0-9]?/);
-	x_mm = x_mm.toString().replace(/,/,'.')
-	if (isNaN(x_mm)) {
-		x_mm = 0;
+	// check for only minus sign as input. Otherwise, a single minus-sign without any following digit will quickly be removed, making it annoying to type negative values.
+	if (x_mm.toString().localeCompare('-') == 0) {
+		document.getElementById("x_input").value = x_mm
+	} else {	
+		if (isNaN(x_mm)) {
+			x_mm = 0;
+		}
+		if (x_mm > app_config_main.workspace[0] - status_cache.pos[0] - status_cache.offset[0]) {
+		  document.getElementById("x_input").value = Math.round((app_config_main.workspace[0] - status_cache.pos[0] - status_cache.offset[0])*10)/10
+		} else if (x_mm < - status_cache.pos[0] - status_cache.offset[0]) {
+		  document.getElementById("x_input").value = Math.round((- status_cache.pos[0] - status_cache.offset[0])*10)/10
+		} else {
+		  document.getElementById("x_input").value = x_mm
+		}
 	}
-    if (x_mm > app_config_main.workspace[0]) {
-      document.getElementById("x_input").value = app_config_main.workspace[0]
-    } else {
-      document.getElementById("x_input").value = x_mm
-    }
   })
 
   $("#y_input").keyup(function(e){
-    // make sure 'value' is a float with at most one decial point and always smaller than the workspace
+    // make sure 'value' is a float with at most one decimal point and always smaller than the workspace
 	value = document.getElementById("y_input").value;
 	y_mm = value.match(/[-+]?[0-9]+[\.|,]?[0-9]?/);
-	y_mm = y_mm.toString().replace(/,/,'.')
-	if (isNaN(y_mm)) {
-		y_mm = 0;
+	// check for only minus sign as input. Otherwise, a single minus-sign without any following digit will quickly be removed, making it annoying to type negative values.
+	if (y_mm.toString().localeCompare('-') == 0) {
+		document.getElementById("y_input").value = y_mm
+	} else {	
+		if (isNaN(y_mm)) {
+			y_mm = 0;
+		}
+		if (y_mm > app_config_main.workspace[1] - status_cache.pos[1] - status_cache.offset[1]) {
+		  document.getElementById("y_input").value = Math.round((app_config_main.workspace[1] - status_cache.pos[1] - status_cache.offset[1])*10)/10
+		} else if (y_mm < - status_cache.pos[1] - status_cache.offset[1]) {
+		  document.getElementById("y_input").value = Math.round((- status_cache.pos[1] - status_cache.offset[1])*10)/10
+		} else {
+		  document.getElementById("y_input").value = y_mm
+		}
 	}
-    if (y_mm > app_config_main.workspace[1]) {
-      document.getElementById("y_input").value = app_config_main.workspace[1]
-    } else {
-      document.getElementById("y_input").value = y_mm
-    }
   })
   
   
