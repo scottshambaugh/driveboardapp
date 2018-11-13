@@ -363,10 +363,27 @@ function controls_ready() {
   $("#moveBy_btn").tooltip({placement:'top', delay: {show:1000, hide:100}})
   $("#moveBy_btn").click(function(e){
     if (!$(this).hasClass('disabled')) {
-	  jobview_jogLayer.visible = false
-      $(".tool_extra_btn").hide()
-      var x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*10)/10
-      var y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*10)/10
+        jobview_jogLayer.visible = false
+        $(".tool_extra_btn").hide()
+        x_mm = Math.round(parseFloat(document.getElementById("x_input").value)*10)/10
+        y_mm = Math.round(parseFloat(document.getElementById("y_input").value)*10)/10
+        if (isNaN(x_mm)) {
+            x_mm = 0;
+        }
+        if (x_mm > app_config_main.workspace[0] - status_cache.pos[0] - status_cache.offset[0]) {
+          x_mm = Math.round((app_config_main.workspace[0] - status_cache.pos[0] - status_cache.offset[0])*10)/10
+        } else if (x_mm < - status_cache.pos[0] - status_cache.offset[0]) {
+          x_mm = Math.round((- status_cache.pos[0] - status_cache.offset[0])*10)/10
+        }
+        if (isNaN(y_mm)) {
+            y_mm = 0;
+        }
+        if (y_mm > app_config_main.workspace[1] - status_cache.pos[1] - status_cache.offset[1]) {
+          y_mm = Math.round((app_config_main.workspace[1] - status_cache.pos[1] - status_cache.offset[1])*10)/10
+        } else if (y_mm < - status_cache.pos[1] - status_cache.offset[1]) {
+          y_mm = Math.round((- status_cache.pos[1] - status_cache.offset[1])*10)/10
+        }
+          
       request_relative_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving by "+x_mm+","+y_mm)
       status_cache.ready = undefined  // force status update
     } else {
