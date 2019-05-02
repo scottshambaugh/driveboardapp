@@ -8,7 +8,7 @@
 # The full license is in the file COPYING.txt, distributed with this software.
 #-----------------------------------------------------------------------------
 
-from __future__ import print_function
+
 
 import codecs
 import sys, os
@@ -35,10 +35,10 @@ if sys.platform.startswith('win'):
 # PYPI page will contain complete PyInstaller changelog.
 def read(filename):
     try:
-        return unicode(codecs.open(filename, encoding='utf-8').read())
+        return str(codecs.open(filename, encoding='utf-8').read())
     except NameError:
         return open(filename, 'r', encoding='utf-8').read()
-long_description = u'\n\n'.join([read('README.rst'),
+long_description = '\n\n'.join([read('README.rst'),
                                  read('doc/CHANGES.rst')])
 if sys.version_info < (3,):
     long_description = long_description.encode('utf-8')

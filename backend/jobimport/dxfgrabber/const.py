@@ -2,7 +2,7 @@
 # Created: 21.07.2012, taken from my ezdxf project
 # Copyright (C) 2012, Manfred Moitzi
 # License: MIT License
-from __future__ import unicode_literals
+
 __author__ = "mozman <mozman@gmx.at>"
 
 ENV_CYTHON = 'DXFGRABBER_CYTHON'
@@ -26,7 +26,7 @@ acadrelease = {
 }
 
 dxfversion = {
-    acad: dxf for dxf, acad in acadrelease.items()
+    acad: dxf for dxf, acad in list(acadrelease.items())
 }
 
 # Entity: Polyline, Polymesh

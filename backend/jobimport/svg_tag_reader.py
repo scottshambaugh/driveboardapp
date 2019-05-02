@@ -62,7 +62,7 @@ class SVGTagReader:
         if tagName in self._handlers:
             # log.debug("reading tag: " + tagName)
             # parse own attributes and overwrite in node
-            for attr,value in tag.attrib.items():
+            for attr,value in list(tag.attrib.items()):
                 # log.debug("considering attrib: " + attr)
                 self._attribReader.read_attrib(node, attr, value)
             # accumulate transformations
@@ -255,7 +255,7 @@ class SVGTagReader:
         # Something like: =pass12:2550:100%:#fff000:#ababab:#ccc999=
         # Results in: [('12', '2550', '', '100', '%', ':#fff000', ':#ababab', ':#ccc999', '', '', '')]
         # convert values to actual numbers
-        for i in xrange(len(matches)):
+        for i in range(len(matches)):
             vals = list(matches[i])
             # pass
             vals[0] = int(vals[0])

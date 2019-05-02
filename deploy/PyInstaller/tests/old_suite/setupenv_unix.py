@@ -7,7 +7,7 @@
 # The full license is in the file COPYING.txt, distributed with this software.
 #-----------------------------------------------------------------------------
 
-from __future__ import print_function
+
 
 # Install necessary 3rd party Python modules to run all tests.
 # This script is supposed to be used in a continuous integration system:

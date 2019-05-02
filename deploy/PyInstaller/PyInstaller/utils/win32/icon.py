@@ -17,7 +17,7 @@ LOAD_LIBRARY_AS_DATAFILE = 2
 import struct
 import types
 try:
-    StringTypes = types.StringTypes
+    StringTypes = (str,)
 except AttributeError:
     StringTypes = [ type("") ]
 
@@ -113,7 +113,7 @@ class IconFile:
 
 def CopyIcons_FromIco(dstpath, srcpath, id=1):
     import win32api #, win32con
-    icons = map(IconFile, srcpath)
+    icons = list(map(IconFile, srcpath))
     logger.info("Updating icons from %s to %s", srcpath, dstpath)
 
     hdst = win32api.BeginUpdateResource(dstpath, 0)

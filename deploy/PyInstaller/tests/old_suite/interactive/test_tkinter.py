@@ -13,7 +13,7 @@
 try:
     from tkinter import *
 except ImportError:
-    from Tkinter import *
+    from tkinter import *
 
 
 root = Tk()

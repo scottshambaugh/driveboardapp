@@ -172,7 +172,7 @@ class Target(object):
                 logger.info("Building because %s is bad", self.tocbasename)
             else:
                 # create a dict for easier access
-                data = dict(zip((g[0] for g in self._GUTS), data))
+                data = dict(list(zip((g[0] for g in self._GUTS), data)))
         # assemble if previous data was not found or is outdated
         if not data or self._check_guts(data, last_build):
             self.assemble()

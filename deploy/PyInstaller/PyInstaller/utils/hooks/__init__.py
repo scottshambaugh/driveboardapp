@@ -62,7 +62,7 @@ def __exec_python_cmd(cmd, env=None):
     # Encode unicode filenames using FS encoding.
     # TODO: `os.environ` wrapper that encodes automatically?
     if is_py2:
-        if isinstance(pp, unicode):
+        if isinstance(pp, str):
             pp = pp.encode(sys.getfilesystemencoding())
 
     # PYTHONPATH might be already defined in the 'env' argument. Prepend it.

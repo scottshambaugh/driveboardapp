@@ -7,5 +7,5 @@ if not sys.platform == "darwin":  # Linux Windows
 else:  # OSX
     cmd = "python PyInstaller/pyinstaller.py --onedir --windowed --clean --noconfirm app.spec"
 
-print cmd
+print(cmd)
 os.system(cmd)

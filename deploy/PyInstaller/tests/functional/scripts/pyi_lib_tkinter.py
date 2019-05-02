@@ -20,7 +20,7 @@ import os
 try:
     from tkinter import *
 except ImportError:
-    from Tkinter import *
+    from tkinter import *
 
 
 def compare(test_name, expect, frozen):

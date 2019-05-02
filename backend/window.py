@@ -4,8 +4,8 @@ import sys
 import itertools
 import webbrowser
 
-import Queue
-import Tkinter as tk
+import queue
+import tkinter as tk
 
 from config import conf
 
@@ -43,7 +43,7 @@ def init():
 
 
     # output queue, required because of tkinter thread issues
-    q = Queue.Queue()
+    q = queue.Queue()
 
     class OutputHandler(object):
         def write(self, msg):
@@ -69,7 +69,7 @@ def init():
             return
 
     def update(q):
-        for line in itertools.islice(iterex(q.get_nowait, Queue.Empty), 10000):
+        for line in itertools.islice(iterex(q.get_nowait, queue.Empty), 10000):
             if line is None:
                 return  # stop updating
             else:

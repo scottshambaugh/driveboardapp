@@ -8,7 +8,7 @@
 #-----------------------------------------------------------------------------
 
 
-import Tix as tix
+import tkinter.tix as tix
 
 root = tix.Tk()
 root.title("Test for TiX")

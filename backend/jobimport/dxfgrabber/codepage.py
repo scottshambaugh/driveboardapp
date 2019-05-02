@@ -2,7 +2,7 @@
 # Created: 21.07.2012, taken from my ezdxf project
 # Copyright (C) 2012, Manfred Moitzi
 # License: MIT License
-from __future__ import unicode_literals
+
 __author__ = "mozman <mozman@gmx.at>"
 
 codepages = {
@@ -24,14 +24,14 @@ codepages = {
 
 
 def toencoding(dxfcodepage):
-    for codepage, encoding in codepages.items():
+    for codepage, encoding in list(codepages.items()):
         if dxfcodepage.endswith(codepage):
             return encoding
     return 'cp1252'
 
 
 def tocodepage(encoding):
-    for codepage, enc in codepages.items():
+    for codepage, enc in list(codepages.items()):
         if enc == encoding:
             return 'ANSI_'+codepage
     return 'ANSI_1252'

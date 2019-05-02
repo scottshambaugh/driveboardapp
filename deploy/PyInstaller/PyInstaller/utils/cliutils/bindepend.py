@@ -12,7 +12,7 @@
 Show dll dependencies of executable files or other dynamic libraries.
 """
 
-from __future__ import print_function
+
 
 import glob
 import argparse

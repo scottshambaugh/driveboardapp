@@ -2,7 +2,7 @@
 # Created: 21.07.2012, taken from my ezdxf project
 # Copyright (C) 2012, Manfred Moitzi
 # License: MIT License
-from __future__ import unicode_literals
+
 __author__ = "mozman <mozman@gmx.at>"
 
 from .codepage import toencoding
@@ -25,7 +25,7 @@ class Sections(object):
 
     def _create_default_sections(self):
         self._sections['header'] = HeaderSection()
-        for cls in SECTIONMAP.values():
+        for cls in list(SECTIONMAP.values()):
             section = cls()
             self._sections[section.name] = section
 

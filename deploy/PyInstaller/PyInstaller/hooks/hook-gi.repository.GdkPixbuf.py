@@ -80,7 +80,7 @@ else:
 
             # Rejoin these lines in a manner preserving this object's "unicode"
             # type under Python 2.
-            cachedata = u'\n'.join(cd)
+            cachedata = '\n'.join(cd)
 
             # Write the updated loader cache to this file.
             with open_file(cachefile, 'w') as fp:

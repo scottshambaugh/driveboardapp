@@ -9,8 +9,8 @@
 import socket
 
 try:
-    import BaseHTTPServer
-    import SimpleHTTPServer
+    import http.server
+    import http.server
 except ImportError:
     import http.server as BaseHTTPServer
     import http.server as SimpleHTTPServer
@@ -41,7 +41,7 @@ else:
     basedir = os.path.dirname(__file__)
 
 
-SERVER_CERT = os.path.join(basedir, u"server.pem")
+SERVER_CERT = os.path.join(basedir, "server.pem")
 
 
 if not os.path.exists(SERVER_CERT):
@@ -59,9 +59,9 @@ def main():
         try:
             # SSL server copied from here:
             # http://www.piware.de/2011/01/creating-an-https-server-in-python/
-            httpd = BaseHTTPServer.HTTPServer(
+            httpd = http.server.HTTPServer(
                 ('localhost', SERVER_PORT),
-                SimpleHTTPServer.SimpleHTTPRequestHandler)
+                http.server.SimpleHTTPRequestHandler)
         except socket.error as e:
             if e.errno == 98:  # Address in use
                 SERVER_PORT += 1
@@ -94,7 +94,7 @@ def main():
 
     # Use requests to get a page from the server
     requests.get(
-        u"https://localhost:{}".format(SERVER_PORT),
+        "https://localhost:{}".format(SERVER_PORT),
         verify=SERVER_CERT)
     # requests.get("https://github.com")
 

@@ -18,7 +18,7 @@ PYTHON3 = sys.version_info.major > 2
 if PYTHON3:
     tostr = str
 else:  # PYTHON27
-    tostr = unicode
+    tostr = str
 
 # end of Python 2/3 adaption
 # if tostr does not work, look at package 'dxfwrite' for escaping unicode chars

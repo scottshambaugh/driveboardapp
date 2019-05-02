@@ -58,8 +58,8 @@ class TestOpenRaster(unittest.TestCase):
         img_s = img_g.resize((w,h), resample=Image.BICUBIC)
         # img_s.show()
         data = img_s.getdata()
-        for lx in xrange(h):
-            for rx in xrange(w):
+        for lx in range(h):
+            for rx in range(w):
                 x = data[w*lx+rx]
                 if x < 100:
                     sys.stdout.write('.')
@@ -90,12 +90,12 @@ class TestRaster(unittest.TestCase):
                     "feedrate":4000,
                     "intensity":53
                 }]
-        print job.keys()
+        print(list(job.keys()))
         pprint.pprint(job['raster']['passes'])
         jobname = lasersaur.load(job)
         self.assertIn(jobname, lasersaur.listing())
         lasersaur.run(jobname, progress=True)
-        print "done!"
+        print("done!")
 
 
 if __name__ == '__main__':

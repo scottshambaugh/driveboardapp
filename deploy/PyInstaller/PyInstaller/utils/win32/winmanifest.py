@@ -102,7 +102,7 @@ logger = logging.getLogger(__name__)
 # Use `isinstance(foo, string_types)` instead.
 
 if is_py2:
-    string_types = basestring
+    string_types = str
 else:
     string_types = str
 
@@ -900,7 +900,7 @@ class Manifest(object):
                              "8"    :"{4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38}",
                              "8.1"  :"{1f676c76-80e1-4239-95bb-83d0f6d0da78}",
                              "10"   :"{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"}
-        for guid in supportedOS_guids.values():
+        for guid in list(supportedOS_guids.values()):
             sosE = doc.cE("supportedOS")
             sosE.setAttribute("Id", guid)
             caE.aChild(sosE)
@@ -974,8 +974,8 @@ def ManifestFromResFile(filename, names=None, languages=None):
     res = GetManifestResources(filename, names, languages)
     pth = []
     if res and res[RT_MANIFEST]:
-        while isinstance(res, dict) and res.keys():
-            key = res.keys()[0]
+        while isinstance(res, dict) and list(res.keys()):
+            key = list(res.keys())[0]
             pth.append(str(key))
             res = res[key]
     if isinstance(res, dict):

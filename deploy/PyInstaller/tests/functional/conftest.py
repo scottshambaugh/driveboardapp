@@ -11,7 +11,7 @@
 # =======
 # Futures
 # -------
-from __future__ import print_function
+
 
 # Library imports
 # ---------------
@@ -178,7 +178,7 @@ class AppBuilder(object):
                                   testname + '.py')
         source = textwrap.dedent(source)
         with io.open(scriptfile, 'w', encoding='utf-8') as ofh:
-            print(u'# -*- coding: utf-8 -*-', file=ofh)
+            print('# -*- coding: utf-8 -*-', file=ofh)
             print(source, file=ofh)
         return self.test_script(scriptfile, *args, **kwargs)
 
@@ -314,11 +314,11 @@ class AppBuilder(object):
         # fails with ASCII encode error. subprocess succeeds if progname is
         # mbcs-encoded 'bytes'
         if is_win and is_py2:
-            if isinstance(exe_path, unicode):
+            if isinstance(exe_path, str):
                 exe_path = exe_path.encode('mbcs')
-            if isinstance(prog_name, unicode):
+            if isinstance(prog_name, str):
                 prog_name = prog_name.encode('mbcs')
-            if isinstance(prog_cwd, unicode):
+            if isinstance(prog_cwd, str):
                 prog_cwd = prog_cwd.encode('mbcs')
 
         args = [prog_name] + args

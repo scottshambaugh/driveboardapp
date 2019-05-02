@@ -99,11 +99,11 @@ def build():
     #os.system('%(dude)s -U hfuse:w:0xd2:m -U lfuse:w:0xff:m' % {'dude':AVRDUDEAPP})
 
     ## clean after upload
-    print "Cleaning up build files."
+    print("Cleaning up build files.")
     # current_dir = os.path.dirname(os.path.abspath(__file__))
     # current_dir = os.path.dirname(inspect.getfile(inspect.currentframe()))
     current_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
-    print current_dir
+    print(current_dir)
     for fileobj in OBJECTS:
         file_abs = os.path.join(current_dir, '%(file)s.o' % {'file':fileobj})
         if os.path.isfile(file_abs):
@@ -120,7 +120,7 @@ def build():
 if len(sys.argv) == 2:
     # (1) get the serial device from the argument list
     SERIAL_PORT = sys.argv[1]
-    print "Using serial device '"+ SERIAL_PORT +"' from command line."
+    print("Using serial device '"+ SERIAL_PORT +"' from command line.")
 else:
     if os.path.isfile(CONFIG_FILE):
         # (2) get the serial device from the config file
@@ -128,7 +128,7 @@ else:
         line = fp.readline().strip()
         if len(line) > 3:
             SERIAL_PORT = line
-            print "Using serial device '"+ SERIAL_PORT +"' from '" + CONFIG_FILE + "'."
+            print("Using serial device '"+ SERIAL_PORT +"' from '" + CONFIG_FILE + "'.")
 
 
 
@@ -139,7 +139,7 @@ if not SERIAL_PORT:
         for device in devices:
             if device[:len(GUESS_PPREFIX)] == GUESS_PPREFIX:
                 SERIAL_PORT = "/dev/" + device
-                print "Using serial device '"+ SERIAL_PORT +"' by best guess."
+                print("Using serial device '"+ SERIAL_PORT +"' by best guess.")
                 break
 
 
@@ -147,14 +147,14 @@ if not SERIAL_PORT:
 if SERIAL_PORT:
     build()
 else:
-    print "-----------------------------------------------------------------------------"
-    print "ERROR: flash.py doesn't know what serial device to connect to!"
-    print "On Linux or OSX this is something like '/dev/tty.usbmodemfd121' and on"
-    print "Windows this is something like 'COM1', 'COM2', 'COM3', ..."
-    print "The serial port can be supplied in one of the following ways:"
-    print "(1) First argument on the  command line."
-    print "(2) In a config file named '" + CONFIG_FILE + "' (located in same directory)"
-    print "    with the serial port string on the first line."
-    print "(3) Best guess. On Linux and OSX the app can guess the serial name by"
-    print "    choosing the first device it finds starting with '"+ GUESS_PPREFIX +"'."
-    print "-----------------------------------------------------------------------------"
+    print("-----------------------------------------------------------------------------")
+    print("ERROR: flash.py doesn't know what serial device to connect to!")
+    print("On Linux or OSX this is something like '/dev/tty.usbmodemfd121' and on")
+    print("Windows this is something like 'COM1', 'COM2', 'COM3', ...")
+    print("The serial port can be supplied in one of the following ways:")
+    print("(1) First argument on the  command line.")
+    print("(2) In a config file named '" + CONFIG_FILE + "' (located in same directory)")
+    print("    with the serial port string on the first line.")
+    print("(3) Best guess. On Linux and OSX the app can guess the serial name by")
+    print("    choosing the first device it finds starting with '"+ GUESS_PPREFIX +"'.")
+    print("-----------------------------------------------------------------------------")

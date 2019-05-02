@@ -20,7 +20,7 @@ https://github.com/kennethreitz/requests/pull/2375 for the corresponding pull
 request.
 '''
 
-from __future__ import absolute_import
+
 import sys
 
 try:

@@ -89,10 +89,10 @@ def importorskip(modname, minversion=None):
     # Convert all other unexpected errors into the same decoration.
     except Exception as exc:
         # For debuggability, print a verbose stacktrace.
-        print('importorskip: Exception in module "{}":'.format(modname))
-        print('-' * 60)
+        print(('importorskip: Exception in module "{}":'.format(modname)))
+        print(('-' * 60))
         traceback.print_exc(file=sys.stdout)
-        print('-' * 60)
+        print(('-' * 60))
 
         return skip(str(exc))
     # Else, this module is importable and optionally satisfies this minimum

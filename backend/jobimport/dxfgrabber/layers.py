@@ -59,7 +59,7 @@ class Table(object):
         return name in self._table_entries
 
     def __iter__(self):
-        return iter(self._table_entries.values())
+        return iter(list(self._table_entries.values()))
 
     def __len__(self):
         return len(self._table_entries)

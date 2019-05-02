@@ -120,25 +120,19 @@ def _GetResources(hsrc, types=None, names=None, languages=None):
         # logger.debug("Enumerating resource types")
         enum_types = win32api.EnumResourceTypes(hsrc)
         if types and not "*" in types:
-            enum_types = filter(lambda type_:
-                                type_ in types,
-                                enum_types)
+            enum_types = [type_ for type_ in enum_types if type_ in types]
         for type_ in enum_types:
             # logger.debug("Enumerating resources of type %s", type_)
             enum_names = win32api.EnumResourceNames(hsrc, type_)
             if names and not "*" in names:
-                enum_names = filter(lambda name:
-                                    name in names,
-                                    enum_names)
+                enum_names = [name for name in enum_names if name in names]
             for name in enum_names:
                 # logger.debug("Enumerating resources of type %s name %s", type_, name)
                 enum_languages = win32api.EnumResourceLanguages(hsrc,
                                                                 type_,
                                                                 name)
                 if languages and not "*" in languages:
-                    enum_languages = filter(lambda language:
-                                            language in languages,
-                                            enum_languages)
+                    enum_languages = [language for language in enum_languages if language in languages]
                 for language in enum_languages:
                     data = win32api.LoadResource(hsrc, type_, name, language)
                     if not type_ in res:

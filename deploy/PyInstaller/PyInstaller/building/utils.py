@@ -547,8 +547,8 @@ def get_code_object(modname, filename):
                 raise ValueError("Module file %s is missing" % filename)
             return co
     except SyntaxError as e:
-        print("Syntax error in ", filename)
-        print(e.args)
+        print(("Syntax error in ", filename))
+        print((e.args))
         raise
 
 

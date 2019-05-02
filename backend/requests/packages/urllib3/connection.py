@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 import datetime
 import logging
 import os
@@ -12,8 +12,8 @@ try:  # Python 3
     from http.client import HTTPConnection as _HTTPConnection
     from http.client import HTTPException  # noqa: unused in this module
 except ImportError:
-    from httplib import HTTPConnection as _HTTPConnection
-    from httplib import HTTPException  # noqa: unused in this module
+    from http.client import HTTPConnection as _HTTPConnection
+    from http.client import HTTPException  # noqa: unused in this module
 
 try:  # Compiled with SSL?
     import ssl
@@ -175,7 +175,7 @@ class HTTPConnection(_HTTPConnection, object):
         headers = HTTPHeaderDict(headers if headers is not None else {})
         skip_accept_encoding = 'accept-encoding' in headers
         self.putrequest(method, url, skip_accept_encoding=skip_accept_encoding)
-        for header, value in headers.items():
+        for header, value in list(headers.items()):
             self.putheader(header, value)
         if 'transfer-encoding' not in headers:
             self.putheader('Transfer-Encoding', 'chunked')

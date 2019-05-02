@@ -7,7 +7,7 @@ History
 
 Originally (loosely) based on code in py2exe's build_exe.py by Thomas Heller.
 """
-from __future__ import absolute_import
+
 
 import sys
 import os
@@ -311,7 +311,7 @@ def _replacePackages():
     REPLACEPACKAGES = {
         '_xmlplus':     'xml',
     }
-    for k,v in REPLACEPACKAGES.items():
+    for k,v in list(REPLACEPACKAGES.items()):
         modulegraph.replacePackage(k, v)
 
 _replacePackages()

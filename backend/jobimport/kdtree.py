@@ -428,7 +428,7 @@ if __name__ == "__main__":
                 node, distsq = tree.nearest(p)
             e=time()-s
             print("queries|tree size|tree height|empties|query load|query time") 
-            print("{0:7d}|{2:9d}|{1.level:11d}|      0|{3:10.2f}|{4:10.1f}".format(qsize,tree,tsize,float(tree.count)/qsize,e))
+            print(("{0:7d}|{2:9d}|{1.level:11d}|      0|{3:10.2f}|{4:10.1f}".format(qsize,tree,tsize,float(tree.count)/qsize,e)))
             
             tree.resetcounters()
             empty=[]
@@ -441,7 +441,7 @@ if __name__ == "__main__":
             for p in qpos:
                 node, distsq = tree.nearest(p)
             e2=time()-s
-            print("{0:7d}|{2:9d}|{1.level:11d}|      0|{3:10.2f}|{4:10.1f}".format(qsize,tree,tsize*10,float(tree.count)/qsize,e2))
+            print(("{0:7d}|{2:9d}|{1.level:11d}|      0|{3:10.2f}|{4:10.1f}".format(qsize,tree,tsize*10,float(tree.count)/qsize,e2)))
             
             self.assertLess(e2,3*e,msg="a 10x bigger tree shouldn't take more than 3x the time to query")
 
@@ -453,6 +453,6 @@ if __name__ == "__main__":
             for p in qpos:
                 node, distsq = tree.nearest(p,checkempty=True)
             e3=time()-s
-            print("{0:7d}|{2:9d}|{1.level:11d}|{5:7d}|{3:10.2f}|{4:10.1f}".format(qsize,tree,tsize*10,float(tree.count)/qsize,e3,tsize*10//emptyq))
+            print(("{0:7d}|{2:9d}|{1.level:11d}|{5:7d}|{3:10.2f}|{4:10.1f}".format(qsize,tree,tsize*10,float(tree.count)/qsize,e3,tsize*10//emptyq)))
             
     unittest.main()

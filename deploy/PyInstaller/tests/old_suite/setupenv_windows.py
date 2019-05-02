@@ -13,7 +13,7 @@
 # https://jenkins.shiningpanda.com/pyinstaller/
 # Python there is mostly 64bit. Only Python 2.4 is 32bit on Windows 7.
 
-from __future__ import print_function
+
 
 import glob
 import optparse
@@ -109,7 +109,7 @@ def main():
     opts, _ = parser.parse_args()
 
     # Install packages.
-    for k, v in _PACKAGES.items():
+    for k, v in list(_PACKAGES.items()):
         # Test python version for module.
         if k in _PY_VERSION:
             # Python version too old, skip module.

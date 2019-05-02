@@ -7,7 +7,7 @@ __author__ = 'David S. Touretzky, Stefan Hechenberger <stefan@nortd.com>'
 
 
 import math
-import StringIO
+import io
 
 
 
@@ -41,7 +41,7 @@ class DXFReader:
     def parse(self, dxfstring):
         self.linecount = 0
         self.line = ""
-        self.infile = StringIO.StringIO(dxfstring)
+        self.infile = io.StringIO(dxfstring)
 
         # assume metric file for now
         # self.readtosection(9, "$MEASUREMENT")
@@ -67,7 +67,7 @@ class DXFReader:
             else: self.complain_invalid()
 
         self.infile.close()
-        print "Done!"
+        print("Done!")
         return {'boundarys':self.boundarys}
 
 
@@ -88,8 +88,8 @@ class DXFReader:
         self.linecount += 1
         self.line = self.infile.readline()
         if not self.line: 
-            print "Premature end of file!"
-            print "Something is wrong. Sorry!"
+            print("Premature end of file!")
+            print("Something is wrong. Sorry!")
             raise ValueError
         self.line = self.line.rstrip()
 
@@ -169,14 +169,14 @@ class DXFReader:
             path.append([x,y])
 
     def complain_spline(self):
-        print "Encountered a SPLINE at line", self.linecount
-        print "This program cannot handle splines at present."
-        print "Convert the spline to an LWPOLYLINE using Save As options in SolidWorks."
+        print("Encountered a SPLINE at line", self.linecount)
+        print("This program cannot handle splines at present.")
+        print("Convert the spline to an LWPOLYLINE using Save As options in SolidWorks.")
         raise ValueError
 
     def complain_invalid(self):
-        print "Invalid element '" + self.line + "' on line", self.linecount
-        print "Can't process this DXF file. Sorry!"
+        print("Invalid element '" + self.line + "' on line", self.linecount)
+        print("Can't process this DXF file. Sorry!")
         raise ValueError
 
     def addArc(self, path, x1, y1, rx, ry, phi, large_arc, sweep, x2, y2):

@@ -17,7 +17,7 @@ __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 import math
 import logging
 
-import kdtree
+from . import kdtree
 
 log = logging.getLogger("svg_reader")
 
@@ -32,7 +32,7 @@ def connect_segments(path, epsilon2):
     """
     join_count = 0
     newIdx = 0
-    for i in xrange(1,len(path)):
+    for i in range(1,len(path)):
         lastpathseg = path[newIdx]
         pathseg = path[i]
         point = lastpathseg[-1]
@@ -49,7 +49,7 @@ def connect_segments(path, epsilon2):
             path[newIdx] = pathseg
 
     # remove exessive slots
-    for i in xrange(len(path)-(newIdx+1)):
+    for i in range(len(path)-(newIdx+1)):
         path.pop()
 
     # report if excessive joins
@@ -84,7 +84,7 @@ def simplifyDP(tol2, v, j, k, mk):
     b = 0.0
     cw = 0.0
     dv2 = 0.0         # dv2 = distance v[i] to S squared
-    for i in xrange(j+1, k):
+    for i in range(j+1, k):
         # compute distance squared
         # w = diff(v[i], S[0])
         w = [v[i][0]-S[0][0], v[i][1]-S[0][1]]  # diff
@@ -140,7 +140,7 @@ def simplify(pathseg, tolerance2):
     tPathseg.append(pathseg[0])        # start at the beginning
     k = 1
     pv = 0
-    for i in xrange(1, n):
+    for i in range(1, n):
         if d2(pathseg[i], pathseg[pv]) < tolerance2:
             continue
         tPathseg.append(pathseg[i])
@@ -151,12 +151,12 @@ def simplify(pathseg, tolerance2):
         k += 1
 
     # STAGE 2.  Douglas-Peucker polyline simplification
-    mk = [None for i in xrange(k)]    # marker buffer, ints
+    mk = [None for i in range(k)]    # marker buffer, ints
     mk[0] = mk[k-1] = 1;              # mark the first and last vertices
     simplifyDP(tolerance2, tPathseg, 0, k-1, mk)
 
     # copy marked vertices to the output simplified polyline
-    for i in xrange(k):
+    for i in range(k):
         if mk[i]:
             sPathseg.append(tPathseg[i])
     return sPathseg
@@ -166,7 +166,7 @@ def simplify(pathseg, tolerance2):
 def simplify_all(path, tolerance2):
     totalverts = 0
     optiverts = 0
-    for u in xrange(len(path)):
+    for u in range(len(path)):
         totalverts += len(path[u])
         path[u] = simplify(path[u], tolerance2)
         optiverts += len(path[u])
@@ -182,7 +182,7 @@ def simplify_all(path, tolerance2):
 def sort_by_seektime(path, start=[0.0, 0.0]):
     path_unsorted = []
     tree = kdtree.Tree(2)
-    for i in xrange(len(path)):
+    for i in range(len(path)):
         pathseg = path[i]
         # copy, so we can place the result in path
         path_unsorted.append(pathseg)
@@ -194,7 +194,7 @@ def sort_by_seektime(path, start=[0.0, 0.0]):
     endpoint = start
     newIdx = 0
     usedIdxs = {}
-    for p in xrange(2*len(path_unsorted)):
+    for p in range(2*len(path_unsorted)):
         node, distsq = tree.nearest(endpoint, checkempty=True)
         i, rev = node.data
         node.data = None

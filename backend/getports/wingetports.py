@@ -10,7 +10,7 @@ import sys
 if sys.version_info.major > 2:
     import winreg
 else:
-    import _winreg as winreg
+    import winreg as winreg
 
 port_prefix = b'\\\\.\\' # two backlashes, a dot, and another backslash
 # port_prefix is not necessary for COM1 through COM9, but doesn't hurt

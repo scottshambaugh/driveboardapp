@@ -565,7 +565,7 @@ def getcwd():
     # We need this workaround only for Python 2 on Windows.
     if is_win and is_py2:
         try:
-            unicode(cwd)
+            str(cwd)
         except UnicodeDecodeError:
             # Do conversion to ShortPathName really only in case 'cwd' is not
             # ascii only - conversion to unicode type cause this unicode error.

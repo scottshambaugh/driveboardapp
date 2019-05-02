@@ -2,7 +2,7 @@
 
 import io
 
-from dxf_parser import DXFParser
+from .dxf_parser import DXFParser
 
 tolerance = 0.08
 preColor = {}
@@ -12,7 +12,7 @@ fin = open("test.dxf");
 dxf_string = fin.read();  
 fin.close() 
 
-dxf_string = unicode(dxf_string)
+dxf_string = str(dxf_string)
 dxfParser = DXFParser(0.8)
 forced_unit = 0
 

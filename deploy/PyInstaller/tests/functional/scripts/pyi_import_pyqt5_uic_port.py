@@ -24,7 +24,7 @@ assert PyQt5.__pyinstaller_fake_module_marker__ == '__pyinstaller_fake_module_ma
 
 try:
     import PyQt5.uic.port_v3
-    print(PyQt5.uic.port_v3.__path__)
+    print((PyQt5.uic.port_v3.__path__))
 except ImportError:
     print('PyQt5.uic.port_v3 not imported')
     pass
@@ -32,7 +32,7 @@ except ImportError:
 # This is the same, just for Python3 importing PyQT5.uic.port_v2.test
 try:
     import PyQt5.uic.port_v2
-    print(PyQt5.uic.port_v2.__path__)
+    print((PyQt5.uic.port_v2.__path__))
 except ImportError:
     print('PyQt5.uic.port_v2 not imported')
     pass

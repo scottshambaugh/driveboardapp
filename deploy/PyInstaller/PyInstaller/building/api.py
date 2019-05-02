@@ -122,7 +122,7 @@ class PYZ(Target):
         # Remove leading parts of paths in code objects
         self.code_dict = {
             key: strip_paths_in_code(code)
-            for key, code in self.code_dict.items()
+            for key, code in list(self.code_dict.items())
         }
 
         pyz = ZlibArchiveWriter(self.name, toc, code_dict=self.code_dict, cipher=self.cipher)

@@ -297,20 +297,20 @@ def load(configname):
         with open(path) as fp:
             try:
                 userconf = json.load(fp)
-                for k in userconfigurable.keys():
+                for k in list(userconfigurable.keys()):
                     if k in userconf:
                         conf[k] = userconf[k]
             except ValueError:
-                print "ERROR: failed to read config file"
+                print("ERROR: failed to read config file")
     else:
         if not configname:
             # special case: default config not present, create
-            print "INFO: creating default config file"
+            print("INFO: creating default config file")
             with open(path, "w") as fp:
-                confout = {k:v for k,v in conf.items() if k in userconfigurable}
+                confout = {k:v for k,v in list(conf.items()) if k in userconfigurable}
                 json.dump(confout, fp, indent=4)
         else:
-            print "ERROR: invalid config specified"
+            print("ERROR: invalid config specified")
             sys.exit()
 
 
@@ -327,11 +327,11 @@ def write_config_fields(subconfigdict):
 
 
 def list_configs():
-    print "Config files in " + conf['confdir'] + ":"
+    print("Config files in " + conf['confdir'] + ":")
     tempdir = os.getcwd()
     os.chdir(conf['confdir'])
     cfiles = glob.glob('config.*.json')
     for cfile in cfiles:
         confname = cfile.split('.')[1]
-        print "%s - (%s)" % (confname, cfile)
+        print("%s - (%s)" % (confname, cfile))
     os.chdir(tempdir)

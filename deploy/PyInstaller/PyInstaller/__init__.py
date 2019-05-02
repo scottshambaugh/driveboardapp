@@ -33,7 +33,7 @@ if is_win and is_py2:
     # This ensures for Python 2 that PyInstaller will work on Windows
     # with paths containing foreign characters.
     try:
-        unicode(HOMEPATH)
+        str(HOMEPATH)
     except UnicodeDecodeError:
         # Do conversion to ShortPathName really only in case HOMEPATH is not
         # ascii only - conversion to unicode type cause this unicode error.

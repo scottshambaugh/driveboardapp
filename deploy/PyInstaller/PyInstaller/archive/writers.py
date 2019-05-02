@@ -133,17 +133,17 @@ class ArchiveWriter(object):
                     bool, int, float, complex, str, bytes, bytearray,
                     tuple, list, set, frozenset, dict, CodeType))
                 if sys.version_info[0] == 2:
-                    MARSHALLABLE_TYPES.add(long)
+                    MARSHALLABLE_TYPES.add(int)
 
-                for module_name, module_tuple in self.toc.items():
+                for module_name, module_tuple in list(self.toc.items()):
                     if type(module_name) not in MARSHALLABLE_TYPES:
-                        print('Module name "%s" (%s) unmarshallable.' % (module_name, type(module_name)))
+                        print(('Module name "%s" (%s) unmarshallable.' % (module_name, type(module_name))))
                     if type(module_tuple) not in MARSHALLABLE_TYPES:
-                        print('Module "%s" tuple "%s" (%s) unmarshallable.' % (module_name, module_tuple, type(module_tuple)))
+                        print(('Module "%s" tuple "%s" (%s) unmarshallable.' % (module_name, module_tuple, type(module_tuple))))
                     elif type(module_tuple) == tuple:
                         for i in range(len(module_tuple)):
                             if type(module_tuple[i]) not in MARSHALLABLE_TYPES:
-                                print('Module "%s" tuple index %s item "%s" (%s) unmarshallable.' % (module_name, i, module_tuple[i], type(module_tuple[i])))
+                                print(('Module "%s" tuple index %s item "%s" (%s) unmarshallable.' % (module_name, i, module_tuple[i], type(module_tuple[i]))))
 
             raise
 
@@ -376,7 +376,7 @@ class CArchiveWriter(ArchiveWriter):
                 fh = open(pathnm, 'rb')
                 ulen = os.fstat(fh.fileno()).st_size
         except IOError:
-            print("Cannot find ('%s', '%s', %s, '%s')" % (nm, pathnm, flag, typcd))
+            print(("Cannot find ('%s', '%s', %s, '%s')" % (nm, pathnm, flag, typcd)))
             raise
 
         where = self.lib.tell()

@@ -3,7 +3,7 @@
 # Created: 17.04.2016
 # Copyright (C) 2016, Manfred Moitzi
 # License: MIT License
-from __future__ import unicode_literals
+
 __author__ = "mozman <mozman@gmx.at>"
 
 import math
@@ -470,7 +470,7 @@ class SubFace(object):
 class PolyShape(object):
     def __init__(self, polyline, dxftype):
         # copy all dxf attributes from polyline
-        for key, value in polyline.__dict__.items():
+        for key, value in list(polyline.__dict__.items()):
             self.__dict__[key] = value
         self.dxftype = dxftype
 

@@ -21,7 +21,7 @@ log.setLevel(logging.DEBUG)
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
-    print log.warn("Using non-C (slow) XML parser.")
+    print(log.warn("Using non-C (slow) XML parser."))
     import xml.etree.ElementTree as ET
 
 
@@ -340,7 +340,7 @@ class SVGReader:
                             self.boundarys[hexcolor] = [path]
 
                 # 4. any lasertags (cut settings)?
-                if node.has_key('lasertags'):
+                if 'lasertags' in node:
                     self.lasertags.extend(node['lasertags'])
 
                 # 5. Raster Data [(x, y, size, data)]

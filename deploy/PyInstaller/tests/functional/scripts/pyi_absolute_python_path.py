@@ -7,7 +7,7 @@
 # The full license is in the file COPYING.txt, distributed with this software.
 #-----------------------------------------------------------------------------
 
-from __future__ import print_function
+
 
 # sys.path  should contain absolute paths.
 # With relative paths frozen application will
@@ -22,7 +22,7 @@ import tempfile
 
 
 # Python 3 does not have function os.getcwdu() since all strings are unicode.
-getcwd = os.getcwdu if sys.version_info[0] < 3 else os.getcwd
+getcwd = os.getcwd if sys.version_info[0] < 3 else os.getcwd
 
 
 print('sys.stderr.encoding:', sys.stderr.encoding)

@@ -13,8 +13,8 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
     FIRMWARE = os.path.join(resources_dir, 'firmware', "firmware.%s.hex" % (firmware))
 
     if not os.path.exists(FIRMWARE):
-        print "ERROR: invalid firmware path"
-        print FIRMWARE
+        print("ERROR: invalid firmware path")
+        print(FIRMWARE)
         return
 
     if not (conf['hardware'] == 'beaglebone' or conf['hardware'] == 'raspberrypi'):
@@ -48,7 +48,7 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
         command = ('"%(dude)s" -c %(programmer)s -b %(bps)s -P %(port)s -p %(device)s -C "%(dudeconf)s" -Uflash:w:"%(firmware)s":i'
             % {'dude':AVRDUDEAPP, 'programmer':PROGRAMMER, 'bps':BITRATE, 'port':serial_port, 'device':DEVICE, 'dudeconf':AVRDUDECONFIG, 'firmware':FIRMWARE})
 
-        print command
+        print(command)
         return subprocess.call(command, shell=True)
 
         # PROGRAMMER = "avrisp"  # old way, required pressing the reset button
@@ -81,7 +81,7 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
         ### Trigger the atmega328's reset pin to invoke bootloader
 
         if conf['hardware'] == 'beaglebone':
-            print "Flashing from BeagleBone ..."
+            print("Flashing from BeagleBone ...")
             # The reset pin is connected to GPIO2_7 (2*32+7 = 71).
             # Setting it to low triggers a reset.
             # echo 71 > /sys/class/gpio/export
@@ -120,8 +120,8 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
             fwb.close()
             time.sleep(0.1)
         elif conf['hardware'] == 'raspberrypi':
-            print "Flashing from Raspberry Pi ..."
-            import thread
+            print("Flashing from Raspberry Pi ...")
+            import _thread
             import RPi.GPIO as GPIO
             def trigger_reset():
                 GPIO.setmode(GPIO.BCM)  # use chip pin number
@@ -131,7 +131,7 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
                 time.sleep(0.8)
                 GPIO.output(pinReset, GPIO.HIGH)
                 time.sleep(0.1)
-            thread.start_new_thread(trigger_reset, ())
+            _thread.start_new_thread(trigger_reset, ())
             # GPIO.setmode(GPIO.BCM)  # use chip pin number
             # pinReset = 2
             # # GPIO.setup(pinReset, GPIO.OUT)
@@ -140,12 +140,12 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
             # GPIO.output(pinReset, GPIO.HIGH)
             # time.sleep(0.1)
 
-        print command
+        print(command)
         return subprocess.call(command, shell=True)
 
 
 def reset_atmega():
-    print "Resetting Atmega ..."
+    print("Resetting Atmega ...")
     if conf['hardware'] == 'beaglebone':
         try:
             fw = file("/sys/class/gpio/export", "w")
@@ -184,7 +184,7 @@ def reset_atmega():
         time.sleep(0.2)
         GPIO.output(pinReset, GPIO.HIGH)
     else:
-        print "ERROR: forced reset only possible on beaglebone and raspberrypi"
+        print("ERROR: forced reset only possible on beaglebone and raspberrypi")
         raise IOError
 
 
@@ -201,4 +201,4 @@ def usb_reset_hack():
 if __name__ == '__main__':
     ret = flash_upload()
     if ret != 0:
-        print "ERROR: flash failed"
+        print("ERROR: flash failed")

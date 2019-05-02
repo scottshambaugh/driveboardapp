@@ -13,7 +13,7 @@
 # by this program but be recognizable by any one as a dependency of that
 # particular test.
 
-from __future__ import print_function
+
 
 
 import glob

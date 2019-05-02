@@ -6,7 +6,7 @@ import math
 import sys
 import re
 import os.path
-import StringIO
+import io
 
 
 
@@ -84,9 +84,9 @@ class NGCReader:
                     if attr[0] == 'S':
                         intensity = float(attr[1])
             else:
-                print "Warning: Unsupported Gcode"
+                print("Warning: Unsupported Gcode")
 
-        print "Done!"
+        print("Done!")
         self.boundarys = {'#000000':paths}
         pass_ = ['1', feedrate, '', intensity, '', '#000000']
         return {'boundarys':self.boundarys}

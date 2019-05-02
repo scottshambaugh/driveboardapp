@@ -75,7 +75,7 @@ class PyApp(gtk.Window):
         if args.animate:
             count = 0
             break_ = False
-            for i in xrange(len(job['vector']['paths'])):
+            for i in range(len(job['vector']['paths'])):
                 path = job['vector']['paths'][i]
                 if break_: break
                 for polyline in path:
@@ -85,7 +85,7 @@ class PyApp(gtk.Window):
                     seeks.line_to(polyline[0][0], polyline[0][1])
                     cr.move_to(polyline[0][0], polyline[0][1])
                     count += 1
-                    for i in xrange(1, len(polyline)):
+                    for i in range(1, len(polyline)):
                         if count >= self.todraw:
                             break_ = True
                         if break_: break
@@ -100,7 +100,7 @@ class PyApp(gtk.Window):
                 for polyline in path:
                     seeks.line_to(polyline[0][0], polyline[0][1])
                     cr.move_to(polyline[0][0], polyline[0][1])
-                    for i in xrange(1, len(polyline)):
+                    for i in range(1, len(polyline)):
                         cr.line_to(polyline[i][0], polyline[i][1])
                         seeks.move_to(polyline[i][0], polyline[i][1])
 
@@ -140,10 +140,10 @@ if __name__ == '__main__':
             for polyline in path:
                 for point in polyline:
                     total_points += 1
-        print "STATS:"
-        print "\ttotal points: %s" % total_points
+        print("STATS:")
+        print("\ttotal points: %s" % total_points)
         if 'vector' in job and 'optimized' in job['vector']:
-            print "\ttolerance: %s" % job['vector']['optimized']
+            print("\ttolerance: %s" % job['vector']['optimized'])
 
         # run gtk window
         PyApp()
@@ -154,6 +154,6 @@ if __name__ == '__main__':
         os.chdir(jobpath)
         files = glob.glob("*.*")
         os.chdir(cwd_temp)
-        print "Name one of the following files:"
+        print("Name one of the following files:")
         for file_ in files:
-            print file_
+            print(file_)

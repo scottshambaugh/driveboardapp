@@ -1,2 +1,2 @@
 #
-print('This is ' + __name__)
+print(('This is ' + __name__))

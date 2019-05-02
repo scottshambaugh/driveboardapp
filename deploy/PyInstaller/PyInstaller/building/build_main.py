@@ -448,7 +448,7 @@ class Analysis(Target):
             hooked_module_names = set()
 
             # For each remaining hookable module and corresponding hooks...
-            for module_name, module_hooks in module_hook_cache.items():
+            for module_name, module_hooks in list(module_hook_cache.items()):
                 # Graph node for this module if imported or "None" otherwise.
                 module_node = self.graph.findNode(
                     module_name, create_nspkg=False)
@@ -499,7 +499,7 @@ class Analysis(Target):
         # First get code objects of all modules that import 'ctypes'.
         logger.info('Looking for ctypes DLLs')
         ctypes_code_objs = self.graph.get_co_using_ctypes()  # dict like:  {'module1': code_obj, 'module2': code_obj}
-        for name, co in ctypes_code_objs.items():
+        for name, co in list(ctypes_code_objs.items()):
             # Get dlls that might be needed by ctypes.
             logger.debug('Scanning %s for shared libraries or dlls', name)
             ctypes_binaries = scan_code_for_ctypes(co)

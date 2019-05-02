@@ -6,7 +6,7 @@ import math
 import sys
 import re
 import os.path
-import StringIO
+import io
 
 debug = True
 
@@ -198,7 +198,7 @@ class GcodeReader:
 
     def on_action(self, action):
         if not self.bTool:
-            print("ERROR: no tool defined at: %s:%s" % action)
+            print(("ERROR: no tool defined at: %s:%s" % action))
             return
         self.path.append(action)
 

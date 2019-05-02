@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 
 import os
 import imp
@@ -8,14 +8,14 @@ import marshal
 import warnings
 
 try:
-    unicode
+    str
 except NameError:
-    unicode = str
+    str = str
 
 
 if sys.version_info[0] == 2:
-    from StringIO import StringIO as BytesIO
-    from StringIO import StringIO
+    from io import StringIO as BytesIO
+    from io import StringIO
 
 else:
     from io import BytesIO, StringIO
@@ -28,7 +28,7 @@ def imp_find_module(name, path=None):
     """
     names = name.split('.')
     if path is not None:
-        if isinstance(path, (str, unicode)):
+        if isinstance(path, str):
             path = [os.path.realpath(path)]
     for name in names:
         result = imp.find_module(name, path)

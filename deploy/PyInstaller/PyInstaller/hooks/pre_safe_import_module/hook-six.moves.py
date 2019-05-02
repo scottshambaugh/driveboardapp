@@ -52,5 +52,5 @@ print('}')
 ''')
 
     api.add_runtime_module(api.module_name)
-    for real_module_name, six_module_name in real_to_six_module_name.items():
+    for real_module_name, six_module_name in list(real_to_six_module_name.items()):
         api.add_alias_module(real_module_name, six_module_name)

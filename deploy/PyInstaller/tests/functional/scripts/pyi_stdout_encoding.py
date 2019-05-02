@@ -25,8 +25,8 @@ if not encoding == 'None' and not frozen_encoding == 'None':
     frozen_encoding = codecs.lookup(frozen_encoding).name
 
 
-print('Encoding expected: ' + encoding)
-print('Encoding current: ' + frozen_encoding)
+print(('Encoding expected: ' + encoding))
+print(('Encoding current: ' + frozen_encoding))
 
 if not frozen_encoding == encoding:
     raise SystemExit('Frozen encoding %s is not the same as unfrozen %s.' %

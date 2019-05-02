@@ -64,14 +64,14 @@ class TestLowLevel(unittest.TestCase):
         # test if we can get a sound config dict
         c = lasersaur.config()
         self.assertIsInstance(c, dict)
-        self.assertIn('appname', c.keys())
-        self.assertIn('version', c.keys())
+        self.assertIn('appname', list(c.keys()))
+        self.assertIn('version', list(c.keys()))
 
     def test_status(self):
         s = lasersaur.status()
         self.assertIsInstance(s, dict)
-        self.assertIn('appver', s.keys())
-        self.assertIn('firmver', s.keys())
+        self.assertIn('appver', list(s.keys()))
+        self.assertIn('firmver', list(s.keys()))
 
     def test_feedrate_intensity(self):
         new_rate = 4500.1
@@ -232,7 +232,7 @@ class TestQueue(unittest.TestCase):
             lasersaur.load_library('lasersaur')
         jobs = lasersaur.listing()
         self.assertEqual(len(jobs), conf['max_jobs_in_list'])
-        print jobs
+        print(jobs)
         lasersaur.clear()
         jobs = lasersaur.listing()
         self.assertListEqual(jobs, [])
@@ -253,7 +253,7 @@ class TestJobs(unittest.TestCase):
         jobname = lasersaur.load(job)
         self.assertIn(jobname, lasersaur.listing())
         lasersaur.run(jobname, progress=True)
-        print "done!"
+        print("done!")
 
 
 if __name__ == '__main__':

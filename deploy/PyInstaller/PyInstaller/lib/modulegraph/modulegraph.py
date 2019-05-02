@@ -7,7 +7,7 @@ but uses a graph data structure and 2.3 features
 XXX: Verify all calls to import_hook (and variants) to ensure that
 imports are done in the right way.
 """
-from __future__ import absolute_import, print_function
+
 
 import pkg_resources
 
@@ -30,9 +30,9 @@ from . import util
 from . import zipio
 
 if sys.version_info[0] == 2:
-    from StringIO import StringIO as BytesIO
-    from StringIO import StringIO
-    from  urllib import pathname2url
+    from io import StringIO as BytesIO
+    from io import StringIO
+    from  urllib.request import pathname2url
     def _Bchr(value):
         return chr(value)
 
@@ -371,7 +371,7 @@ class BaseModule(Node):
         self.packagepath = path
 
     def infoTuple(self):
-        return tuple(filter(None, (self.identifier, self.filename, self.packagepath)))
+        return tuple([_f for _f in (self.identifier, self.filename, self.packagepath) if _f])
 
 class BuiltinModule(BaseModule):
     pass
@@ -1921,7 +1921,7 @@ class ModuleGraph(ObjectGraph):
                 url = pathname2url(m.filename or "")
                 content = contpl_linked % {"NAME": name, "URL": url,
                                            'TYPE': m.__class__.__name__}
-            oute, ince = map(sorted_namelist, self.get_edges(m))
+            oute, ince = list(map(sorted_namelist, self.get_edges(m)))
             if oute:
                 links = ""
                 for n in oute:
@@ -1973,7 +1973,7 @@ class ModuleGraph(ObjectGraph):
         yield 'digraph %s {\n' % (name,)
         attr = dict(rankdir='LR', concentrate='true')
         cpatt  = '%s="%s"'
-        for item in attr.items():
+        for item in list(attr.items()):
             yield '\t%s;\n' % (cpatt % item,)
 
         # find all packages (subgraphs)
@@ -1996,7 +1996,7 @@ class ModuleGraph(ObjectGraph):
                 node,
                 ','.join([
                     (cpatt % item) for item in
-                    nodevisitor(node, data, outgoing, incoming).items()
+                    list(nodevisitor(node, data, outgoing, incoming).items())
                 ]),
             )
 
@@ -2050,10 +2050,10 @@ class ModuleGraph(ObjectGraph):
                 yield edgestr % (
                     head,
                     tail,
-                    ','.join([(cpatt % item) for item in attribs.items()]),
+                    ','.join([(cpatt % item) for item in list(attribs.items())]),
                 )
 
-        for g, edges in subgraphs.items():
+        for g, edges in list(subgraphs.items()):
             yield '\tsubgraph "cluster_%s" {\n' % (g,)
             yield '\t\tlabel="%s";\n' % (nodetoident[g],)
             for s in do_graph(edges, '\t\t'):

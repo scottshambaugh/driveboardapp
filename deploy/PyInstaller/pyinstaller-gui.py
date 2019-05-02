@@ -21,9 +21,9 @@ try:
     from tkinter.ttk import *
     import tkinter.filedialog as filedialog
 except ImportError:
-    from Tkinter import *
-    from ttk import *
-    import tkFileDialog as filedialog
+    from tkinter import *
+    from tkinter.ttk import *
+    import tkinter.filedialog as filedialog
 
 
 class PyInstallerGUI:

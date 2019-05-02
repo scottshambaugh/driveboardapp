@@ -1,4 +1,4 @@
-from __future__ import print_function, absolute_import
+
 import os, sys
 
 from macholib.util import is_platform_file

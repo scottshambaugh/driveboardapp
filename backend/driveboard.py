@@ -16,7 +16,7 @@ if not conf['mill_mode']:
     try:
         from PIL import Image
     except ImportError:
-        print "Pillow module missing, raster mode will fail."
+        print("Pillow module missing, raster mode will fail.")
 
 
 __author__  = 'Stefan Hechenberger <stefan@nortd.com>'
@@ -337,17 +337,17 @@ class SerialLoopClass(threading.Thread):
                         #     sys.stdout.write('~')
                         # last_write = time.time()
                     except OSError:
-                        print "ERROR: serial got disconnected 1."
+                        print("ERROR: serial got disconnected 1.")
                         self.stop_processing = True
                         self._status['serial'] = False
                         self._status['ready'] = False
                     except ValueError:
-                        print "ERROR: serial got disconnected 2."
+                        print("ERROR: serial got disconnected 2.")
                         self.stop_processing = True
                         self._status['serial'] = False
                         self._status['ready']  = False
                 else:
-                    print "ERROR: serial got disconnected 3."
+                    print("ERROR: serial got disconnected 3.")
                     self.stop_processing = True
                     self._status['serial'] = False
                     self._status['ready']  = False
@@ -371,7 +371,7 @@ class SerialLoopClass(threading.Thread):
                 if char == CMD_CHUNK_PROCESSED:
                     self.firmbuf_used -= self.TX_CHUNK_SIZE
                     if self.firmbuf_used < 0:
-                        print "ERROR: firmware buffer tracking to low"
+                        print("ERROR: firmware buffer tracking to low")
                 elif char == STATUS_END:
                     # status frame complete, compile status
                     self._status, self._s = self._s, self._status  # flip
@@ -410,27 +410,27 @@ class SerialLoopClass(threading.Thread):
                 elif char == ERROR_SERIAL_STOP_REQUEST:
                     self._s['stops']['requested'] = True
                     # print "ERROR firmware: stop request"
-                    print "INFO firmware: stop request"
+                    print("INFO firmware: stop request")
                 elif char == ERROR_RX_BUFFER_OVERFLOW:
                     self._s['stops']['buffer'] = True
-                    print "ERROR firmware: rx buffer overflow"
+                    print("ERROR firmware: rx buffer overflow")
                 elif char == ERROR_INVALID_MARKER:
                     self._s['stops']['marker'] = True
-                    print "ERROR firmware: invalid marker"
+                    print("ERROR firmware: invalid marker")
                 elif char == ERROR_INVALID_DATA:
                     self._s['stops']['data'] = True
-                    print "ERROR firmware: invalid data"
+                    print("ERROR firmware: invalid data")
                 elif char == ERROR_INVALID_COMMAND:
                     self._s['stops']['command'] = True
-                    print "ERROR firmware: invalid command"
+                    print("ERROR firmware: invalid command")
                 elif char == ERROR_INVALID_PARAMETER:
                     self._s['stops']['parameter'] = True
-                    print "ERROR firmware: invalid parameter"
+                    print("ERROR firmware: invalid parameter")
                 elif char == ERROR_TRANSMISSION_ERROR:
                     self._s['stops']['transmission'] = True
-                    print "ERROR firmware: transmission"
+                    print("ERROR firmware: transmission")
                 else:
-                    print "ERROR: invalid stop error marker"
+                    print("ERROR: invalid stop error marker")
                 # in stop mode, print recent transmission, unless stop request, or limit
                 if char != ERROR_SERIAL_STOP_REQUEST and \
                           char != ERROR_LIMIT_HIT_X1 and \
@@ -440,15 +440,15 @@ class SerialLoopClass(threading.Thread):
                           char != ERROR_LIMIT_HIT_Z1 and \
                           char != ERROR_LIMIT_HIT_Z2:
                     recent_chars = self.tx_buffer[max(0,self.tx_pos-128):self.tx_pos]
-                    print "RECENT TX BUFFER:"
+                    print("RECENT TX BUFFER:")
                     for char in recent_chars:
-                        if markers_tx.has_key(char):
-                            print "\t%s" % (markers_tx[char])
+                        if char in markers_tx:
+                            print("\t%s" % (markers_tx[char]))
                         elif 127 < ord(char) < 256:
-                            print "\t(data byte)"
+                            print("\t(data byte)")
                         else:
-                            print "\t(invalid)"
-                    print "----------------"
+                            print("\t(invalid)")
+                    print("----------------")
                 # stop mode housekeeping
                 self.tx_buffer = []
                 self.tx_pos = 0
@@ -467,7 +467,7 @@ class SerialLoopClass(threading.Thread):
                 elif char == INFO_CHILLER_OFF:
                     self._s['info']['chiller'] = True
                 else:
-                    print "ERROR: invalid info flag"
+                    print("ERROR: invalid info flag")
                     sys.stdout.write('('+char+','+str(ord(char))+')')
                 self.pdata_count = 0
             elif 96 < ord(char) < 123:  # parameter
@@ -505,7 +505,7 @@ class SerialLoopClass(threading.Thread):
                 elif char == INFO_STACK_CLEARANCE:
                     self._s['stackclear'] = num
                 else:
-                    print "ERROR: invalid param"
+                    print("ERROR: invalid param")
                 self.pdata_count = 0
             elif ord(char) > 127:  ### data
                 # char is in [128,255]
@@ -513,11 +513,11 @@ class SerialLoopClass(threading.Thread):
                     self.pdata_chars[self.pdata_count] = char
                     self.pdata_count += 1
                 else:
-                    print "ERROR: invalid data"
+                    print("ERROR: invalid data")
             else:
-                print ord(char)
-                print char
-                print "ERROR: invalid marker"
+                print(ord(char))
+                print(char)
+                print("ERROR: invalid marker")
                 self.pdata_count = 0
 
 
@@ -560,18 +560,18 @@ class SerialLoopClass(threading.Thread):
                         t_prewrite = time.time()
                         actuallySent = self.device.write(to_send)
                         if actuallySent != expectedSent*2:
-                            print "ERROR: write did not complete"
+                            print("ERROR: write did not complete")
                             assumedSent = 0
                         else:
                             assumedSent = expectedSent
                             self.firmbuf_used += assumedSent
                             if self.firmbuf_used > self.FIRMBUF_SIZE:
-                                print "ERROR: firmware buffer tracking too high"
+                                print("ERROR: firmware buffer tracking too high")
                         if time.time() - t_prewrite > 0.1:
-                            print "WARN: write delay 1"
+                            print("WARN: write delay 1")
                     except serial.SerialTimeoutException:
                         assumedSent = 0
-                        print "ERROR: writeTimeoutError 2"
+                        print("ERROR: writeTimeoutError 2")
                     self.tx_pos += assumedSent
         else:
             if self.tx_buffer:  # job finished sending
@@ -592,7 +592,7 @@ class SerialLoopClass(threading.Thread):
                 pass
                 # print "WARN: write delay 2"
         except serial.SerialTimeoutException:
-            print "ERROR: writeTimeoutError 1"
+            print("ERROR: writeTimeoutError 1")
 
 
 
@@ -666,7 +666,7 @@ def find_controller(baudrate=conf['baudrate'], verbose=True):
         return arduinos[0]
     # none found
     if verbose:
-        print "ERROR: No controller found."
+        print("ERROR: No controller found.")
     return None
 
 
@@ -708,22 +708,22 @@ def connect(port=conf['serial_port'], baudrate=conf['baudrate'], verbose=True):
             while True:
                 if time.time() - start > 2:
                     if verbose:
-                        print "ERROR: Cannot get 'hello' from controller"
+                        print("ERROR: Cannot get 'hello' from controller")
                     raise serial.SerialException
                 char = SerialLoop.device.read(1)
                 if char == INFO_HELLO:
                     if verbose:
-                        print "Controller says Hello!"
+                        print("Controller says Hello!")
                     break
 
             SerialLoop.start()  # this calls run() in a thread
         except serial.SerialException:
             SerialLoop = None
             if verbose:
-                print "ERROR: Cannot connect serial on port: %s" % (port)
+                print("ERROR: Cannot connect serial on port: %s" % (port))
     else:
         if verbose:
-            print "ERROR: disconnect first"
+            print("ERROR: disconnect first")
 
 
 def connect_withfind(port=conf['serial_port'], baudrate=conf['baudrate'], verbose=True):
@@ -731,30 +731,30 @@ def connect_withfind(port=conf['serial_port'], baudrate=conf['baudrate'], verbos
     if not connected():
         # try finding driveboard
         if verbose:
-            print "WARN: Cannot connect to configured serial port."
-            print "INFO: Trying to find port."
+            print("WARN: Cannot connect to configured serial port.")
+            print("INFO: Trying to find port.")
         serialfindresult = find_controller(verbose=verbose)
         if serialfindresult:
             if verbose:
-                print "INFO: Hardware found at %s." % serialfindresult
+                print("INFO: Hardware found at %s." % serialfindresult)
             connect(port=serialfindresult, baudrate=baudrate, verbose=verbose)
             if not connected():  # special case arduino found, but no firmware
-                yesno = raw_input("Firmware appears to be missing. Want to flash-upload it (Y/N)? ")
+                yesno = input("Firmware appears to be missing. Want to flash-upload it (Y/N)? ")
                 if yesno in ('Y', 'y'):
                     ret = flash(serial_port=serialfindresult)
                     if ret == 0:
                         connect(port=serialfindresult, baudrate=baudrate, verbose=verbose)
         if connected():
             if verbose:
-                print "INFO: Connected at %s." % serialfindresult
+                print("INFO: Connected at %s." % serialfindresult)
             conf['serial_port'] = serialfindresult
             write_config_fields({'serial_port':serialfindresult})
         else:
             if verbose:
-                print "-----------------------------------------------------------------------------"
-                print "How to configure:"
-                print "https://github.com/nortd/driveboardapp/blob/master/docs/configure.md"
-                print "-----------------------------------------------------------------------------"
+                print("-----------------------------------------------------------------------------")
+                print("How to configure:")
+                print("https://github.com/nortd/driveboardapp/blob/master/docs/configure.md")
+                print("-----------------------------------------------------------------------------")
 
 
 def connected():
@@ -791,7 +791,7 @@ def flash(serial_port=conf['serial_port'], firmware=conf['firmware']):
     if reconnect:
         connect()
     if ret != 0:
-        print "ERROR: flash failed"
+        print("ERROR: flash failed")
     return ret
 
 
@@ -799,7 +799,7 @@ def build():
     import build
     ret = build.build_all()
     if ret != 0:
-        print "ERROR: build_all failed"
+        print("ERROR: build_all failed")
     return ret
 
 
@@ -834,7 +834,7 @@ def homing():
             SerialLoop.request_resume = True  # to recover from a stop mode
             SerialLoop.send_command(CMD_HOMING)
         else:
-            print "WARN: ignoring homing command while job running"
+            print("WARN: ignoring homing command while job running")
 
 
 def feedrate(val):
@@ -1009,7 +1009,7 @@ def job(jobdict):
         else:
             job_laser(jobdict)
     else:
-        print "INFO: not a valid job, 'head' entry missing"
+        print("INFO: not a valid job, 'head' entry missing")
 
 
 def job_laser(jobdict):
@@ -1051,11 +1051,11 @@ def job_laser(jobdict):
     """
 
     if not 'defs' in jobdict or not 'items' in jobdict:
-        print "ERROR: invalid job"
+        print("ERROR: invalid job")
         return
 
     if not 'passes' in jobdict:
-        print "NOTICE: no passes defined"
+        print("NOTICE: no passes defined")
         return
 
     # reset vavles
@@ -1128,11 +1128,11 @@ def job_laser(jobdict):
                 # calc leadin/out
                 leadinpos = posx - conf['raster_leadin']
                 if leadinpos < 0:
-                    print "WARN: not enough leadin space"
+                    print("WARN: not enough leadin space")
                     leadinpos = 0
                 leadoutpos = posx + size[0] + conf['raster_leadin']
                 if leadoutpos > conf['workspace'][0]:
-                    print "WARN: not enough leadout space"
+                    print("WARN: not enough leadout space")
                     leadoutpos = conf['workspace'][0]
                 # assists on, beginning of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
@@ -1152,7 +1152,7 @@ def job_laser(jobdict):
                 # print len(pxarray)
                 # print (px_w*px_h)
                 line_count = int(size[1]/pxsize)
-                for l in xrange(line_count):
+                for l in range(line_count):
                     end += px_w
                     # move to start of line
                     feedrate(seekrate)
@@ -1207,10 +1207,10 @@ def job_laser(jobdict):
                             #     aux_on()
                             # TODO dwell according to pierce time
                             if is_2d:
-                                for i in xrange(1, len(polyline)):
+                                for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1])
                             else:
-                                for i in xrange(1, len(polyline)):
+                                for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1], polyline[i][2])
                             # turn off assists if set to 'feed'
                             if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
@@ -1260,11 +1260,11 @@ def job_mill(jobdict):
     if (not 'head' in jobdict) or \
        (not 'kind' in jobdict['head']) or \
        (jobdict['head']['kind'] != 'mill'):
-        print "NOTICE: not a mill job"
+        print("NOTICE: not a mill job")
         return
 
     if not 'defs' in jobdict:
-        print "ERROR: invalid job"
+        print("ERROR: invalid job")
         return
     # prime job
     air_off()

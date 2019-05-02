@@ -7,9 +7,9 @@ __author__ = 'jet <jet@allartburns.org>'
 
 from math import *
 import io
-import StringIO
+import io
 
-import dxfgrabber
+from . import dxfgrabber
 
 import sys
 import linecache
@@ -84,7 +84,7 @@ class DXFParser:
         self.y_max = 0.0
         
     def parse(self, dxfInput, forced_unit):
-        dxfStream = io.StringIO(unicode(dxfInput.replace('\r\n','\n')))
+        dxfStream = io.StringIO(str(dxfInput.replace('\r\n','\n')))
         dwg = dxfgrabber.read(dxfStream)
         if not dwg:
             raise RuntimeError("dxfgrabber.read() failed")
@@ -119,10 +119,10 @@ class DXFParser:
         if forced_unit == 0 or forced_unit == None:
             self.units = dwg.header.setdefault('$INSUNITS', 0)
         else:
-            print("using forced_unit", forced_unit)
+            print(("using forced_unit", forced_unit))
             self.units = forced_unit
         if self.verbose:
-            print("dxf units read %s, default 0 " % self.units)
+            print(("dxf units read %s, default 0 " % self.units))
         if self.units == 0:
             self.unitsString = "unitless"
         elif self.units == 1:
@@ -166,24 +166,24 @@ class DXFParser:
         elif self.units == 20:
             self.unitsString = "parsecs"
         else:
-            print("DXF units: >%s< unsupported" % self.units)
+            print(("DXF units: >%s< unsupported" % self.units))
             raise RuntimeError
             
         if self.verbose:
-            print("dxfgrabber release: ", self.dxfgrabber_version)
-            print("DXF file format version: {}".format(dwg.dxfversion))
-            print("header var count: ", len(dwg.header))
-            print("layer count: ", len(dwg.layers)) 
-            print("block def count: ", len(dwg.blocks))
-            print("entitiy count: ", len(dwg.entities))
-            print("units: ", self.unitsString)
+            print(("dxfgrabber release: ", self.dxfgrabber_version))
+            print(("DXF file format version: {}".format(dwg.dxfversion)))
+            print(("header var count: ", len(dwg.header)))
+            print(("layer count: ", len(dwg.layers))) 
+            print(("block def count: ", len(dwg.blocks)))
+            print(("entitiy count: ", len(dwg.entities)))
+            print(("units: ", self.unitsString))
 
         for entity in dwg.entities:
             if entity.color == dxfgrabber.BYLAYER:
                 layer = dwg.layers[entity.layer]
                 entity.color = layer.color
                 if self.debug:
-                    print("set entity color to layer color %d" % layer.color)
+                    print(("set entity color to layer color %d" % layer.color))
 
             if entity.dxftype == "LINE":
                 self.addLine(entity)
@@ -194,20 +194,20 @@ class DXFParser:
             elif entity.dxftype == "LWPOLYLINE":
                 self.addPolyLine(entity)
             elif entity.dxftype == "SPLINE":
-                print("TODO ADD: ", entity.dxftype)
+                print(("TODO ADD: ", entity.dxftype))
                 #self.addSpline(entity)
             else:
                 if self.verbose:
-                    print("unknown entity: ", entity.dxftype)
+                    print(("unknown entity: ", entity.dxftype))
 
-        print "Done!"
+        print("Done!")
 
         if self.verbose:
             print ("pre flipped");
-            print ("x min %f" % self.x_min)
-            print ("x max %f" % self.x_max)
-            print ("y min %f" % self.y_min)
-            print ("y max %f" % self.y_max)
+            print(("x min %f" % self.x_min))
+            print(("x max %f" % self.x_max))
+            print(("y min %f" % self.y_min))
+            print(("y max %f" % self.y_max))
 
         # remember that Y is in negative space relative to our bed,
         # CAD software has 0,0 and bottom left, lasersaur has
@@ -223,17 +223,17 @@ class DXFParser:
         for color in self.colorLayers:
             if len(self.colorLayers[color]) > 0:
                 if self.debug:
-                    print ("returning color ", color)
+                    print(("returning color ", color))
                 self.returnColorLayers[color] = self.colorLayers[color]
 
         # format: {'#ff0000': [[[x,y], [x,y], ...], [], ..], '#0000ff':[]}
         job = {'head':{}, 'passes':[], 'items':[], 'defs':[]}
         #job['units'] = self.unitsString
-        for color, path in self.returnColorLayers.iteritems():
+        for color, path in self.returnColorLayers.items():
             job['defs'].append({"kind":"path",
                                 "data":path})
             job['items'].append({"def":len(job['defs'])-1, "color":color})
-        print "Done!"
+        print("Done!")
         return job
 
 
@@ -296,7 +296,7 @@ class DXFParser:
         flippedPath = self.flipPathAxis(path, "X")
         if self.debug:
             if flippedPath == path:
-                print("caution: flippedPath %s == path %s" % (flippedPath, path))
+                print(("caution: flippedPath %s == path %s" % (flippedPath, path)))
         if color == 1:
             self.red_colorLayer.append(flippedPath)
         elif color == 2:
@@ -313,7 +313,7 @@ class DXFParser:
             self.black_colorLayer.append(flippedPath)
         else:
             if self.verbose:
-                print("unrecognized color %d, setting to cyan" % color)
+                print(("unrecognized color %d, setting to cyan" % color))
             #TODO: we need a better way to handle this
             #don't know what to do with this color, assigning to red/cut
             self.cyan_colorLayer.append(flippedPath)
@@ -350,13 +350,13 @@ class DXFParser:
 
     
     def complain_spline(self):
-        print "Encountered a SPLINE at line", self.linecount
-        print "This program cannot handle splines at present."
-        print "Convert the spline to an LWPOLYLINE using Save As options in SolidWorks."
+        print("Encountered a SPLINE at line", self.linecount)
+        print("This program cannot handle splines at present.")
+        print("Convert the spline to an LWPOLYLINE using Save As options in SolidWorks.")
         raise RuntimeError
 
     def complain_invalid(self):
-        print "Skipping unrecognized element '" + self.line + "' on line", self.linecount
+        print("Skipping unrecognized element '" + self.line + "' on line", self.linecount)
 
     def makeArc(self, path, x1, y1, rx, ry, phi, large_arc, sweep, x2, y2):
         # Implemented based on the SVG implementation notes
@@ -456,9 +456,9 @@ class DXFParser:
         if self.x_min < 0:
             xShift = 0.0 - self.x_min - self.x_max
             if self.debug:
-                print("x_min %f" % self.x_min)
-                print("x_max %f" % self.x_max)
-                print("xShift %f" % xShift)
+                print(("x_min %f" % self.x_min))
+                print(("x_max %f" % self.x_max))
+                print(("xShift %f" % xShift))
 
         if self.y_min < self.bedwidth[1]:
             self.y_min += 0
@@ -472,10 +472,10 @@ class DXFParser:
             else:
                 yShift = self.bedwidth[1]
             if self.debug:
-                print("y bedwidth %f" % self.bedwidth[1])
-                print("y_min %f" % self.y_min)
-                print("y_max %f" % self.y_max)
-                print("yShift %f" % yShift)
+                print(("y bedwidth %f" % self.bedwidth[1]))
+                print(("y_min %f" % self.y_min))
+                print(("y_max %f" % self.y_max))
+                print(("yShift %f" % yShift))
 
         for color in self.colorLayers:
             if len(self.colorLayers[color]) > 0:

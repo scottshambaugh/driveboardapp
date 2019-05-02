@@ -31,8 +31,8 @@ _DFLT_FILE_MODE = (
 
 
 if _sys.version_info[0] == 2:
-    from  StringIO import StringIO as _BaseStringIO
-    from  StringIO import StringIO as _BaseBytesIO
+    from  io import StringIO as _BaseStringIO
+    from  io import StringIO as _BaseBytesIO
 
     class _StringIO (_BaseStringIO):
         def __enter__(self):

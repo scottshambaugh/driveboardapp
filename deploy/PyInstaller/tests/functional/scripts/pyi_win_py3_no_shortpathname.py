@@ -22,22 +22,22 @@ def check_shortpathname(fn):
     fn = os.path.normcase(fn)
     lfn = os.path.normcase(lfn)
     if lfn != fn:
-        print("ShortPathName: Expected %s, got %s" % (fn, lfn))
+        print(("ShortPathName: Expected %s, got %s" % (fn, lfn)))
         raise SystemExit(-1)
 
-print("sys.executable: %s" % safe_repr(sys.executable))
+print(("sys.executable: %s" % safe_repr(sys.executable)))
 
 if not os.path.exists(sys.executable):
     raise SystemExit("sys.executable does not exist.")
 check_shortpathname(sys.executable)
 
-print("sys.argv[0]: %s" % safe_repr(sys.argv[0]))
+print(("sys.argv[0]: %s" % safe_repr(sys.argv[0])))
 
 if not os.path.exists(sys.argv[0]):
     raise SystemExit("sys.argv[0] does not exist.")
 check_shortpathname(sys.argv[0])
 
-print("sys._MEIPASS: %s" % safe_repr(sys._MEIPASS))
+print(("sys._MEIPASS: %s" % safe_repr(sys._MEIPASS)))
 
 if not os.path.exists(sys._MEIPASS):
     raise SystemExit("sys._MEIPASS does not exist.")

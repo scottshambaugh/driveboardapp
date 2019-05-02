@@ -62,7 +62,7 @@ def build_all():
         shutil.copy(config_file, 'config.h')
         try:
             firmware_name = "firmware.%s" % (hardware_designator)
-            print "INFO: building for %s" % (config_file)
+            print("INFO: building for %s" % (config_file))
             # buid
             r = build_firmware(firmware_name)
             if r != 0:
@@ -121,7 +121,7 @@ def build_firmware(firmware_name="DriveboardFirmware"):
 
     try:
         ## clean after upload
-        print "Cleaning up build files."
+        print("Cleaning up build files.")
         for fileobj in OBJECTS:
             f = '%s.o' % (fileobj)
             if os.path.isfile(f):
@@ -130,11 +130,11 @@ def build_firmware(firmware_name="DriveboardFirmware"):
             os.remove('main.elf')
 
         ## move firmware hex file
-        print "Moving firmware to standard location."
+        print("Moving firmware to standard location.")
         firmware_src = firmware_name+'.hex'
         firmware_dst = os.path.join(firmware_dir, firmware_src)
         shutil.move(firmware_src, firmware_dst)
-        print firmware_dst
+        print(firmware_dst)
     finally:
         #restore previous cwd
         os.chdir(cwd_temp)

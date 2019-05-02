@@ -1,7 +1,7 @@
 """
 Utilities for reading and writing Mach-O headers
 """
-from __future__ import print_function
+
 
 import sys
 import struct
@@ -15,9 +15,9 @@ except ImportError:
     pass
 
 try:
-    unicode
+    str
 except NameError:
-    unicode = str
+    str = str
 
 __all__ = ['MachO']
 
@@ -338,7 +338,7 @@ class MachOHeader(object):
             cmd.to_fileobj(fileobj)
 
             if sys.version_info[0] == 2:
-                if isinstance(data, unicode):
+                if isinstance(data, str):
                     fileobj.write(data.encode(sys.getfilesystemencoding()))
 
                 elif isinstance(data, (bytes, str)):

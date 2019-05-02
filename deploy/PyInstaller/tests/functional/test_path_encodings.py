@@ -33,7 +33,7 @@ def test_linux_non_unicode_path(pyi_builder, monkeypatch):
     # test verifies that _Py_char2wchar will decode the "undecodable" bytes and
     # will decode even filenames that weren't encoded with the locale encoding.
     distdir = pyi_builder._distdir
-    unicode_filename = u'ěščřžýáíé日本語'
+    unicode_filename = 'ěščřžýáíé日本語'
     pyi_builder._distdir = os.path.join(distdir, unicode_filename)
     os.makedirs(pyi_builder._distdir)
 
@@ -54,7 +54,7 @@ def test_linux_non_unicode_path(pyi_builder, monkeypatch):
 def test_osx_linux_unicode_path(pyi_builder, monkeypatch):
     # Mac and Linux should handle 'unicode' type filenames without problem.
     distdir = pyi_builder._distdir
-    unicode_filename = u'ěščřžýáíé日本語'
+    unicode_filename = 'ěščřžýáíé日本語'
     pyi_builder._distdir = os.path.join(distdir, unicode_filename)
     os.makedirs(pyi_builder._distdir)
 
@@ -76,7 +76,7 @@ def test_win_codepage_path(pyi_builder, monkeypatch):
     # Create some bytes and decode with the current codepage to get a filename that
     # is guaranteed to encode with the current codepage.
     # Assumes a one-byte codepage, i.e. not cp937 (shift-JIS) which is multibyte
-    cp_filename = bytes(bytearray(range(0x80, 0x86))).decode('mbcs')
+    cp_filename = bytes(bytearray(list(range(0x80, 0x86)))).decode('mbcs')
 
     pyi_builder._distdir = os.path.join(distdir, cp_filename)
     os.makedirs(pyi_builder._distdir)
@@ -98,7 +98,7 @@ def test_win_codepage_path_disabled_shortfilename(pyi_builder, monkeypatch):
     # Create some bytes and decode with the current codepage to get a filename that
     # is guaranteed to encode with the current codepage.
     # Assumes a one-byte codepage, i.e. not cp937 (shift-JIS) which is multibyte
-    cp_filename = bytes(bytearray(range(0x80, 0x86))).decode('mbcs')
+    cp_filename = bytes(bytearray(list(range(0x80, 0x86)))).decode('mbcs')
 
     distdir = os.path.join(distdir, cp_filename)
     os.makedirs(distdir)
@@ -148,7 +148,7 @@ def test_win_non_codepage_path(pyi_builder, monkeypatch):
 
     distdir = pyi_builder._distdir
     # Both eastern European and Japanese characters - no codepage should encode this.
-    non_cp_filename = u'ěščřžýáíé日本語'
+    non_cp_filename = 'ěščřžýáíé日本語'
 
     # Codepage encoding would replace some of these chars with "???".
 

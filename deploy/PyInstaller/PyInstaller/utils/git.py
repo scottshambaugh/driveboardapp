@@ -55,4 +55,4 @@ def get_repo_revision():
 
 
 if __name__ == '__main__':
-    print(get_repo_revision())
+    print((get_repo_revision()))

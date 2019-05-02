@@ -72,7 +72,7 @@ if hasattr(settings, 'TEMPLATES'):
                 mods = [_remove_class(x) for x in mods]
                 hiddenimports += mods
 # Include database backends - it is a dict.
-for v in settings.DATABASES.values():
+for v in list(settings.DATABASES.values()):
     hiddenimports.append(v['ENGINE'])
 
 

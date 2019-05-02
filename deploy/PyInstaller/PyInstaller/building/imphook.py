@@ -378,7 +378,7 @@ class ModuleHook(object):
         # Copy hook script attributes into magic attributes exposed as instance
         # variables of the current "ModuleHook" instance.
         for attr_name, (default_type, sanitizer_func) in (
-            _MAGIC_MODULE_HOOK_ATTRS.items()):
+            list(_MAGIC_MODULE_HOOK_ATTRS.items())):
             # Unsanitized value of this attribute.
             attr_value = getattr(self._hook_module, attr_name, None)
 

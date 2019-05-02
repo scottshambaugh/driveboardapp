@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 import errno
 import logging
 import sys
@@ -10,9 +10,9 @@ import socket
 try:  # Python 3
     from queue import LifoQueue, Empty, Full
 except ImportError:
-    from Queue import LifoQueue, Empty, Full
+    from queue import LifoQueue, Empty, Full
     # Queue is imported for side effects on MS Windows
-    import Queue as _unused_module_Queue  # noqa: unused
+    import queue as _unused_module_Queue  # noqa: unused
 
 
 from .exceptions import (
@@ -190,7 +190,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
         self.proxy_headers = _proxy_headers or {}
 
         # Fill the queue up so that doing get() on it will block properly
-        for _ in xrange(maxsize):
+        for _ in range(maxsize):
             self.pool.put(None)
 
         # These are mostly for testing and debugging purposes.

@@ -19,9 +19,9 @@ PEP-302 importers for frozen applications.
 
 
 import sys
-import pyimod01_os_path as pyi_os_path
+from . import pyimod01_os_path as pyi_os_path
 
-from pyimod02_archive import ArchiveReadError, ZlibArchiveReader
+from .pyimod02_archive import ArchiveReadError, ZlibArchiveReader
 
 
 SYS_PREFIX = sys._MEIPASS
@@ -537,7 +537,7 @@ class CExtensionImporter(object):
                 if module is None:
                     # Need to search for the filename again, since to
                     # be thread-safe we can't store it in find_module().
-                    for ext, ext_tuple in EXTENSION_SUFFIXES.iteritems():
+                    for ext, ext_tuple in EXTENSION_SUFFIXES.items():
                         filename = fullname + ext
                         if filename in self._file_cache:
                             break

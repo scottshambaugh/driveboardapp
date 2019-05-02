@@ -12,7 +12,7 @@
 Viewer for archives packaged by archive.py
 """
 
-from __future__ import print_function
+
 
 import argparse
 import os
@@ -173,7 +173,7 @@ def get_content(arch, recursive, brief, output):
     if isinstance(arch.toc, dict):
         toc = arch.toc
         if brief:
-            for name, _ in toc.items():
+            for name, _ in list(toc.items()):
                 output.append(name)
         else:
             output.append(toc)

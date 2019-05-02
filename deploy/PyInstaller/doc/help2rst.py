@@ -7,7 +7,7 @@ before "Options" resp. "optional arguments" and after "Obsolete
 options".
 '''
 
-from __future__ import print_function
+
 
 import argparse
 import subprocess

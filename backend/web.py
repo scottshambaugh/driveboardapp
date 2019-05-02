@@ -28,7 +28,7 @@ time_status_last = 0
 
 if conf['mill_mode']:
     frontend_path = 'frontend_mill'
-    print "INFO: loading mill mode frontend"
+    print("INFO: loading mill mode frontend")
 else:
     frontend_path = 'frontend'
 
@@ -89,8 +89,8 @@ def temp():
     with fp:
         fp.write(job)
         fp.close()
-    print job
-    print "file stashed: " + os.path.basename(filename)
+    print(job)
+    print("file stashed: " + os.path.basename(filename))
     # return os.path.basename(filename)
     return json.dumps(os.path.basename(filename))
 
@@ -98,7 +98,7 @@ def temp():
 @bottle.route('/download/<filename>/<dlname>')
 @bottle.auth_basic(checkuser)
 def download(filename, dlname):
-    print "requesting: " + filename
+    print("requesting: " + filename)
     return bottle.static_file(filename, root=tempfile.gettempdir(), download=dlname)
 
 
@@ -350,11 +350,11 @@ def _get_sorted(globpattern, library=False, stripext=False):
     try:
         if library:
             os.chdir(os.path.join(conf['rootdir'], 'library'))
-            files = filter(os.path.isfile, glob.glob(globpattern))
+            files = list(filter(os.path.isfile, glob.glob(globpattern)))
             files.sort()
         else:
             os.chdir(conf['confdir'])
-            files = filter(os.path.isfile, glob.glob(globpattern))
+            files = list(filter(os.path.isfile, glob.glob(globpattern)))
             files.sort(key=lambda x: os.path.getmtime(x))
         if stripext:
             for i in range(len(files)):
@@ -408,7 +408,7 @@ def _clear(limit=None):
             break
         filename = os.path.join(conf['confdir'], filename)
         os.remove(filename);
-        print "file deleted: " + filename
+        print("file deleted: " + filename)
         if type(limit) is int:
             limit -= 1
 
@@ -418,7 +418,7 @@ def _add(job, name):
     namepath = os.path.join(conf['confdir'], name.strip('/\\')+'.dba')
     with open(namepath, 'w') as fp:
         fp.write(job)
-        print "file saved: " + namepath
+        print("file saved: " + namepath)
     # delete excessive job files
     num_to_del = len(_get_sorted('*.dba')) - conf['max_jobs_in_list']
     _clear(num_to_del)
@@ -426,7 +426,7 @@ def _add(job, name):
 def _unique_name(jobname):
     files = _get_sorted('*.dba*', stripext=True)
     if jobname in files:
-        for i in xrange(2,999):
+        for i in range(2,999):
             altname = "%s_%s" % (jobname, i)
             if altname in files:
                 continue
@@ -492,7 +492,7 @@ def listing(kind=None):
         files = _get_sorted('*.dba*', stripext=True)
     elif kind == 'starred':
         files = _get_sorted('*.dba.starred', stripext=True)
-        print files
+        print(files)
     elif kind == 'unstarred':
         files = _get_sorted('*.dba', stripext=True)
     else:
@@ -538,7 +538,7 @@ def remove(jobname):
     """Delete a job."""
     jobpath = _get_path(jobname)
     os.remove(jobpath)
-    print "INFO: file deleted: " + jobpath
+    print("INFO: file deleted: " + jobpath)
     return '{}'
 
 
@@ -713,7 +713,7 @@ class Server(threading.Thread):
                 self.server.handle_request()
             except KeyboardInterrupt:
                 break
-        print "\nServer shutting down..."
+        print("\nServer shutting down...")
         driveboard.close()
 
     def stop(self):
@@ -750,18 +750,18 @@ def start(browser=False, debug=False):
     S.server.quiet = not debug
     if debug:
         bottle.debug(True)
-    print "Library Directory: " + conf['rootdir']
-    print "Config Directory: " + conf['confdir']
-    print "-----------------------------------------------------------------------------"
-    print "Starting server at http://%s:%d/" % ('127.0.0.1', conf['network_port'])
-    print "-----------------------------------------------------------------------------"
+    print("Library Directory: " + conf['rootdir'])
+    print("Config Directory: " + conf['confdir'])
+    print("-----------------------------------------------------------------------------")
+    print("Starting server at http://%s:%d/" % ('127.0.0.1', conf['network_port']))
+    print("-----------------------------------------------------------------------------")
     driveboard.connect_withfind()
     # open web-browser
     if browser:
         try:
             webbrowser.open_new_tab('http://127.0.0.1:'+str(conf['network_port']))
         except webbrowser.Error:
-            print "Cannot open Webbrowser, please do so manually."
+            print("Cannot open Webbrowser, please do so manually.")
     sys.stdout.flush()  # make sure everything gets flushed
     # start server
     # print "INFO: Starting web server thread."
@@ -787,4 +787,4 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             break
     stop()
-    print "END of DriveboardApp"
+    print("END of DriveboardApp")

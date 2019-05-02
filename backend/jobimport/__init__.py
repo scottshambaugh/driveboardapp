@@ -2,10 +2,10 @@
 import json
 
 from config import conf
-from svg_reader import SVGReader
-from dxf_parser import DXFParser
-from gcode_reader import GcodeReader
-import pathoptimizer
+from .svg_reader import SVGReader
+from .dxf_parser import DXFParser
+from .gcode_reader import GcodeReader
+from . import pathoptimizer
 
 
 __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
@@ -25,7 +25,7 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
     """
     type_ = get_type(job)
     if type_ == 'dba':
-        if type(job) in (str, unicode):
+        if type(job) in (str, str):
             job = json.loads(job)
         if optimize:
             if 'defs' in job:
@@ -43,7 +43,7 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
     elif type_ == 'gcode':
         job = read_gcode(job, tolerance, optimize=optimize)
     else:
-        print "ERROR: file type not recognized"
+        print("ERROR: file type not recognized")
         raise TypeError
     return job
 
@@ -68,7 +68,7 @@ def read_svg(svg_string, workspace, tolerance, forced_dpi=None, optimize=True):
     if 'boundarys' in res:
         if 'dpi' in res:
             job['head']['dpi'] = res['dpi']
-        for color,path in res['boundarys'].iteritems():
+        for color,path in res['boundarys'].items():
             if optimize:
                 pathoptimizer.optimize(path, tolerance)
             job['defs'].append({"kind":"path",
@@ -131,7 +131,7 @@ def get_type(job):
     # figure out type
     if type(job) is dict:
         type_ = 'dba'
-    elif type(job) is str or type(job) is unicode:
+    elif type(job) is str or type(job) is str:
         jobheader = job[:1024].lstrip()
         if jobheader and jobheader[0] == '{':
             type_ = 'dba'
@@ -145,9 +145,9 @@ def get_type(job):
              'g00' in jobheader or 'g01' in jobheader:
             type_ = 'gcode'
         else:
-            print "ERROR: Cannot figure out file type 1."
+            print("ERROR: Cannot figure out file type 1.")
             raise TypeError
     else:
-        print "ERROR: Cannot figure out file type 2."
+        print("ERROR: Cannot figure out file type 2.")
         raise TypeError
     return type_

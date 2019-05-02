@@ -40,7 +40,7 @@ config.load(args.config)
 import web
 
 try:
-    import Tkinter
+    import tkinter
 except ImportError:
     args.cli = True
 
@@ -48,7 +48,7 @@ if not args.cli:
     import window
     root = window.init()
 
-print "DriveboardApp v" + config.conf['version']
+print("DriveboardApp v" + config.conf['version'])
 
 # start server in thread
 web.start(browser=(not args.nobrowser), debug=args.debug)
@@ -59,10 +59,10 @@ while 1:
         if not args.cli:
             try:
                 root.update()
-            except Tkinter.TclError:
+            except tkinter.TclError:
                 break
         time.sleep(0.1)
     except KeyboardInterrupt:
         break
 web.stop()
-print "END of DriveboardApp"
+print("END of DriveboardApp")

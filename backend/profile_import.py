@@ -35,7 +35,7 @@ def main():
     thislocation = os.path.dirname(os.path.realpath(__file__))
     if args.jobfile:
         jobfile = os.path.join(thislocation, "testjobs", args.jobfile)
-        print jobfile
+        print(jobfile)
         with open(jobfile) as fp:
             job = fp.read()
         job = jobimport.convert(job, tolerance=float(args.tolerance),
@@ -47,19 +47,19 @@ def main():
             for polyline in path:
                 for point in polyline:
                     total_points += 1
-        print "STATS:"
-        print "\ttotal points: %s" % total_points
+        print("STATS:")
+        print("\ttotal points: %s" % total_points)
         if 'vector' in job and 'optimized' in job['vector']:
-            print "\ttolerance: %s" % job['vector']['optimized']
+            print("\ttolerance: %s" % job['vector']['optimized'])
     else:
         jobpath = os.path.join(thislocation, "testjobs")
         cwd_temp = os.getcwd()
         os.chdir(jobpath)
         files = glob.glob("*.*")
         os.chdir(cwd_temp)
-        print "Name one of the following files:"
+        print("Name one of the following files:")
         for file_ in files:
-            print file_
+            print(file_)
 
 
 if args.profile:
@@ -69,7 +69,7 @@ if args.profile:
     os.remove('profile.tmp')
 elif args.timeit:
     t = timeit.Timer("main()", "from __main__ import main")
-    print t.timeit(1)
+    print(t.timeit(1))
     # print t.timeit(3)
 else:
     main()
