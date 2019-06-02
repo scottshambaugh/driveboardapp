@@ -2,7 +2,7 @@
 # Created: 21.07.2012, taken from my ezdxf project
 # Copyright (C) 2012, Manfred Moitzi
 # License: MIT License
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 from .codepage import toencoding
@@ -25,7 +25,7 @@ class Sections(object):
 
     def _create_default_sections(self):
         self._sections['header'] = HeaderSection()
-        for cls in list(SECTIONMAP.values()):
+        for cls in SECTIONMAP.values():
             section = cls()
             self._sections[section.name] = section
 
@@ -33,14 +33,12 @@ class Sections(object):
         def name(section):
             return section[1].value
 
-        bootstrap = True
         for section in iterchunks(tagreader, stoptag='EOF', endofchunk='ENDSEC'):
-            if bootstrap:
+            if name(section) == 'HEADER':
                 new_section = HeaderSection.from_tags(section)
                 drawing.dxfversion = new_section.get('$ACADVER', 'AC1009')
                 codepage = new_section.get('$DWGCODEPAGE', 'ANSI_1252')
                 drawing.encoding = toencoding(codepage)
-                bootstrap = False
             else:
                 section_name = name(section)
                 if section_name in SECTIONMAP:

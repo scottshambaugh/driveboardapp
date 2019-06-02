@@ -2,17 +2,16 @@
 # Created: 21.07.2012, taken from my ezdxf project
 # Copyright (C) 2012, Manfred Moitzi
 # License: MIT License
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 import sys
 from .codepage import toencoding
 from .const import acadrelease
-from array import array
 
 from io import StringIO
 from collections import namedtuple
-from itertools import chain, islice
+from itertools import chain
 from . import tostr
 
 
@@ -31,11 +30,28 @@ def point_tuple(value):
     return tuple(float(f) for f in value)
 
 
-POINT_CODES = frozenset(chain(list(range(10, 20)), (210, ), list(range(110, 113)), list(range(1010, 1020))))
+POINT_CODES = frozenset(chain(range(10, 20), (210, ), range(110, 113), range(1010, 1020)))
 
 
 def is_point_tag(tag):
     return tag[0] in POINT_CODES
+
+
+infinite = float('inf')
+neg_infinite = float('-inf')
+
+
+def to_float_with_infinite(value):
+    try:
+        return float(value)
+    except ValueError:
+        value = value.lower().strip()
+        if value.startswith('inf'):
+            return infinite
+        if value.startswith('-inf'):
+            return neg_infinite
+        else:
+            raise
 
 
 class TagCaster:
@@ -71,34 +87,35 @@ class TagCaster:
             else:
                 raise
 
+
 TYPES = [
-    (tostr, list(range(0, 10))),
-    (point_tuple, list(range(10, 20))),
-    (float, list(range(20, 60))),
-    (int, list(range(60, 100))),
-    (tostr, list(range(100, 106))),
-    (point_tuple, list(range(110, 113))),
-    (float, list(range(113, 150))),
-    (int, list(range(170, 180))),
+    (tostr, range(0, 10)),
+    (point_tuple, range(10, 20)),
+    (to_float_with_infinite, range(20, 60)),
+    (int, range(60, 100)),
+    (tostr, range(100, 106)),
+    (point_tuple, range(110, 113)),
+    (to_float_with_infinite, range(113, 150)),
+    (int, range(170, 180)),
     (point_tuple, [210]),
-    (float, list(range(211, 240))),
-    (int, list(range(270, 290))),
-    (int, list(range(290, 300))),  # bool 1=True 0=False
-    (tostr, list(range(300, 370))),
-    (int, list(range(370, 390))),
-    (tostr, list(range(390, 400))),
-    (int, list(range(400, 410))),
-    (tostr, list(range(410, 420))),
-    (int, list(range(420, 430))),
-    (tostr, list(range(430, 440))),
-    (int, list(range(440, 460))),
-    (float, list(range(460, 470))),
-    (tostr, list(range(470, 480))),
-    (tostr, list(range(480, 482))),
-    (tostr, list(range(999, 1010))),
-    (point_tuple, list(range(1010, 1020))),
-    (float, list(range(1020, 1060))),
-    (int, list(range(1060, 1072))),
+    (to_float_with_infinite, range(211, 240)),
+    (int, range(270, 290)),
+    (int, range(290, 300)),  # bool 1=True 0=False
+    (tostr, range(300, 370)),
+    (int, range(370, 390)),
+    (tostr, range(390, 400)),
+    (int, range(400, 410)),
+    (tostr, range(410, 420)),
+    (int, range(420, 430)),
+    (tostr, range(430, 440)),
+    (int, range(440, 460)),
+    (to_float_with_infinite, range(460, 470)),
+    (tostr, range(470, 480)),
+    (tostr, range(480, 482)),
+    (tostr, range(999, 1010)),
+    (point_tuple, range(1010, 1020)),
+    (to_float_with_infinite, range(1020, 1060)),
+    (int, range(1060, 1072)),
 ]
 
 _TagCaster = TagCaster()
@@ -107,7 +124,7 @@ cast_tag_value = _TagCaster.cast_value
 
 
 def stream_tagger(stream, assure_3d_coords=False):
-    """ Generates DXFTag() from a stream (untrusted external source). Does not skip comment tags 999.
+    """ Generates DXFTag() from a stream (untrusted external source). Does skip comment tags 999.
     """
     class Counter:
         def __init__(self):
@@ -121,8 +138,8 @@ def stream_tagger(stream, assure_3d_coords=False):
         value = stream.readline()
         line.counter += 2
         if code and value:  # StringIO(): empty strings indicates EOF
-            return DXFTag(int(code[:-1]), value[:-1])  # without '\n'
-        else:  # StringIO(): missing '\n' indicates EOF
+            return DXFTag(int(code.rstrip('\r\n')), value.rstrip('\r\n'))  # without line ending
+        else:  # StringIO(): empty lines indicates EOF
             raise EOFError()
 
     while True:
@@ -432,7 +449,8 @@ def dxfinfo(stream):
     info = DXFInfo()
     tag = DXFTag(999999, '')
     tagreader = stream_tagger(stream)
-    while tag != DXFTag(0, 'ENDSEC'):
+    stop_tag = DXFTag(0, 'ENDSEC')
+    while tag != stop_tag:
         tag = next(tagreader)
         if tag.code != 9:
             continue
@@ -444,6 +462,7 @@ def dxfinfo(stream):
 
 
 def binary_encoded_data_to_bytes(data):
+    from array import array
     PY3 = sys.version_info[0] >= 3
     byte_array = array('B' if PY3 else b'B')
     for text in data:

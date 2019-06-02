@@ -3,7 +3,7 @@
 # Copyright (C) 2014, Manfred Moitzi
 # License: MIT License
 
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 from itertools import islice

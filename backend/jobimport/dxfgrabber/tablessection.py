@@ -2,7 +2,7 @@
 # Created: 21.07.2012, taken from my ezdxf project
 # Copyright (C) 2012, Manfred Moitzi
 # License: MIT License
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 from .defaultchunk import iterchunks, DefaultChunk
@@ -42,7 +42,7 @@ class TablesSection(object):
         self._create_default_tables()
 
     def _create_default_tables(self):
-        for cls in list(TABLESMAP.values()):
+        for cls in TABLESMAP.values():
             table = cls()
             self._tables[table.name] = table
 

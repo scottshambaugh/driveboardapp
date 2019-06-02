@@ -2,7 +2,7 @@
 # Created: 09.08.2012, taken from my package ezdxf
 # Copyright (C) 2011, Manfred Moitzi
 # License: MIT-License
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 from itertools import islice
@@ -45,7 +45,7 @@ class BlocksSection(object):
         return len(self._blocks)
 
     def __iter__(self):
-        return iter(list(self._blocks.values()))
+        return iter(self._blocks.values())
 
     def __contains__(self, name):
         return name in self._blocks

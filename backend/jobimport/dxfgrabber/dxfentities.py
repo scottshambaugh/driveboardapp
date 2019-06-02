@@ -3,7 +3,7 @@
 # Created: 17.04.2016
 # Copyright (C) 2016, Manfred Moitzi
 # License: MIT License
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 import math
@@ -190,8 +190,8 @@ class Text(DXFEntity):
         self.halign = 0
         self.valign = 0
         self.align_point = None
-        self.font = ""
-        self.big_font = ""
+        self.font = None
+        self.big_font = None
 
     def setup_attributes(self, tags):
         for code, value in super(Text, self).setup_attributes(tags):
@@ -470,7 +470,7 @@ class SubFace(object):
 class PolyShape(object):
     def __init__(self, polyline, dxftype):
         # copy all dxf attributes from polyline
-        for key, value in list(polyline.__dict__.items()):
+        for key, value in polyline.__dict__.items():
             self.__dict__[key] = value
         self.dxftype = dxftype
 
@@ -545,6 +545,8 @@ class Vertex(DXFEntity):
                 self.start_width = value
             elif code == 41:
                 self.end_width = value
+            elif code == 42:
+                self.bulge = value
             elif code == 50:
                 self.tangent = value
             elif code == 70:

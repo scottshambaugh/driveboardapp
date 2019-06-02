@@ -2,7 +2,7 @@
 # Created: 01.05.2014
 # Copyright (C) 2014, Manfred Moitzi
 # License: MIT License
-
+from __future__ import unicode_literals
 __author__ = "mozman <mozman@gmx.at>"
 
 from . import PYTHON3
@@ -23,7 +23,7 @@ def decode(text_lines):
         if PYTHON3:
             text = bytes(text, 'ascii')
         else:
-            text = list(map(ord, text))
+            text = map(ord, text)
 
         for c in text:
             if skip:
