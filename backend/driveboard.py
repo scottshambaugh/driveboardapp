@@ -18,9 +18,7 @@ if not conf['mill_mode']:
     except ImportError:
         print("Pillow module missing, raster mode will fail.")
 
-
 __author__  = 'Stefan Hechenberger <stefan@nortd.com>'
-
 
 
 ################ SENDING PROTOCOL
@@ -113,7 +111,6 @@ INFO_PIXEL_WIDTH = 'j'
 ################
 
 
-
 # reverse lookup for commands, for debugging
 # NOTE: have to be in sync with above definitions
 markers_tx = {
@@ -158,6 +155,15 @@ markers_tx = {
 }
 
 markers_rx = {
+    chr(1): "CMD_STOP",
+    chr(2): "CMD_RESUME",
+    chr(3): "CMD_STATUS",
+    chr(4): "CMD_SUPERSTATUS",
+    chr(5): "CMD_CHUNK_PROCESSED",
+    chr(16): "CMD_RASTER_DATA_START",
+    chr(17): "CMD_RASTER_DATA_END",
+    chr(6): "STATUS_END",
+
     # status: error flags
     '!': "ERROR_SERIAL_STOP_REQUEST",
     '"': "ERROR_RX_BUFFER_OVERFLOW",
@@ -202,11 +208,9 @@ markers_rx = {
     'j': "INFO_PIXEL_WIDTH",
 }
 
-
-
-
 SerialLoop = None
 fallback_msg_thread = None
+
 
 class SerialLoopClass(threading.Thread):
 
@@ -238,7 +242,7 @@ class SerialLoopClass(threading.Thread):
         self.request_status = 2       # 0: no request, 1: normal request, 2: super request
 
         self.pdata_count = 0
-        self.pdata_chars = [None, None, None, None]
+        self.pdata_nums = [128, 128, 128, 192]
 
         threading.Thread.__init__(self)
         self.stop_processing = False
@@ -248,7 +252,6 @@ class SerialLoopClass(threading.Thread):
         # lock mechanism for chared data
         # see: http://effbot.org/zone/thread-synchronization.htm
         self.lock = threading.Lock()
-
 
 
     def reset_status(self):
@@ -285,7 +288,7 @@ class SerialLoopClass(threading.Thread):
 
 
     def send_command(self, command):
-        self.tx_buffer.append(command)
+        self.tx_buffer.append(ord(command))
         self.job_size += 1
 
 
@@ -293,15 +296,15 @@ class SerialLoopClass(threading.Thread):
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
         # three decimals are retained
         num = int(round(((val+134217.728)*1000)))
-        char0 = chr((num&127)+128)
-        char1 = chr(((num&(127<<7))>>7)+128)
-        char2 = chr(((num&(127<<14))>>14)+128)
-        char3 = chr(((num&(127<<21))>>21)+128)
+        char0 = (num&127)+128
+        char1 = ((num&(127<<7))>>7)+128
+        char2 = ((num&(127<<14))>>14)+128
+        char3 = ((num&(127<<21))>>21)+128
         self.tx_buffer.append(char0)
         self.tx_buffer.append(char1)
         self.tx_buffer.append(char2)
         self.tx_buffer.append(char3)
-        self.tx_buffer.append(param)
+        self.tx_buffer.append(ord(param))
         self.job_size += 5
 
 
@@ -311,7 +314,7 @@ class SerialLoopClass(threading.Thread):
             self.tx_buffer.append(CMD_RASTER_DATA_START)
         for val in itertools.islice(data, start, end):
             with self.lock:
-                self.tx_buffer.append(chr(int(0.5*(255-val))+128))
+                self.tx_buffer.append(int(0.5*(255-val))+128)
             count += 1
         with self.lock:
             self.tx_buffer.append(CMD_RASTER_DATA_END)
@@ -363,16 +366,17 @@ class SerialLoopClass(threading.Thread):
             time.sleep(0.004)
 
 
-
     def _serial_read(self):
-        for char in self.device.read(self.RX_CHUNK_SIZE):
-            # sys.stdout.write('('+char+','+str(ord(char))+')')
-            if ord(char) < 32:  ### flow
-                if char == CMD_CHUNK_PROCESSED:
+        chunk = self.device.read(self.RX_CHUNK_SIZE)
+        for data_num in chunk:
+            data_char = chr(data_num)
+            #sys.stdout.write('('+data_char+','data_num+')')
+            if data_num < 32:  ### flow
+                if data_char == CMD_CHUNK_PROCESSED:
                     self.firmbuf_used -= self.TX_CHUNK_SIZE
                     if self.firmbuf_used < 0:
                         print("ERROR: firmware buffer tracking to low")
-                elif char == STATUS_END:
+                elif data_char == STATUS_END:
                     # status frame complete, compile status
                     self._status, self._s = self._s, self._status  # flip
                     self._status['paused'] = self._paused
@@ -387,64 +391,65 @@ class SerialLoopClass(threading.Thread):
                     self._s['ready'] = False
                     self._s['underruns'] = self._status['underruns']
                     self._s['stackclear'] = self._status['stackclear']
-            elif 31 < ord(char) < 65:  ### stop error markers
+            elif 31 < data_num < 65:  ### stop error markers
                 # chr is in [!-@], process flag
-                if char == ERROR_LIMIT_HIT_X1:
+                if data_char == ERROR_LIMIT_HIT_X1:
                     self._s['stops']['x1'] = True
                     # print "ERROR firmware: limit hit x1"
-                elif char == ERROR_LIMIT_HIT_X2:
+                elif data_char == ERROR_LIMIT_HIT_X2:
                     self._s['stops']['x2'] = True
                     # print "ERROR firmware: limit hit x2"
-                elif char == ERROR_LIMIT_HIT_Y1:
+                elif data_char == ERROR_LIMIT_HIT_Y1:
                     self._s['stops']['y1'] = True
                     # print "ERROR firmware: limit hit y1"
-                elif char == ERROR_LIMIT_HIT_Y2:
+                elif data_char == ERROR_LIMIT_HIT_Y2:
                     self._s['stops']['y2'] = True
                     # print "ERROR firmware: limit hit y2"
-                elif char == ERROR_LIMIT_HIT_Z1:
+                elif data_char == ERROR_LIMIT_HIT_Z1:
                     self._s['stops']['z1'] = True
                     # print "ERROR firmware: limit hit z1"
-                elif char == ERROR_LIMIT_HIT_Z2:
+                elif data_char == ERROR_LIMIT_HIT_Z2:
                     self._s['stops']['z2'] = True
                     # print "ERROR firmware: limit hit z2"
-                elif char == ERROR_SERIAL_STOP_REQUEST:
+                elif data_char == ERROR_SERIAL_STOP_REQUEST:
                     self._s['stops']['requested'] = True
                     # print "ERROR firmware: stop request"
                     print("INFO firmware: stop request")
-                elif char == ERROR_RX_BUFFER_OVERFLOW:
+                elif data_char == ERROR_RX_BUFFER_OVERFLOW:
                     self._s['stops']['buffer'] = True
                     print("ERROR firmware: rx buffer overflow")
-                elif char == ERROR_INVALID_MARKER:
+                elif data_char == ERROR_INVALID_MARKER:
                     self._s['stops']['marker'] = True
                     print("ERROR firmware: invalid marker")
-                elif char == ERROR_INVALID_DATA:
+                elif data_char == ERROR_INVALID_DATA:
                     self._s['stops']['data'] = True
                     print("ERROR firmware: invalid data")
-                elif char == ERROR_INVALID_COMMAND:
+                elif data_char == ERROR_INVALID_COMMAND:
                     self._s['stops']['command'] = True
                     print("ERROR firmware: invalid command")
-                elif char == ERROR_INVALID_PARAMETER:
+                elif data_char == ERROR_INVALID_PARAMETER:
                     self._s['stops']['parameter'] = True
                     print("ERROR firmware: invalid parameter")
-                elif char == ERROR_TRANSMISSION_ERROR:
+                elif data_char == ERROR_TRANSMISSION_ERROR:
                     self._s['stops']['transmission'] = True
                     print("ERROR firmware: transmission")
                 else:
                     print("ERROR: invalid stop error marker")
                 # in stop mode, print recent transmission, unless stop request, or limit
-                if char != ERROR_SERIAL_STOP_REQUEST and \
-                          char != ERROR_LIMIT_HIT_X1 and \
-                          char != ERROR_LIMIT_HIT_X2 and \
-                          char != ERROR_LIMIT_HIT_Y1 and \
-                          char != ERROR_LIMIT_HIT_Y2 and \
-                          char != ERROR_LIMIT_HIT_Z1 and \
-                          char != ERROR_LIMIT_HIT_Z2:
-                    recent_chars = self.tx_buffer[max(0,self.tx_pos-128):self.tx_pos]
+                if data_char != ERROR_SERIAL_STOP_REQUEST and \
+                          data_char != ERROR_LIMIT_HIT_X1 and \
+                          data_char != ERROR_LIMIT_HIT_X2 and \
+                          data_char != ERROR_LIMIT_HIT_Y1 and \
+                          data_char != ERROR_LIMIT_HIT_Y2 and \
+                          data_char != ERROR_LIMIT_HIT_Z1 and \
+                          data_char != ERROR_LIMIT_HIT_Z2:
+                    recent_data = self.tx_buffer[max(0,self.tx_pos-128):self.tx_pos]
                     print("RECENT TX BUFFER:")
-                    for char in recent_chars:
-                        if char in markers_tx:
-                            print("\t%s" % (markers_tx[char]))
-                        elif 127 < ord(char) < 256:
+                    for data_num in recent_data:
+                        data_char = chr(data_num)
+                        if data_char in markers_tx:
+                            print("\t%s" % (markers_tx[data_char]))
+                        elif 127 < data_num < 256:
                             print("\t(data byte)")
                         else:
                             print("\t(invalid)")
@@ -457,70 +462,69 @@ class SerialLoopClass(threading.Thread):
                 self.device.flushOutput()
                 self.pdata_count = 0
                 self._s['ready'] = True # ready but in stop mode
-            elif 64 < ord(char) < 91:  # info flags
-                # chr is in [A-Z], info flag
-                if char == INFO_IDLE_YES:
+            elif 64 < data_num < 91:  # info flags
+                # data_char is in [A-Z], info flag
+                if data_char == INFO_IDLE_YES:
                     if not self.tx_buffer:
                         self._s['ready'] = True
-                elif char == INFO_DOOR_OPEN:
+                elif data_char == INFO_DOOR_OPEN:
                     self._s['info']['door'] = True
-                elif char == INFO_CHILLER_OFF:
+                elif data_char == INFO_CHILLER_OFF:
                     self._s['info']['chiller'] = True
                 else:
                     print("ERROR: invalid info flag")
-                    sys.stdout.write('('+char+','+str(ord(char))+')')
+                    sys.stdout.write('(',data_char,',',data_num,')')
                 self.pdata_count = 0
-            elif 96 < ord(char) < 123:  # parameter
-                # char is in [a-z], process parameter
-                num = ((((ord(self.pdata_chars[3])-128)*2097152
-                       + (ord(self.pdata_chars[2])-128)*16384
-                       + (ord(self.pdata_chars[1])-128)*128
-                       + (ord(self.pdata_chars[0])-128) )- 134217728)/1000.0)
-                if char == INFO_POS_X:
+            elif 96 < data_num < 123:  # parameter
+                # data_char is in [a-z], process parameter
+                num = ((((self.pdata_nums[3]-128)*2097152
+                       + (self.pdata_nums[2]-128)*16384
+                       + (self.pdata_nums[1]-128)*128
+                       + (self.pdata_nums[0]-128) )- 134217728)/1000.0)
+                if data_char == INFO_POS_X:
                     self._s['pos'][0] = num
-                elif char == INFO_POS_Y:
+                elif data_char == INFO_POS_Y:
                     self._s['pos'][1] = num
-                elif char == INFO_POS_Z:
+                elif data_char == INFO_POS_Z:
                     self._s['pos'][2] = num
-                elif char == INFO_VERSION:
+                elif data_char == INFO_VERSION:
                     num = str(int(num)/100.0)
                     self._s['firmver'] = num
-                elif char == INFO_BUFFER_UNDERRUN:
+                elif data_char == INFO_BUFFER_UNDERRUN:
                     self._s['underruns'] = num
                 # super status
-                elif char == INFO_OFFSET_X:
+                elif data_char == INFO_OFFSET_X:
                     self._s['offset'][0] = num
-                elif char == INFO_OFFSET_Y:
+                elif data_char == INFO_OFFSET_Y:
                     self._s['offset'][1] = num
-                elif char == INFO_OFFSET_Z:
+                elif data_char == INFO_OFFSET_Z:
                     self._s['offset'][2] = num
-                elif char == INFO_FEEDRATE:
+                elif data_char == INFO_FEEDRATE:
                     self._s['feedrate'] = num
-                elif char == INFO_INTENSITY:
+                elif data_char == INFO_INTENSITY:
                     self._s['intensity'] = 100*num/255
-                elif char == INFO_DURATION:
+                elif data_char == INFO_DURATION:
                     self._s['duration'] = num
-                elif char == INFO_PIXEL_WIDTH:
+                elif data_char == INFO_PIXEL_WIDTH:
                     self._s['pixelwidth'] = num
-                elif char == INFO_STACK_CLEARANCE:
+                elif data_char == INFO_STACK_CLEARANCE:
                     self._s['stackclear'] = num
                 else:
                     print("ERROR: invalid param")
                 self.pdata_count = 0
-            elif ord(char) > 127:  ### data
-                # char is in [128,255]
+                self.pdata_nums = [128, 128, 128, 192]
+            elif data_num > 127:  ### data
+                # data_char is in [128,255]
                 if self.pdata_count < 4:
-                    self.pdata_chars[self.pdata_count] = char
+                    self.pdata_nums[self.pdata_count] = data_num
                     self.pdata_count += 1
                 else:
                     print("ERROR: invalid data")
             else:
-                print(ord(char))
-                print(char)
+                print(data_num)
+                print(data_char)
                 print("ERROR: invalid marker")
                 self.pdata_count = 0
-
-
 
 
     def _serial_write(self):
@@ -552,10 +556,10 @@ class SerialLoopClass(threading.Thread):
                         expectedSent = len(to_send)
                         # by protocol duplicate every char
                         to_send_double = []
-                        for c in to_send:
-                            to_send_double.append(c)
-                            to_send_double.append(c)
-                        to_send = ''.join(to_send_double)
+                        for n in to_send:
+                            to_send_double.append(n)
+                            to_send_double.append(n)
+                        to_send = to_send_double
                         #
                         t_prewrite = time.time()
                         actuallySent = self.device.write(to_send)
@@ -580,14 +584,13 @@ class SerialLoopClass(threading.Thread):
                 self.tx_pos = 0
 
 
-
-
     def _send_char(self, char):
         try:
             t_prewrite = time.time()
             # self.device.write(char)
             # print "send_char: [%s,%s]" % (str(ord(char)),str(ord(char)))
-            self.device.write(char+char)  # by protocol send twice
+            print(char)
+            self.device.write([ord(char),ord(char)])  # by protocol send twice
             if time.time() - t_prewrite > 0.1:
                 pass
                 # print "WARN: write delay 2"
@@ -595,43 +598,10 @@ class SerialLoopClass(threading.Thread):
             print("ERROR: writeTimeoutError 1")
 
 
-
-
-
 ###########################################################################
 ### API ###################################################################
 ###########################################################################
 
-
-# def find_controller(baudrate=conf['baudrate'], verbose=True):
-#     if os.name == 'posix':
-#         iterator = sorted(serial.tools.list_ports.grep('tty'))
-#         for port, desc, hwid in iterator:
-#             # print "Looking for controller on port: " + port
-#             try:
-#                 s = serial.Serial(port=port, baudrate=baudrate, timeout=2.0)
-#                 lasaur_hello = s.read(8)
-#                 if lasaur_hello.find(INFO_HELLO) > -1:
-#                     return port
-#                 s.close()
-#             except serial.SerialException:
-#                 pass
-#     else:
-#         # windows hack because pyserial does not enumerate USB-style com ports
-#         if verbose:
-#             print "Trying to find controller ..."
-#         for i in range(24):
-#             try:
-#                 s = serial.Serial(port=i, baudrate=baudrate, timeout=2.0)
-#                 lasaur_hello = s.read(8)
-#                 if lasaur_hello.find(INFO_HELLO) > -1:
-#                     return s.portstr
-#                 s.close()
-#             except serial.SerialException:
-#                 pass
-#     if verbose:
-#         print "ERROR: No controller found."
-#     return None
 def find_controller(baudrate=conf['baudrate'], verbose=True):
     iterator = sorted(serial.tools.list_ports.comports())
     # look for Arduinos
@@ -644,7 +614,7 @@ def find_controller(baudrate=conf['baudrate'], verbose=True):
         try:
             s = serial.Serial(port=port, baudrate=baudrate, timeout=2.0)
             lasaur_hello = s.read(8)
-            if lasaur_hello.find(INFO_HELLO) > -1:
+            if lasaur_hello.find(ord(INFO_HELLO)) > -1:
                 s.close()
                 return port
             s.close()
@@ -655,7 +625,7 @@ def find_controller(baudrate=conf['baudrate'], verbose=True):
         try:
             s = serial.Serial(port=port, baudrate=baudrate, timeout=2.0)
             lasaur_hello = s.read(8)
-            if lasaur_hello.find(INFO_HELLO) > -1:
+            if lasaur_hello.find(ord(INFO_HELLO)) > -1:
                 s.close()
                 return port
             s.close()
@@ -710,10 +680,11 @@ def connect(port=conf['serial_port'], baudrate=conf['baudrate'], verbose=True):
                     if verbose:
                         print("ERROR: Cannot get 'hello' from controller")
                     raise serial.SerialException
-                char = SerialLoop.device.read(1)
-                if char == INFO_HELLO:
+                data = SerialLoop.device.read(1)
+                if data.find(ord(INFO_HELLO)) > -1:
                     if verbose:
                         print("Controller says Hello!")
+                        print("Connected on serial port: %s" % (port))
                     break
 
             SerialLoop.start()  # this calls run() in a thread
@@ -780,7 +751,6 @@ def close():
     return ret
 
 
-
 def flash(serial_port=conf['serial_port'], firmware=conf['firmware']):
     import flash
     reconnect = False
@@ -842,31 +812,37 @@ def feedrate(val):
     with SerialLoop.lock:
         SerialLoop.send_param(PARAM_FEEDRATE, val)
 
+
 def intensity(val):
     global SerialLoop
     with SerialLoop.lock:
         val = max(min(255*val/100, 255), 0)
         SerialLoop.send_param(PARAM_INTENSITY, val)
 
+
 def duration(val):
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_param(PARAM_DURATION, val)
+
 
 def pixelwidth(val):
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_param(PARAM_PIXEL_WIDTH, val)
 
+
 def relative():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_REF_RELATIVE)
 
+
 def absolute():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_REF_ABSOLUTE)
+
 
 def move(x=None, y=None, z=None):
     global SerialLoop
@@ -878,6 +854,7 @@ def move(x=None, y=None, z=None):
         if z is not None:
             SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_LINE)
+
 
 def supermove(x=None, y=None, z=None):
     """Moves in machine coordinates bypassing any offsets."""
@@ -904,6 +881,7 @@ def supermove(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_OFFSET_RESTORE)
         SerialLoop.send_command(CMD_LINE)
 
+
 def rastermove(x, y, z=0.0):
     global SerialLoop
     with SerialLoop.lock:
@@ -912,16 +890,19 @@ def rastermove(x, y, z=0.0):
         SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_RASTER)
 
+
 def rasterdata(data, start, end):
     # NOTE: no SerialLoop.lock
     # more granular locking in send_data
     SerialLoop.send_data(data, start, end)
+
 
 def pause():
     global SerialLoop
     with SerialLoop.lock:
         if SerialLoop.tx_buffer:
             SerialLoop._paused = True
+
 
 def unpause():
     global SerialLoop
@@ -951,15 +932,18 @@ def air_on():
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_ENABLE)
 
+
 def air_off():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_DISABLE)
 
+
 def aux_on():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AUX_ENABLE)
+
 
 def aux_off():
     global SerialLoop
@@ -981,6 +965,7 @@ def offset(x=None, y=None, z=None):
             SerialLoop.send_param(PARAM_OFFSET_Z, z)
         SerialLoop.send_command(CMD_REF_RESTORE)
 
+
 def absoffset(x=None, y=None, z=None):
     """Sets an offset in machine coordinates."""
     global SerialLoop
@@ -994,7 +979,6 @@ def absoffset(x=None, y=None, z=None):
         if z is not None:
             SerialLoop.send_param(PARAM_OFFSET_Z, z)
         SerialLoop.send_command(CMD_REF_RESTORE)
-
 
 
 def jobfile(filepath):
@@ -1241,7 +1225,6 @@ def job_laser(jobdict):
         move(0, 0, 0)
 
 
-
 def job_mill(jobdict):
     """Queue a .dba mill job.
     A typical mill job dict looks like this:
@@ -1313,9 +1296,6 @@ def job_mill(jobdict):
     intensity(0.0)
     supermove(z=0)
     supermove(x=0, y=0)
-
-
-
 
 
 if __name__ == "__main__":
