@@ -68,13 +68,13 @@ class SVGAttributeReader:
 
 
     def stringAttrib(self, node, attr, value):
-    	"""Read a string attribute."""
+        """Read a string attribute."""
         if value != 'inherit':
             node[attr] = value
 
 
     def opacityAttrib(self, node, attr, value):
-    	"""Read a opacity attribute."""
+        """Read a opacity attribute."""
         try:
             node[attr] = min(1.0,max(0.0,float(value)))
         except ValueError:
@@ -82,13 +82,13 @@ class SVGAttributeReader:
         	node[attr] = 1.0
 
     def dimensionAttrib(self, node, attr, value):
-    	"""Read a dimension attribute."""
+        """Read a dimension attribute."""
         node[attr] = self._parseUnit(value)
 
     def colorAttrib(self, node, attr, value):
         # http://www.w3.org/TR/SVG11/color.html
         # http://www.w3.org/TR/SVG11/painting.html#SpecifyingPaint
-    	"""Read a color attribute."""
+        """Read a color attribute."""
         col = self._parseColor(value)
         if col != 'inherit':
 	        node[attr] = col
@@ -198,8 +198,8 @@ class SVGAttributeReader:
 
 
     def pointsAttrib(self, node, attr, value):
-    	"""Read the 'points' attribute."""
-    	floats = parseFloats(value)
+        """Read the 'points' attribute."""
+        floats = parseFloats(value)
         if len(floats) % 2 == 0:
             node[attr] = floats
         else:
