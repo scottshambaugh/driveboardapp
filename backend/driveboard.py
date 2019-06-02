@@ -10,6 +10,7 @@ import threading
 import itertools
 import serial
 import serial.tools.list_ports
+import datetime
 from config import conf, write_config_fields
 
 if not conf['mill_mode']:
@@ -216,6 +217,8 @@ class SerialLoopClass(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
+        
+        self.verbose = False
 
         self.device = None
         self.tx_buffer = []
@@ -368,9 +371,11 @@ class SerialLoopClass(threading.Thread):
 
     def _serial_read(self):
         chunk = self.device.read(self.RX_CHUNK_SIZE)
+        if self.verbose and chunk != b'':
+            timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-4]
+            print(timestamp + ' Receiving: ' + prettify_serial(chunk, markers=markers_rx))
         for data_num in chunk:
             data_char = chr(data_num)
-            #sys.stdout.write('('+data_char+','data_num+')')
             if data_num < 32:  ### flow
                 if data_char == CMD_CHUNK_PROCESSED:
                     self.firmbuf_used -= self.TX_CHUNK_SIZE
@@ -554,6 +559,10 @@ class SerialLoopClass(threading.Thread):
                         # to_send = ''.join(islice(self.tx_buffer, 0, self.TX_CHUNK_SIZE))
                         to_send = self.tx_buffer[self.tx_pos:self.tx_pos+self.TX_CHUNK_SIZE]
                         expectedSent = len(to_send)
+                        if self.verbose:
+                            timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-4]
+                            print(timestamp + ' Sending: ' + prettify_serial(to_send, markers=markers_tx))
+
                         # by protocol duplicate every char
                         to_send_double = []
                         for n in to_send:
@@ -589,7 +598,9 @@ class SerialLoopClass(threading.Thread):
             t_prewrite = time.time()
             # self.device.write(char)
             # print "send_char: [%s,%s]" % (str(ord(char)),str(ord(char)))
-            print(char)
+            if self.verbose:
+                timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-4]
+                print(timestamp + ' Sending: ' + prettify_serial(ord(char), markers=markers_tx))
             self.device.write([ord(char),ord(char)])  # by protocol send twice
             if time.time() - t_prewrite > 0.1:
                 pass
@@ -601,6 +612,40 @@ class SerialLoopClass(threading.Thread):
 ###########################################################################
 ### API ###################################################################
 ###########################################################################
+
+def prettify_serial(chunk, markers=markers_tx):
+    string = ''
+    pdata_count = 0
+    pdata_nums = [128, 128, 128, 192]
+    
+    if isinstance(chunk, int):
+        chunk = [chunk] # make intger inputs iterable
+    
+    for i in range(len(chunk)):
+        data = chunk[i]
+        if data >= 128:
+            string += str(data) + ' '
+            pdata_nums[pdata_count] = data
+            pdata_count += 1
+        if data < 128 or i+1 == len(chunk):
+            if pdata_count != 0:
+                num = ((((pdata_nums[3]-128)*2097152
+                         + (pdata_nums[2]-128)*16384
+                         + (pdata_nums[1]-128)*128
+                         + (pdata_nums[0]-128) )- 134217728)/1000.0)
+                string += '(' + str(num) + ') '
+                pdata_count = 0
+                pdata_nums = [128, 128, 128, 192]
+        if data < 128:
+            string += markers[chr(data)] + ', '
+
+    if len(string) >= 2 and string[-2] == ',':
+        string = string[:-2]
+    elif len(string) >= 1 and string[-1] == ' ':
+        string = string[:-1]
+
+    return string
+
 
 def find_controller(baudrate=conf['baudrate'], verbose=True):
     iterator = sorted(serial.tools.list_ports.comports())
