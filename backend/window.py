@@ -17,12 +17,20 @@ def init():
     root.title("DriveboardApp Server")
     img = tk.PhotoImage(file=os.path.join(conf['rootdir'], 'backend', 'icon.gif'))
     root.tk.call('wm', 'iconphoto', root._w, img)
+    root.geometry('1200x400')
     # root.iconify()  # not working as expected on osx
 
 
     # text widget
-    text = tk.Text(root)
-    text.pack()
+    text = tk.Text(root, wrap=tk.NONE)
+    text.pack(expand=True, side=tk.LEFT, fill=tk.BOTH) 
+    scrolly = tk.Scrollbar(text, command=text.yview, orient=tk.VERTICAL)
+    scrolly.pack(side=tk.RIGHT, fill=tk.Y)
+    scrollx = tk.Scrollbar(text, command=text.xview, orient=tk.HORIZONTAL)
+    scrollx.pack(side=tk.BOTTOM, fill=tk.X)
+    text.config(yscrollcommand = scrolly.set, xscrollcommand = scrollx.set)
+    scrolly.set(0.0,1.0)
+    
     # add copy to clipboard feature
     def copy(event):
         selected = text.get("sel.first", "sel.last")
@@ -34,12 +42,12 @@ def init():
 
     # open frontend button
     def open_browser():
-        print('opening in browser')
+        print('Opening browser interface...')
         try:
             webbrowser.open_new_tab('http://127.0.0.1:4444')
         except webbrowser.Error:
-            print("Cannot open Webbrowser, please do so manually.")
-    tk.Button(root, text="Open in Browser", command=open_browser).pack()
+            print("Cannot open Webbrowser, please do so manually. Address: http://127.0.0.1:4444")
+    tk.Button(text, text="Open Browser Interface", command=open_browser).pack(side=tk.BOTTOM)
 
 
     # output queue, required because of tkinter thread issues
@@ -73,8 +81,12 @@ def init():
             if line is None:
                 return  # stop updating
             else:
+                track_text = 1
+                if scrolly.get()[1] != 1.0:
+                    track_text = 0
                 text.insert(tk.END, line)
-                text.see(tk.END)
+                if track_text:
+                    text.see(tk.END)
                 root.focus()
         global update_callback_id
         update_callback_id = root.after(40, update, q)  # schedule next update
