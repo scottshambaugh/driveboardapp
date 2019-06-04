@@ -25,7 +25,9 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
     """
     type_ = get_type(job)
     if type_ == 'dba':
-        if type(job) in (str, str):
+        if type(job) is bytes:
+            job = job.decode('utf-8')
+        if type(job) is str:
             job = json.loads(job)
         if optimize:
             if 'defs' in job:
@@ -131,7 +133,9 @@ def get_type(job):
     # figure out type
     if type(job) is dict:
         type_ = 'dba'
-    elif type(job) is str or type(job) is str:
+    elif type(job) in [str, bytes]:
+        if type(job) is bytes:
+            job = job.decode('utf-8')
         jobheader = job[:1024].lstrip()
         if jobheader and jobheader[0] == '{':
             type_ = 'dba'
