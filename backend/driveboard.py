@@ -314,13 +314,13 @@ class SerialLoopClass(threading.Thread):
     def send_data(self, data, start, end):
         count = 2
         with self.lock:
-            self.tx_buffer.append(CMD_RASTER_DATA_START)
+            self.tx_buffer.append(ord(CMD_RASTER_DATA_START))
         for val in itertools.islice(data, start, end):
             with self.lock:
                 self.tx_buffer.append(int(0.5*(255-val))+128)
             count += 1
         with self.lock:
-            self.tx_buffer.append(CMD_RASTER_DATA_END)
+            self.tx_buffer.append(ord(CMD_RASTER_DATA_END))
             self.job_size += count
 
 
@@ -1142,7 +1142,7 @@ def job_laser(jobdict):
                 px_h = int(size[1]/pxsize)
                 # create image obj, convert to grayscale, scale, loop through lines
                 # print "--- start of image processing ---"
-                imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:].encode('utf-8'))))
+                imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
                 imgobj = imgobj.resize((px_w,px_h), resample=Image.BICUBIC)
                 if imgobj.mode == 'RGBA':
                     imgbg = Image.new('RGBA', imgobj.size, (255, 255, 255))
@@ -1169,17 +1169,18 @@ def job_laser(jobdict):
                 # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
                 #     aux_on()
                 ### go through image lines ####
-                pxarray = imgobj.getdata()
+                pxarray = list(imgobj.getdata())
+                pxarray[:] = (value for value in pxarray if type(value) is not str)
                 # if len(pxarray) % size[0] != 0:
-                #     print "ERROR: img length not divisable by width"
+                #     print("ERROR: img length not divisable by width")
                 start = end = 0
                 line_y = posy + 0.5*pxsize
                 posleft = posx + 0.5*pxsize
                 posright = posx + size[0] - 0.5*pxsize
-                # print "mm: %s|%s|%s  h:%s" % (posleft-leadinpos, size[0], leadoutpos-posright, size[1])
-                # print "px: |%s|  raster_size:%s" % (px_w, pxsize)
-                # print len(pxarray)
-                # print (px_w*px_h)
+                # print("mm: %s|%s|%s  h:%s" % (posleft-leadinpos, size[0], leadoutpos-posright, size[1]))
+                # print("px: |%s|  raster_size:%s" % (px_w, pxsize))
+                # print(len(pxarray))
+                # print((px_w*px_h))
                 line_count = int(size[1]/pxsize)
                 for l in range(line_count):
                     end += px_w
