@@ -1171,6 +1171,8 @@ def job_laser(jobdict):
                 ### go through image lines ####
                 pxarray = list(imgobj.getdata())
                 pxarray[:] = (value for value in pxarray if type(value) is not str)
+                pxarray_reversed = pxarray[::-1]
+                px_n = len(pxarray)
                 # if len(pxarray) % size[0] != 0:
                 #     print("ERROR: img length not divisable by width")
                 start = end = 0
@@ -1182,29 +1184,44 @@ def job_laser(jobdict):
                 # print(len(pxarray))
                 # print((px_w*px_h))
                 line_count = int(size[1]/pxsize)
+                import time
                 for l in range(line_count):
-                    end += px_w
-                    # move to start of line
-                    feedrate(seekrate)
-                    # intensity(0.0)
-                    move(leadinpos, line_y)
-                    # lead-in
-                    feedrate(feedrate_)
-                    move(posleft, line_y)
-                    # raster move
-                    intensity(intensity_)
-                    rastermove(posright, line_y)
-                    # lead-out
-                    intensity(0.0)
-                    move(leadoutpos, line_y)
-                    # stream raster data for previous rastermove
-                    rasterdata(pxarray, start, end)
-                    # prime for next line
-                    start = end
-                    line_y += pxsize
-                    # feedrate(200)
-                    # move(leadoutpos, line_y)
-                # assists off, end of feed if set to 'feed'
+                    if l == 0:
+                        # move to start of line
+                        feedrate(seekrate)
+                        move(leadinpos, line_y)                        
+                        feedrate(feedrate_)
+                    if l % 2 == 0: 
+                        end += px_w
+                        # lead-in
+                        move(posleft, line_y)
+                        # raster move
+                        intensity(intensity_)
+                        rastermove(posright, line_y)
+                        # lead-out
+                        intensity(0.0)
+                        move(leadoutpos, line_y)
+                        # stream raster data for above rastermove
+                        rasterdata(pxarray, start, end)
+                        # prime for next line
+                        start = end
+                        line_y += pxsize
+                    else:
+                        end += px_w
+                        # lead-in
+                        move(posright, line_y)
+                        # raster move
+                        intensity(intensity_)
+                        rastermove(posleft, line_y)
+                        # lead-out
+                        intensity(0.0)
+                        move(leadinpos, line_y)
+                        # stream raster data for above rastermove
+                        rasterdata(pxarray_reversed, px_n - end, px_n - start)
+                        # prime for next line
+                        start = end
+                        line_y += pxsize
+                        # assists off, end of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                     air_off()
                 # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
