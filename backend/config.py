@@ -57,6 +57,7 @@ conf = {
         'laser': 'laser',
     },
     'enable_gzip': True,                # allow gzip upload of files / jobs
+    'home_on_startup': True,
     'mill_mode': False,
     'mill_max_rpm': 18000,
 }
@@ -81,6 +82,7 @@ userconfigurable = {
     'fill_leadin': "Leadin for vector fills in mm.",
     'users': "List of user cendentials for UI access.",
     'enable_gzip': "Enable gzip compression in job uploads.",
+    'home_on_startup': "Automatically perform a homing cycle when the machine first connects.",
     'mill_mode': "Activate CNC mill mode.",
     'mill_max_rpm': "Maximum spindle RPM.",
 }

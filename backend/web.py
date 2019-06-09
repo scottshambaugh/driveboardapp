@@ -766,6 +766,8 @@ def start(browser=False, debug=False):
     # start server
     # print "INFO: Starting web server thread."
     S.start()
+    if conf['home_on_startup']:
+        driveboard.homing()
 
 
 
