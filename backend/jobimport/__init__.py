@@ -25,15 +25,25 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
     """
     type_ = get_type(job)
     if type_ == 'dba':
-        if type(job) is bytes:
+        if type(job) is bytes: 
             job = job.decode('utf-8')
         if type(job) is str:
             job = json.loads(job)
         if optimize:
             if 'defs' in job:
                 for def_ in job['defs']:
-                    if def_['kind'] == "path":
+                    if def_['kind'] == 'path':
                         pathoptimizer.optimize(def_['data'], tolerance)
+                    if def_['kind'] == 'fill':
+                        if conf['fill_mode'] == 'Forward':
+                            pass
+                        elif conf['fill_mode'] == 'Bidirectional':
+                            pathoptimizer.fill_optimize(def_['data'], tolerance)
+                        elif conf['fill_mode'] == 'NearestNeighbor':
+                            pathoptimizer.optimize(def_['data'], tolerance)
+                        else:
+                            # default to Forward if undefined
+                            print("WARN: fill_mode not recognized. Please check your config file.")
                 if not 'head' in job:
                     job['head'] = {}
                 job['head']['optimized'] = tolerance

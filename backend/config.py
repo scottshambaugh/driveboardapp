@@ -41,15 +41,16 @@ conf = {
     'tolerance': 0.01,
     'workspace': [1220,610,0],
     'grid_mm': 100,
-    'seekrate': 6000,
+    'seekrate': 10000,             # arbitrarily high, will go at max machine speed
     'feedrate': 2000,
     'intensity': 0,
     'kerf': 0.3,
-    'pxsize': 0.4,                 # size (mm) of beam for rastering
+    'pxsize': 0.2,                 # size (mm) of beam for rastering
     'max_jobs_in_list': 20,
     'usb_reset_hack': False,
+    'fill_mode': 'Bidirectional', # 'Forward', 'Bidirectional', 'NearestNeighbor'
     'fill_leadin': 10,
-    'raster_leadin': 20,
+    'raster_leadin': 10,
     'max_segment_length': 5.0,
     'users': {
         'laser': 'laser',
@@ -78,7 +79,8 @@ userconfigurable = {
     'users': "List of user cendentials for UI access.",
     'enable_gzip': "Enable gzip compression in job uploads.",
     'mill_mode': "Activate CNC mill mode.",
-    'mill_max_rpm': "Maximum spindle RPM."
+    'mill_max_rpm': "Maximum spindle RPM.",
+    'fill_mode': "Algorithm to use when engraving a fill area: 'Forward', 'Bidirectional', or 'NearestNeighbor'",
 }
 
 

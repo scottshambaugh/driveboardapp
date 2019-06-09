@@ -162,7 +162,6 @@ def simplify(pathseg, tolerance2):
     return sPathseg
 
 
-
 def simplify_all(path, tolerance2):
     totalverts = 0
     optiverts = 0
@@ -176,7 +175,6 @@ def simplify_all(path, tolerance2):
         diffpct = (100*difflength/totalverts)
         if diffpct > 10:  # if diff more than 10%
             log.info("INFO: polylines optimized by " + str(int(diffpct)) + '%')
-
 
 
 def sort_by_seektime(path, start=[0.0, 0.0]):
@@ -207,6 +205,39 @@ def sort_by_seektime(path, start=[0.0, 0.0]):
             usedIdxs[i] = True
 
 
+def remove_waypoints(path):
+    # will remove all lead-in and lead-out points
+    inds = []
+    for i in range(len(path)):
+        if len(path[i]) == 1:
+            inds.append(i)
+    for i in inds[::-1]:
+        del path[i]
+       
+
+def bidirectionalize_fill(path):
+    path_unsorted = path.copy()
+    path_idx = 0
+    # sort unique y values of fill lines from top to bottom
+    y_vals = [point[1] for point in [segment[0] for segment in path_unsorted]]
+    y_vals = list(set(y_vals))
+    y_vals.sort()
+    for i in range(len(y_vals)):
+        inds = []
+        # find all segments at that y level
+        for j in range(len(path_unsorted)):
+            if path_unsorted[j][0][1] == y_vals[i]:
+                inds.append(j)
+        if i % 2 == 0: # keep even-line passes forward
+            for k in inds:
+                path[path_idx] = path_unsorted[k]
+                path_idx += 1
+        else: # reverse odd-line passes
+            for k in inds[::-1]:
+                path[path_idx] = path_unsorted[k][::-1]
+                path_idx += 1
+
+
 def dxf_optimize(paths, tolerance):
     tolerance2 = tolerance**2
     epsilon2 = (0.1*tolerance)**2
@@ -214,12 +245,23 @@ def dxf_optimize(paths, tolerance):
         # print "PATH before optimize: %s" % len(path)
         connect_segments(path, epsilon2)
         simplify_all(path, tolerance2)
+        remove_waypoints(path)
         sort_by_seektime(path)
         # print "PATH after optimize: %s" % len(path)
+
+
+def fill_optimize(path, tolerance):
+    tolerance2 = tolerance**2
+    epsilon2 = (0.1*tolerance)**2
+    connect_segments(path, epsilon2)
+    simplify_all(path, tolerance2)
+    bidirectionalize_fill(path)
+
 
 def optimize(path, tolerance):
     tolerance2 = tolerance**2
     epsilon2 = (0.1*tolerance)**2
     connect_segments(path, epsilon2)
     simplify_all(path, tolerance2)
+    remove_waypoints(path)
     sort_by_seektime(path)

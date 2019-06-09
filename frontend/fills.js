@@ -10,6 +10,9 @@ function fills_add_by_item(idx, callback) {
   var path = jobhandler.defs[jobhandler.items[idx].def].data
   var bounds = jobhandler.stats.items[idx].bbox
   var leadin = app_config_main.fill_leadin
+  if (app_config_main.fill_mode != 'Forward' && app_config_main.fill_mode != 'Bidirectional') {
+    leadin = 0
+  }
   var min_x = Math.max(bounds[0]-leadin, 0)
   var max_x = Math.min(bounds[2]+leadin, app_config_main.workspace[0])
   var fillpxsize = parseFloat($('#fillpxsize').val())
