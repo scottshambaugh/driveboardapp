@@ -35,15 +35,16 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
                     if def_['kind'] == 'path':
                         pathoptimizer.optimize(def_['data'], tolerance)
                     if def_['kind'] == 'fill':
+                        fill_mode = conf['fill_mode']
+                        if fill_mode not in ['Forward', 'Bidirectional', 'NearestNeighbor']:
+                            fill_mode = 'Bidirectional'
+                            print("WARN: fill_mode not recognized. Please check your config file.")
                         if conf['fill_mode'] == 'Forward':
                             pass
                         elif conf['fill_mode'] == 'Bidirectional':
                             pathoptimizer.fill_optimize(def_['data'], tolerance)
                         elif conf['fill_mode'] == 'NearestNeighbor':
-                            pathoptimizer.optimize(def_['data'], tolerance)
-                        else:
-                            # default to Forward if undefined
-                            print("WARN: fill_mode not recognized. Please check your config file.")
+                            pathoptimizer.optimize(def_['data'], tolerance)                            
                 if not 'head' in job:
                     job['head'] = {}
                 job['head']['optimized'] = tolerance

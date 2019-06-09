@@ -30,32 +30,33 @@ conf = {
     'appname': 'driveboardapp',
     'version': '18.07',
     'company_name': 'com.nortd.labs',
-    'network_host': '',                    # '' for all nics
+    'network_host': '',                 # '' for all nics
     'network_port': 4444,
-    'serial_port': '',                     # set to '' for auto (req. firmware)
+    'serial_port': '',                  # set to '' for auto (req. firmware)
     'baudrate': 57600,
-    'rootdir': None,                       # defined further down (../)
-    'confdir': None,                       # defined further down
-    'hardware': None,                      # defined further down
-    'firmware': None,                      # defined further down
+    'rootdir': None,                    # defined further down (../)
+    'confdir': None,                    # defined further down
+    'hardware': None,                   # defined further down
+    'firmware': None,                   # defined further down
     'tolerance': 0.01,
     'workspace': [1220,610,0],
     'grid_mm': 100,
-    'seekrate': 10000,             # arbitrarily high, will go at max machine speed
+    'seekrate': 10000,                  # arbitrarily high, will go at max machine speed
     'feedrate': 2000,
     'intensity': 0,
     'kerf': 0.3,
-    'pxsize': 0.2,                 # size (mm) of beam for rastering
+    'pxsize': 0.2,                      # size (mm) of beam for rastering
     'max_jobs_in_list': 20,
     'usb_reset_hack': False,
-    'fill_mode': 'Bidirectional', # 'Forward', 'Bidirectional', 'NearestNeighbor'
-    'fill_leadin': 10,
+    'raster_mode': 'Bidirectional',     # 'Forward', 'Bidirectional'
     'raster_leadin': 10,
+    'fill_mode': 'Bidirectional',       # 'Forward', 'Bidirectional', 'NearestNeighbor'
+    'fill_leadin': 10,
     'max_segment_length': 5.0,
     'users': {
         'laser': 'laser',
     },
-    'enable_gzip': True,           # allow gzip upload of files / jobs
+    'enable_gzip': True,                # allow gzip upload of files / jobs
     'mill_mode': False,
     'mill_max_rpm': 18000,
 }
@@ -72,15 +73,16 @@ userconfigurable = {
     'feedrate': "Default feed rate in mm/min.",
     'intensity': "Default intensity setting 0-100.",
     'kerf': "Typical kerf of a cut.",
-    'pxsize': "Default kerf setting for rastering.",
+    'pxsize': "Default kerf setting for rastering and filling.",
     'max_jobs_in_list': "Jobs to keep in the history list.",
-    'fill_leadin': "Leadin for vector fills in mm.",
+    'raster_mode': "Pathing to use when rastering: 'Forward', or 'Bidirectional'",
     'raster_leadin': "Leadin for raster fills in mm.",
+    'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Bidirectional', or 'NearestNeighbor'",
+    'fill_leadin': "Leadin for vector fills in mm.",
     'users': "List of user cendentials for UI access.",
     'enable_gzip': "Enable gzip compression in job uploads.",
     'mill_mode': "Activate CNC mill mode.",
     'mill_max_rpm': "Maximum spindle RPM.",
-    'fill_mode': "Algorithm to use when engraving a fill area: 'Forward', 'Bidirectional', or 'NearestNeighbor'",
 }
 
 
