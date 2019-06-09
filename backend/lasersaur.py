@@ -60,7 +60,6 @@ class Lasersaur(object):
             requests.HTTPError: Web server responded with an error code.
         """
 
-        print('_request')
         url = "http://%s:%s%s" % (self.host, self.port, url)
         if postdict is None:
             r = requests.get(url, auth=(self.user, self.pass_))
@@ -159,7 +158,7 @@ class Lasersaur(object):
         Returns:
             A parsed .dba job.
         """
-        print('open_file')
+
         import jobimport # dependancy only when actually needed
         name_f = os.path.basename(jobfile)
         with open(jobfile) as fp:
@@ -183,7 +182,7 @@ class Lasersaur(object):
         Output:
             A .dba file in the same directory called <name>.conv.dba
         """
-        print('convert_file')
+
         import jobimport # dependancy only when actually needed
         base, name = os.path.split(jobfile)
         name, ext = os.path.splitext(name)
@@ -216,7 +215,7 @@ class Lasersaur(object):
             Unique name give to the job. This is either name or
             name_<numeral>.
         """
-        print('load')
+
         if type(job) is dict:
             job =  json.dumps(job)
         elif type(job) is bytes:
@@ -237,7 +236,7 @@ class Lasersaur(object):
             Unique name give to the job. This is either name or
             name_<numeral>.
         """
-        print('load_file')        
+
         import jobimport # dependancy only when actually needed
         base, name = os.path.split(jobfile)
         name, ext = os.path.splitext(name)
@@ -251,7 +250,7 @@ class Lasersaur(object):
         [ [[x,y,z], ...], [[x,y,z], ...], ... ]
         and can be 2D or 3D.
         """
-        print('load_path')        
+
         job = {
             "vector":{
                 "passes":[
@@ -278,7 +277,7 @@ class Lasersaur(object):
             feedrate: raster speed
             intensity: raster intensity
         """
-        print('load_image')        
+
         with open(image,'rb') as fp:
             img = fp.read()
         img_b64 = base64.encodestring(img).decode("utf8")
