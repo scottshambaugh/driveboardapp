@@ -9,7 +9,7 @@ from math import *
 import io
 import io
 
-from . import dxfgrabber
+import dxfgrabber
 
 import sys
 import linecache
