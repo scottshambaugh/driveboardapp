@@ -7,6 +7,11 @@ In general simply download and run:
 python driveboardapp/backend/app.py
 ```
 
+You many need additional packages that do not come with your python distribution. To install some uncommon ones required for the project, run the following command:
+```
+pip install -r deploy/requirements.txt
+```
+
 If necessary, create a [configuration](configure.md) file for the app.
 
 
@@ -14,8 +19,8 @@ If necessary, create a [configuration](configure.md) file for the app.
 If any issues occur it helps to install the [Arduino IDE installation](https://www.arduino.cc/en/Guide/HomePage) and get the blink LED example to run. This makes sure the basics work. For example on Linux the Arduino IDE will ask you to give access permission to the serial port.
 
 
-Lasersaur Driveboard v14.04 Setup
----------------------------------
+Lasersaur Driveboard v14.04 Setup (Old)
+---------------------------------------
 - make sure the Driveboard/Lasersaur can access the Internet
 - ssh into the Driveboard/Lasersaur with `ssh lasersaur.local` and do the follwoing:
 ```

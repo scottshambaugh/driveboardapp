@@ -1,0 +1,6 @@
+bottle==0.12.16
+dxfgrabber==1.0.0
+requests==2.21.0
+Pillow==6.0.0
+PyInstaller==3.4
+pyserial==3.4
