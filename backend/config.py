@@ -41,7 +41,7 @@ conf = {
     'tolerance': 0.01,
     'workspace': [1220,610,0],
     'grid_mm': 100,
-    'seekrate': 10000,                  # arbitrarily high, will go at max machine speed
+    'seekrate': 6000,
     'feedrate': 2000,
     'intensity': 0,
     'kerf': 0.3,
