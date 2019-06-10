@@ -24,12 +24,12 @@ if sys.platform == "darwin":  # OSX
     AVRDUDECONFIG = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/etc/avrdude.conf"
 
 elif sys.platform == "win32": # Windows
-    AVRDUDEAPP    = "C:\\arduino\\hardware\\tools\\avr\\bin\\avrdude"
-    AVRGCCAPP     = "C:\\arduino\\hardware\\tools\\avr\\bin\\avr-gcc"
-    AVROBJCOPYAPP = "C:\\arduino\\hardware\\tools\\avr\\bin\\avr-objcopy"
-    AVRSIZEAPP    = "C:\\arduino\\hardware\\tools\\avr\\bin\\avr-size"
-    AVROBJDUMPAPP = "C:\\arduino\\hardware\\tools\\avr\\bin\\avr-objdump"
-    AVRDUDECONFIG = "C:\\arduino\\hardware\\tools\\avr\\etc\\avrdude.conf"
+    AVRDUDEAPP    = "C:\\\"Program Files (x86)\"\\Arduino\\hardware\\tools\\avr\\bin"
+    AVRGCCAPP     = "C:\\\"Program Files (x86)\"\\Arduinoo\\hardware\\tools\\avr\\bin"
+    AVROBJCOPYAPP = "C:\\\"Program Files (x86)\"\\Arduino\\hardware\\tools\\avr\\bin"
+    AVRSIZEAPP    = "C:\\\"Program Files (x86)\"\\Arduino\\hardware\\tools\\avr\\bin"
+    AVROBJDUMPAPP = "C:\\\"Program Files (x86)\"\\Arduino\\hardware\\tools\\avr\\bin"
+    AVRDUDECONFIG = "C:\\\"Program Files (x86)\"\\Arduino\\hardware\\tools\\avr\\bin"
 
 elif sys.platform == "linux" or sys.platform == "linux2":  #Linux
     AVRDUDEAPP    = "avrdude"

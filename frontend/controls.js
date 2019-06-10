@@ -82,6 +82,7 @@ function controls_ready() {
 
   $("#rebuild_btn").tooltip({placement:'bottom', delay: {show:1000, hide:100}})
   $("#rebuild_btn").click(function(e){
+    $().uxmessage('notice', "Attempting to build firmware, may take several minutes...")
     request_get({
       url:'/build',
       success: function (data) {
