@@ -297,6 +297,13 @@ def aux_off():
     driveboard.aux_off()
     return '{}'
 
+@bottle.route('/pulse')
+@bottle.auth_basic(checkuser)
+@checkserial
+def pulse():
+    driveboard.pulse()
+    return '{}'
+
 @bottle.route('/offset/<x:float>/<y:float>/<z:float>')
 @bottle.auth_basic(checkuser)
 @checkserial

@@ -57,6 +57,8 @@ air_off()
 aux_on()
 aux_off()
 
+pulse()
+
 set_offset_table()
 set_offset_custom()
 def_offset_table(x, y, z)

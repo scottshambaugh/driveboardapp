@@ -135,7 +135,10 @@ class Lasersaur(object):
 
     def aux_off(self):
         self._request('/aux_off')
-
+    
+    def pulse(self):
+        self._request('/pulse')
+    
     def offset(self, x, y, z=0.0):
         self._request('/offset/%.4f/%.4f/%.4f' % (x,y,z))
 
@@ -459,6 +462,7 @@ air_on = lasersaur.air_on
 air_off = lasersaur.air_off
 aux_on = lasersaur.aux_on
 aux_off = lasersaur.aux_off
+pulse = lasersaur.pulse
 offset = lasersaur.offset
 clear_offset = lasersaur.clear_offset
 ### JOBS QUEUE

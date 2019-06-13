@@ -995,6 +995,24 @@ def aux_off():
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AUX_DISABLE)
 
+def pulse():
+    print('pulse')
+    global SerialLoop
+    air_on()
+    # aux_on()
+    # turn the laser on for a short pulse
+    intensity(50.0)
+    duration(0.25)
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_DWELL)
+    # keep air on for a bit longer
+    intensity(0.0)
+    duration(0.75)
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_DWELL)
+    air_off()
+    # aux_off()
+
 
 def offset(x=None, y=None, z=None):
     """Sets an offset relative to present pos."""
@@ -1087,7 +1105,7 @@ def job_laser(jobdict):
         print("NOTICE: no passes defined")
         return
 
-    # reset vavles
+    # reset valves
     air_off()
     # aux_off()
 

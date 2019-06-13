@@ -18,6 +18,7 @@ This module provides a networked interface to the machine. It's a simple web ser
 /air_off
 /aux_on
 /aux_off
+/pulse
 /offset/<x:float>/<y:float>/<z:float>
 /clear_offset
 /load
