@@ -45,7 +45,7 @@ def flash_upload(serial_port=conf['serial_port'], resources_dir=conf['rootdir'],
             # os.chmod(AVRDUDEAPP, st.st_mode | stat.S_IEXEC)
 
         # call avrdude, returns 0 on success
-        command = ('"%(dude)s" -c %(programmer)s -b %(bps)s -P %(port)s -p %(device)s -C "%(dudeconf)s" -Uflash:w:"%(firmware)s":i'
+        command = ('%(dude)s -c %(programmer)s -b %(bps)s -P %(port)s -p %(device)s -C %(dudeconf)s -Uflash:w:"%(firmware)s":i'
             % {'dude':AVRDUDEAPP, 'programmer':PROGRAMMER, 'bps':BITRATE, 'port':serial_port, 'device':DEVICE, 'dudeconf':AVRDUDECONFIG, 'firmware':FIRMWARE})
 
         print(command)

@@ -767,7 +767,11 @@ def start(browser=False, debug=False):
     # print "INFO: Starting web server thread."
     S.start()
     if conf['home_on_startup']:
-        driveboard.homing()
+        try:
+            # will fail if board not flashed
+            driveboard.homing() 
+        except:
+            pass
 
 
 
