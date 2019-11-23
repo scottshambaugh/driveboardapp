@@ -239,17 +239,30 @@ function passes_set_assignments() {
 
 
 function passes_update_handler() {
-  // called whenever passes wiget changes happen (color add/remove)
+  // called whenever passes widget changes happen (color add/remove)
   // this event handler is debounced to minimize updates
+
+  // TODO: make sure this functions is called, when any of the feedrates was changed, otherwise, passes nedd to be added
+  // and removed to update the duration...
+
   clearTimeout(window.lastPassesUpdateTimer)
   window.lastPassesUpdateTimer = setTimeout(function() {
     jobhandler.passes = passes_get_active()
     // length
-    var length = (jobhandler.getActivePassesLength()/1000.0).toFixed(1)
+
+
+    var length   = (jobhandler.getActivePassesLength()/1000.0).toFixed(1)
     if (length != 0) {
       $('#job_info_length').html(' | '+length+'m')
     } else {
       $('#job_info_length').html('')
+    }
+
+    var duration = (jobhandler.getActivePassesDuration()).toFixed(1)
+    if (duration != 0) {
+      $('#job_info_duration').html(' |  > '+duration+'min')
+    } else {
+      $('#job_info_duration').html('')
     }
     // bounds
     jobhandler.renderBounds()

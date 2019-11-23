@@ -56,6 +56,7 @@ jobhandler = {
     passes_clear()
     $('#job_info_name').html('')
     $('#job_info_length').html('')
+    $('#job_info_duration').html('')
     $('#info_content').html('')
     $('#info_btn').hide()
   },
@@ -438,6 +439,16 @@ jobhandler = {
     return length
   },
 
+  getActivePassesDuration : function() {
+    var duration = 0
+    this.loopPasses(function(pass, item_idxs){
+      for (var i = 0; i < item_idxs.length; i++) {
+        var item = item_idxs[i]
+        duration += 1/jobhandler.passes[i].feedrate * jobhandler.stats.items[item_idxs[i]].len
+      }
+    })
+    return duration
+  },
 
   getActivePassesBbox : function() {
     var bbox = [Infinity, Infinity, -Infinity, -Infinity]
