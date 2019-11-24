@@ -81,6 +81,29 @@ function passes_add(feedrate, intensity, pxsize, items_assigned) {
       $('#assign_btn_'+num).trigger('click')
       return false;
   })
+
+  // update duration when feedrate was changed
+  $('.feedrate').blur(function(e) {
+    passes_update_handler()
+    return false
+  })
+
+  // check user input for feedrate and update cut-duration when user presses enter in feedrate field
+  $('.feedrate').keyup(function(e) {
+
+    if(e.which == 13) {
+      passes_update_handler()
+    } else {
+    feedrate = this.value.match(/[-+]?[0-9]+[\.|,]?[0-9]?/);
+    console.log(feedrate)
+	if (!feedrate) {
+	  // if no match is found, null is returned for which 0 should be the replacement
+	  feedrate = 0
+	}
+	this.value = feedrate.toString()
+  }
+  return false
+  })
 }
 
 
@@ -110,7 +133,6 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
   var html =
   '<div id="pass_'+num+'" class="row pass_widget" style="margin:0; margin-bottom:20px">'+
     '<label style="color:#666666">Pass '+num+'</label>'+
-
     '<a id="pass_conf_btn_'+num+'" style="margin-left:8px; position:relative; top:1px" role="button"'+
       'data-toggle="collapse" href="#pass_conf_'+num+'" aria-expanded="false" aria-controls="pass_conf_'+num+'"'+
       '<span class="glyphicon glyphicon-cog" style="color:#888888"></span>'+
@@ -253,14 +275,14 @@ function passes_update_handler() {
 
     var length   = (jobhandler.getActivePassesLength()/1000.0).toFixed(1)
     if (length != 0) {
-      $('#job_info_length').html(' | '+length+'m')
+      $('#job_info_length').html(' cut length: '+length+' m')
     } else {
       $('#job_info_length').html('')
     }
 
     var duration = (jobhandler.getActivePassesDuration()).toFixed(1)
     if (duration != 0) {
-      $('#job_info_duration').html(' |  > '+duration+'min')
+      $('#job_info_duration').html(' |  min duration: '+duration+' min')
     } else {
       $('#job_info_duration').html('')
     }
