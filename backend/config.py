@@ -48,9 +48,9 @@ conf = {
     'pxsize': 0.2,                      # size (mm) of beam for rastering
     'max_jobs_in_list': 20,
     'usb_reset_hack': False,
-    'raster_mode': 'Bidirectional',     # 'Forward', 'Bidirectional'
+    'raster_mode': 'Bidirectional',     # 'Forward', 'Reverse', 'Bidirectional'
     'raster_leadin': 10,
-    'fill_mode': 'Bidirectional',       # 'Forward', 'Bidirectional', 'NearestNeighbor'
+    'fill_mode': 'Bidirectional',       # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
     'fill_leadin': 10,
     'max_segment_length': 5.0,
     'users': {
@@ -76,9 +76,9 @@ userconfigurable = {
     'kerf': "Typical kerf of a cut.",
     'pxsize': "Default kerf setting for rastering and filling.",
     'max_jobs_in_list': "Jobs to keep in the history list.",
-    'raster_mode': "Pathing to use when rastering: 'Forward', or 'Bidirectional'",
+    'raster_mode': "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'",
     'raster_leadin': "Leadin for raster fills in mm.",
-    'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Bidirectional', or 'NearestNeighbor'",
+    'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'",
     'fill_leadin': "Leadin for vector fills in mm.",
     'users': "List of user cendentials for UI access.",
     'enable_gzip': "Enable gzip compression in job uploads.",

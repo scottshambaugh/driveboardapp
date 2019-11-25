@@ -41,6 +41,8 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
                             print("WARN: fill_mode not recognized. Please check your config file.")
                         if conf['fill_mode'] == 'Forward':
                             pass
+                        elif conf['fill_mode'] == 'Reverse':
+                            pathoptimizer.reverse_path(def_['data'])
                         elif conf['fill_mode'] == 'Bidirectional':
                             pathoptimizer.fill_optimize(def_['data'], tolerance)
                         elif conf['fill_mode'] == 'NearestNeighbor':

@@ -1159,7 +1159,7 @@ def job_laser(jobdict):
                 px_w = int(size[0]/pxsize_x)
                 px_h = int(size[1]/pxsize_y)
                 raster_mode = conf['raster_mode']
-                if raster_mode not in ['Forward', 'Bidirectional']:
+                if raster_mode not in ['Forward', 'Bidirectional', 'Reverse']:
                     raster_mode = 'Bidirectional'
                     print("WARN: raster_mode not recognized. Please check your config file.")
                 # create image obj, convert to grayscale, scale, loop through lines
@@ -1205,20 +1205,15 @@ def job_laser(jobdict):
                 # print(len(pxarray))
                 # print((px_w*px_h))
                 line_count = int(size[1]/pxsize_y)
-                direction = 1 # 1 is forward, -1 is reverse
-                is_first_line = True
+                if raster_mode == 'Reverse':
+                    direction = -1 # 1 is forward, -1 is reverse
+                else:
+                    direction = 1 
+
                 for i in range(line_count):
                     line_end += px_w
                     line = pxarray[line_start:line_end]
                     if not all(px == 255 for px in line): # skip completely white raster lines
-                        if is_first_line:
-                            # move to start of line, always a fwd pass first
-                            intensity(0.0)
-                            feedrate(seekrate)
-                            move(pos_leadin, line_y)                        
-                            feedrate(feedrate_)
-                            is_first_line = False
-
                         whitespace_counter = 0
                         on_starting_edge = True
                         if direction == 1: # fwd
@@ -1282,7 +1277,7 @@ def job_laser(jobdict):
                     # prime for next line
                     if (raster_mode == 'Bidirectional') and (direction == 1):
                         direction = -1 # rev
-                    elif direction == -1: #rev
+                    elif (raster_mode == 'Bidirectional') and (direction == -1): #rev
                         direction = 1 # fwd
                     line_start = line_end
                     line_y += pxsize_y

@@ -213,7 +213,24 @@ def remove_waypoints(path):
             inds.append(i)
     for i in inds[::-1]:
         del path[i]
-       
+
+def reverse_path(path):
+    path_unsorted = path.copy()
+    path_idx = 0
+    # sort unique y values of fill lines from top to bottom
+    y_vals = [point[1] for point in [segment[0] for segment in path_unsorted]]
+    y_vals = list(set(y_vals))
+    y_vals.sort()
+    for i in range(len(y_vals)):
+        inds = []
+        # find all segments at that y level
+        for j in range(len(path_unsorted)):
+            if path_unsorted[j][0][1] == y_vals[i]:
+                inds.append(j)
+        for k in inds[::-1]:
+            path[path_idx] = path_unsorted[k][::-1]
+            path_idx += 1
+
 
 def bidirectionalize_fill(path):
     path_unsorted = path.copy()
