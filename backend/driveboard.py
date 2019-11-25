@@ -1112,13 +1112,13 @@ def job_laser(jobdict):
     # loop passes
     for pass_ in jobdict['passes']:
         if 'pxsize' in pass_:
-            pxsize = float(pass_['pxsize'])
+            pxsize_y = float(pass_['pxsize'])
         else:
-            pxsize = float(conf['pxsize'])
-        pxsize = max(pxsize, 0.01)  # prevent div by 0
+            pxsize_y = float(conf['pxsize'])
+        pxsize_y = max(pxsize_y, 0.01)  # prevent div by 0
         intensity(0.0)
-        pxsize_2 = pxsize/2.0  # use 2x horiz resol.
-        pixelwidth(pxsize_2)
+        pxsize_x = pxsize_y/2.0  # use 2x horiz resol.
+        pixelwidth(pxsize_x)
         # assists on, beginning of pass if set to 'pass'
         if 'air_assist' in pass_:
             if pass_['air_assist'] == 'pass':
@@ -1156,8 +1156,8 @@ def job_laser(jobdict):
                 pos = def_["pos"]
                 size = def_["size"]
                 data = def_["data"]  # in base64, format: jpg, png, gif
-                px_w = int(size[0]/pxsize_2)
-                px_h = int(size[1]/pxsize)
+                px_w = int(size[0]/pxsize_x)
+                px_h = int(size[1]/pxsize_y)
                 raster_mode = conf['raster_mode']
                 if raster_mode not in ['Forward', 'Bidirectional']:
                     raster_mode = 'Bidirectional'
@@ -1173,18 +1173,7 @@ def job_laser(jobdict):
                 else:
                     imgobj = imgobj.convert("L")
                 # print "---- end of image processing ----"
-                # imgobj.show()
-                posx = pos[0]
-                posy = pos[1]
-                # calc leadin/out
-                leadinpos = posx - conf['raster_leadin']
-                if leadinpos < 0:
-                    print("WARN: not enough leadin space")
-                    leadinpos = 0
-                leadoutpos = posx + size[0] + conf['raster_leadin']
-                if leadoutpos > conf['workspace'][0]:
-                    print("WARN: not enough leadout space")
-                    leadoutpos = conf['workspace'][0]
+
                 # assists on, beginning of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                     air_on()
@@ -1197,77 +1186,107 @@ def job_laser(jobdict):
                 px_n = len(pxarray)
                 # if len(pxarray) % size[0] != 0:
                 #     print("ERROR: img length not divisable by width")
-                start = end = 0
-                line_y = posy + 0.5*pxsize
-                posleft = posx + 0.5*pxsize
-                posright = posx + size[0] - 0.5*pxsize
-                # print("mm: %s|%s|%s  h:%s" % (posleft-leadinpos, size[0], leadoutpos-posright, size[1]))
-                # print("px: |%s|  raster_size:%s" % (px_w, pxsize))
+
+                posx = pos[0]
+                posy = pos[1]
+                # calc leadin/out
+                pos_leadin = posx - conf['raster_leadin']
+                if pos_leadin < 0:
+                    print("WARNING: not enough leadin space")
+                    pos_leadin = 0
+                pos_leadout = posx + size[0] + conf['raster_leadin']
+                if pos_leadout > conf['workspace'][0]:
+                    print("WARNING: not enough leadout space")
+                    pos_leadout = conf['workspace'][0]
+                line_start = line_end = 0
+                line_y = posy + 0.5*pxsize_y
+                # print("mm: %s|%s|%s  h:%s" % ( posx + 0.5*pxsize_x - pos_leadin, size[0], pos_leadout - (posx + size[0] - 0.5*pxsize_x), size[1]))
+                # print("px: |%s|  raster_size:%s" % (px_w, pxsize_y))
                 # print(len(pxarray))
                 # print((px_w*px_h))
-                line_count = int(size[1]/pxsize)
-                direction = 'fwd'
+                line_count = int(size[1]/pxsize_y)
+                direction = 1 # 1 is forward, -1 is reverse
                 is_first_line = True
-                if raster_mode == 'Bidirectional':
-                    for l in range(line_count):
-                        end += px_w
-                        if any(px != 255 for px in pxarray[start:end]): # skip completely white raster lines
-                            print(l)
-                            if is_first_line:
-                                # move to start of line
-                                feedrate(seekrate)
-                                move(leadinpos, line_y)                        
-                                feedrate(feedrate_)
-                                is_first_line = False
-                            if direction == "fwd": 
-                                # lead-in
-                                move(posleft, line_y)
-                                # raster move
-                                intensity(intensity_)
-                                rastermove(posright, line_y)
-                                # lead-out
-                                intensity(0.0)
-                                move(leadoutpos, line_y)
-                                # stream raster data for above rastermove
-                                rasterdata(pxarray, start, end)
-                                direction = "rev"
-                            elif direction == "rev":
-                                # lead-in
-                                move(posright, line_y)
-                                # raster move
-                                intensity(intensity_)
-                                rastermove(posleft, line_y)
-                                # lead-out
-                                intensity(0.0)
-                                move(leadinpos, line_y)
-                                # stream raster data for above rastermove
-                                rasterdata(pxarray_reversed, px_n - end, px_n - start)
-                                direction = "fwd"
-                        # prime for next line
-                        start = end
-                        line_y += pxsize
-                elif raster_mode == 'Forward':
-                    for l in range(line_count):
-                        end += px_w
-                        if any(px != 255 for px in pxarray[start:end]): # skip completely white raster lines
-                            # move to start of line
-                            feedrate(seekrate)
-                            # intensity(0.0)
-                            move(leadinpos, line_y)
-                            # lead-in
-                            feedrate(feedrate_)
-                            move(posleft, line_y)
-                            # raster move
-                            intensity(intensity_)
-                            rastermove(posright, line_y)
-                            # lead-out
+                for i in range(line_count):
+                    line_end += px_w
+                    line = pxarray[line_start:line_end]
+                    if not all(px == 255 for px in line): # skip completely white raster lines
+                        if is_first_line:
+                            # move to start of line, always a fwd pass first
                             intensity(0.0)
-                            move(leadoutpos, line_y)
-                            # stream raster data for previous rastermove
-                            rasterdata(pxarray, start, end)
-                        # prime for next line
-                        start = end
-                        line_y += pxsize
+                            feedrate(seekrate)
+                            move(pos_leadin, line_y)                        
+                            feedrate(feedrate_)
+                            is_first_line = False
+
+                        whitespace_counter = 0
+                        on_starting_edge = True
+                        if direction == 1: # fwd
+                            segment_start = line_start
+                            segment_end = segment_start - 1 # will immediately increment
+                        elif direction == -1: # rev
+                            line = line[::-1]
+                            segment_start = line_end
+                            segment_end = segment_start + 1 # will immediately decrement
+
+                        for j in range(len(line)):
+                            segment_end += 1*direction
+                            if line[j] == 255:
+                                whitespace_counter += 1
+                            elif on_starting_edge:
+                                segment_start = segment_end
+                                on_starting_edge = False
+                                whitespace_counter = 0
+                            elif whitespace_counter*pxsize_x <= 2*conf['raster_leadin']:
+                                whitespace_counter = 0
+                            
+                            segment_ended = False
+                            if j == (len(line) - 1):
+                                segment_ended = True
+                            elif (whitespace_counter*pxsize_x > 2*conf['raster_leadin']) and (line[j+1] != 255) and not (on_starting_edge):
+                                segment_ended = True
+
+                            if segment_ended:
+                                if direction == 1: # fwd
+                                    segment_end = segment_end - whitespace_counter + 1
+                                    pos_start = posx + (segment_start - line_start + 0.5)*pxsize_x
+                                    pos_end = posx + (segment_end - line_start - 0.5)*pxsize_x
+                                    pos_leadin = max(posx + (segment_start - line_start)*pxsize_x - conf['raster_leadin'], 0)
+                                    pos_leadout = min(posx + (segment_end - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0])
+                                elif direction == -1: # rev
+                                    segment_end = segment_end + whitespace_counter - 1
+                                    pos_start = posx + (segment_start - line_start - 0.5)*pxsize_x
+                                    pos_end = posx + (segment_end - line_start + 0.5)*pxsize_x
+                                    pos_leadin = min(posx + (segment_start - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0])
+                                    pos_leadout = max(posx + (segment_end - line_start)*pxsize_x - conf['raster_leadin'], 0)
+                                
+                                intensity(0.0) # intensity for seek and lead-in
+                                feedrate(seekrate) # feedrate for seek
+                                move(pos_leadin, line_y) # seek to lead-in start              
+                                feedrate(feedrate_) # feedrate for lead-in, raster, and lead-out
+                                move(pos_start, line_y) # lead-in
+                                intensity(intensity_) # intensity for raster move
+                                rastermove(pos_end, line_y) # raster move
+                                if direction == 1: # fwd
+                                    rasterdata(pxarray, segment_start, segment_end) # stream raster data for above rastermove
+                                elif direction == -1: # rev
+                                    rasterdata(pxarray_reversed, px_n - segment_start, px_n - segment_end) # stream raster data for above rastermove
+                                intensity(0.0) # intensity for lead-out
+                                move(pos_leadout, line_y) # lead-out
+                                
+                                segment_start = segment_end + whitespace_counter*direction
+                                segment_end = segment_start - 1*direction
+                                segment_ended = False
+                                whitespace_counter = 0
+
+                    # prime for next line
+                    if (raster_mode == 'Bidirectional') and (direction == 1):
+                        direction = -1 # rev
+                    elif direction == -1: #rev
+                        direction = 1 # fwd
+                    line_start = line_end
+                    line_y += pxsize_y
+
                 # assists off, end of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                     air_off()
