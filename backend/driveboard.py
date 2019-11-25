@@ -1206,16 +1206,56 @@ def job_laser(jobdict):
                 # print(len(pxarray))
                 # print((px_w*px_h))
                 line_count = int(size[1]/pxsize)
+                direction = 'fwd'
+                is_first_line = True
                 if raster_mode == 'Bidirectional':
                     for l in range(line_count):
-                        if l == 0:
+                        end += px_w
+                        if any(px != 255 for px in pxarray[start:end]): # skip completely white raster lines
+                            print(l)
+                            if is_first_line:
+                                # move to start of line
+                                feedrate(seekrate)
+                                move(leadinpos, line_y)                        
+                                feedrate(feedrate_)
+                                is_first_line = False
+                            if direction == "fwd": 
+                                # lead-in
+                                move(posleft, line_y)
+                                # raster move
+                                intensity(intensity_)
+                                rastermove(posright, line_y)
+                                # lead-out
+                                intensity(0.0)
+                                move(leadoutpos, line_y)
+                                # stream raster data for above rastermove
+                                rasterdata(pxarray, start, end)
+                                direction = "rev"
+                            elif direction == "rev":
+                                # lead-in
+                                move(posright, line_y)
+                                # raster move
+                                intensity(intensity_)
+                                rastermove(posleft, line_y)
+                                # lead-out
+                                intensity(0.0)
+                                move(leadinpos, line_y)
+                                # stream raster data for above rastermove
+                                rasterdata(pxarray_reversed, px_n - end, px_n - start)
+                                direction = "fwd"
+                        # prime for next line
+                        start = end
+                        line_y += pxsize
+                elif raster_mode == 'Forward':
+                    for l in range(line_count):
+                        end += px_w
+                        if any(px != 255 for px in pxarray[start:end]): # skip completely white raster lines
                             # move to start of line
                             feedrate(seekrate)
-                            move(leadinpos, line_y)                        
-                            feedrate(feedrate_)
-                        if l % 2 == 0: 
-                            end += px_w
+                            # intensity(0.0)
+                            move(leadinpos, line_y)
                             # lead-in
+                            feedrate(feedrate_)
                             move(posleft, line_y)
                             # raster move
                             intensity(intensity_)
@@ -1223,44 +1263,8 @@ def job_laser(jobdict):
                             # lead-out
                             intensity(0.0)
                             move(leadoutpos, line_y)
-                            # stream raster data for above rastermove
+                            # stream raster data for previous rastermove
                             rasterdata(pxarray, start, end)
-                            # prime for next line
-                            start = end
-                            line_y += pxsize
-                        else:
-                            end += px_w
-                            # lead-in
-                            move(posright, line_y)
-                            # raster move
-                            intensity(intensity_)
-                            rastermove(posleft, line_y)
-                            # lead-out
-                            intensity(0.0)
-                            move(leadinpos, line_y)
-                            # stream raster data for above rastermove
-                            rasterdata(pxarray_reversed, px_n - end, px_n - start)
-                            # prime for next line
-                            start = end
-                            line_y += pxsize
-                elif raster_mode == 'Forward':
-                    for l in range(line_count):
-                        end += px_w
-                        # move to start of line
-                        feedrate(seekrate)
-                        # intensity(0.0)
-                        move(leadinpos, line_y)
-                        # lead-in
-                        feedrate(feedrate_)
-                        move(posleft, line_y)
-                        # raster move
-                        intensity(intensity_)
-                        rastermove(posright, line_y)
-                        # lead-out
-                        intensity(0.0)
-                        move(leadoutpos, line_y)
-                        # stream raster data for previous rastermove
-                        rasterdata(pxarray, start, end)
                         # prime for next line
                         start = end
                         line_y += pxsize
