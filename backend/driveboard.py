@@ -1159,11 +1159,11 @@ def job_laser(jobdict):
                 px_w = int(size[0]/pxsize_x)
                 px_h = int(size[1]/pxsize_y)
                 raster_mode = conf['raster_mode']
-                if raster_mode not in ['Forward', 'Bidirectional', 'Reverse']:
+                if raster_mode not in ['Forward', 'Reverse', 'Bidirectional']:
                     raster_mode = 'Bidirectional'
                     print("WARN: raster_mode not recognized. Please check your config file.")
+                
                 # create image obj, convert to grayscale, scale, loop through lines
-                # print "--- start of image processing ---"
                 imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
                 imgobj = imgobj.resize((px_w,px_h), resample=Image.BICUBIC)
                 if imgobj.mode == 'RGBA':
@@ -1172,44 +1172,52 @@ def job_laser(jobdict):
                     imgobj = imgbg.convert("L")
                 else:
                     imgobj = imgobj.convert("L")
-                # print "---- end of image processing ----"
 
                 # assists on, beginning of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                     air_on()
                 # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
                 #     aux_on()
-                ### go through image lines ####
+
+                # extract raw pixel data into one large list 
+                # 0 = black / full power
+                # 255 = white / transparent / no power
                 pxarray = list(imgobj.getdata())
                 pxarray[:] = (value for value in pxarray if type(value) is not str)
                 pxarray_reversed = pxarray[::-1]
                 px_n = len(pxarray)
-                # if len(pxarray) % size[0] != 0:
-                #     print("ERROR: img length not divisable by width")
 
-                posx = pos[0]
-                posy = pos[1]
+                posx = pos[0] # left edge location [mm]
+                posy = pos[1] # top edge location [mm]
+                line_y = posy + 0.5*pxsize_y
+                line_count = int(size[1]/pxsize_y)
+                line_start = line_end = 0
+
                 # calc leadin/out
                 pos_leadin = posx - conf['raster_leadin']
                 if pos_leadin < 0:
-                    print("WARNING: not enough leadin space")
+                    print("WARN: not enough leadin space")
                     pos_leadin = 0
                 pos_leadout = posx + size[0] + conf['raster_leadin']
                 if pos_leadout > conf['workspace'][0]:
-                    print("WARNING: not enough leadout space")
+                    print("WARN: not enough leadout space")
                     pos_leadout = conf['workspace'][0]
-                line_start = line_end = 0
-                line_y = posy + 0.5*pxsize_y
+                
                 # print("mm: %s|%s|%s  h:%s" % ( posx + 0.5*pxsize_x - pos_leadin, size[0], pos_leadout - (posx + size[0] - 0.5*pxsize_x), size[1]))
                 # print("px: |%s|  raster_size:%s" % (px_w, pxsize_y))
                 # print(len(pxarray))
                 # print((px_w*px_h))
-                line_count = int(size[1]/pxsize_y)
+
+                # set direction
                 if raster_mode == 'Reverse':
                     direction = -1 # 1 is forward, -1 is reverse
-                else:
+                else: # if 'Forward' or 'Bidirectional'
                     direction = 1 
 
+                # we don't want to waste time at low speeds travelling over whitespace where there is no engraving going on
+                # so, chop off all whitespace at the beginning and end of each line
+                # additionally, break the line into segments so that large interior whitespaces can be travelled over quicker
+                # the threshold for a "large" interior whitespace is 2x the raster_leadin distance so we can still lead in/out properly
                 for i in range(line_count):
                     line_end += px_w
                     line = pxarray[line_start:line_end]
@@ -1228,33 +1236,38 @@ def job_laser(jobdict):
                             segment_end += 1*direction
                             if line[j] == 255:
                                 whitespace_counter += 1
-                            elif on_starting_edge:
+                            elif on_starting_edge: 
+                                # make the first non-white pixel our starting point
                                 segment_start = segment_end
                                 on_starting_edge = False
                                 whitespace_counter = 0
                             elif whitespace_counter*pxsize_x <= 2*conf['raster_leadin']:
+                                # if the interior whitespace is too small, ignore it and travel at normal speeds
                                 whitespace_counter = 0
                             
                             segment_ended = False
                             if j == (len(line) - 1):
                                 segment_ended = True
                             elif (whitespace_counter*pxsize_x > 2*conf['raster_leadin']) and (line[j+1] != 255) and not (on_starting_edge):
+                                # we travel all the way to the end of the interior whitespace, and use whitespace_counter to figure out how far to backtrack
                                 segment_ended = True
 
                             if segment_ended:
+                                # calculate the limits for engraving and leading in/out for this segment
                                 if direction == 1: # fwd
-                                    segment_end = segment_end - whitespace_counter + 1
+                                    segment_end = segment_end - whitespace_counter + 1 # cut off the ending whitespace
                                     pos_start = posx + (segment_start - line_start + 0.5)*pxsize_x
                                     pos_end = posx + (segment_end - line_start - 0.5)*pxsize_x
-                                    pos_leadin = max(posx + (segment_start - line_start)*pxsize_x - conf['raster_leadin'], 0)
-                                    pos_leadout = min(posx + (segment_end - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0])
+                                    pos_leadin = max(posx + (segment_start - line_start)*pxsize_x - conf['raster_leadin'], 0) # ensure we stay in the workspace
+                                    pos_leadout = min(posx + (segment_end - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0]) # ensure we stay in the workspace
                                 elif direction == -1: # rev
-                                    segment_end = segment_end + whitespace_counter - 1
+                                    segment_end = segment_end + whitespace_counter - 1 # cut off the ending whitespace
                                     pos_start = posx + (segment_start - line_start - 0.5)*pxsize_x
                                     pos_end = posx + (segment_end - line_start + 0.5)*pxsize_x
-                                    pos_leadin = min(posx + (segment_start - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0])
-                                    pos_leadout = max(posx + (segment_end - line_start)*pxsize_x - conf['raster_leadin'], 0)
+                                    pos_leadin = min(posx + (segment_start - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0]) # ensure we stay in the workspace
+                                    pos_leadout = max(posx + (segment_end - line_start)*pxsize_x - conf['raster_leadin'], 0) # ensure we stay in the workspace
                                 
+                                # write out the movement and engraving info for the segment
                                 intensity(0.0) # intensity for seek and lead-in
                                 feedrate(seekrate) # feedrate for seek
                                 move(pos_leadin, line_y) # seek to lead-in start              
@@ -1269,6 +1282,7 @@ def job_laser(jobdict):
                                 intensity(0.0) # intensity for lead-out
                                 move(pos_leadout, line_y) # lead-out
                                 
+                                # prime for next segment
                                 segment_start = segment_end + whitespace_counter*direction
                                 segment_end = segment_start - 1*direction
                                 segment_ended = False
@@ -1276,9 +1290,9 @@ def job_laser(jobdict):
 
                     # prime for next line
                     if (raster_mode == 'Bidirectional') and (direction == 1):
-                        direction = -1 # rev
+                        direction = -1 # switch to rev
                     elif (raster_mode == 'Bidirectional') and (direction == -1): #rev
-                        direction = 1 # fwd
+                        direction = 1 # switch to fwd
                     line_start = line_end
                     line_y += pxsize_y
 
