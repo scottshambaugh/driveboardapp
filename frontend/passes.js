@@ -81,8 +81,62 @@ function passes_add(feedrate, intensity, pxsize, items_assigned) {
       $('#assign_btn_'+num).trigger('click')
       return false;
   })
+
+  // swap path with the one above
+  $('#swap_up_btn_'+num).click(function(e) {
+    // num start counting at 1, but we need to swp array elements
+    passes_swap(num-1, num)
+    return false;
+  })
+
+  // swap path with the one below
+  $('#swap_dn_btn_'+num).click(function(e) {
+    // num start counting at 1, but we need to swp array elements
+    passes_swap(num, num+1)
+    return false;
+  })
 }
 
+
+function passes_swap(pass1, pass2) {
+  // get parametes and colors for pass1
+  var feedrate1  = Math.round(parseFloat($('#pass_'+pass1).find("input.feedrate").val()))
+  var intensity1 = Math.round(parseFloat($('#pass_'+pass1).find("input.intensity").val()))
+  var pxsize1    = parseFloat($('#pass_'+pass1).find("input.pxsize").val())
+  // get visible colors for pass1
+  var idx1 = $('#pass_'+pass1).find('div.pass_colors').children('div').filter(':visible').find('.idxmem').text()
+  // remove visible the colors
+  $('#pass_'+pass1).find('.color_remove_btn_'+pass1).click()
+
+  // get parametes and colors for pass2
+  var feedrate2  = Math.round(parseFloat($('#pass_'+pass2).find("input.feedrate").val()))
+  var intensity2 = Math.round(parseFloat($('#pass_'+pass2).find("input.intensity").val()))
+  var pxsize2    = parseFloat($('#pass_'+pass2).find("input.pxsize").val())
+  // get visible colors for pass1
+  var idx2 = $('#pass_'+pass2).find('div.pass_colors').children('div').filter(':visible').find('.idxmem').text()
+  // remove visible the colors
+  $('#pass_'+pass2).find('.color_remove_btn_'+pass2).click()
+
+  // apply parameters from pass2 to pass 1
+  $('#pass_'+pass1).find("input.feedrate").val(feedrate2)
+  $('#pass_'+pass1).find("input.intensity").val(intensity2)
+  $('#pass_'+pass1).find("input.pxsize").val(pxsize2)
+  // apply parameters from pass1 to pass 2
+  $('#pass_'+pass2).find("input.feedrate").val(feedrate1)
+  $('#pass_'+pass2).find("input.intensity").val(intensity1)
+  $('#pass_'+pass2).find("input.pxsize").val(pxsize1)
+
+  // add colors from pass2 to pass1
+  for ( var i = 0; i < idx2.length; i++) {
+    $('#passsel_'+pass1+'_'+idx2.charAt(i)).hide()
+    $('#pass_'+pass1+'_'+idx2.charAt(i)).show(300)
+  }
+  // add colors from pass1 to pass2
+  for ( var i = 0; i < idx1.length; i++) {
+    $('#passsel_'+pass2+'_'+idx1.charAt(i)).hide()
+    $('#pass_'+pass2+'_'+idx1.charAt(i)).show(300)
+  }
+}
 
 
 function passes_pass_html(num, feedrate, intensity, pxsize) {
@@ -114,6 +168,12 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
     '<a id="pass_conf_btn_'+num+'" style="margin-left:8px; position:relative; top:1px" role="button"'+
       'data-toggle="collapse" href="#pass_conf_'+num+'" aria-expanded="false" aria-controls="pass_conf_'+num+'"'+
       '<span class="glyphicon glyphicon-cog" style="color:#888888"></span>'+
+    '</a>'+
+    '<a id="swap_up_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
+      '<span class="glyphicon glyphicon-arrow-up" style="color:#888888"></span>'+
+    '</a>'+
+    '<a id="swap_dn_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
+      '<span class="glyphicon glyphicon-arrow-down" style="color:#888888"></span>'+
     '</a>'+
     '<div class="collapse" id="pass_conf_'+num+'"><div class="well" style="margin-bottom:10px">'+
       '<div class="input-group" style="margin-right:4px">'+
@@ -190,6 +250,7 @@ function passes_add_widget() {
   // bind pass_add_btn
   $('#pass_add_btn').click(function(e) {
     passes_add(2000, 20, app_config_main.pxsize, [])
+    passes_set_swapBtns()
     return false
   })
 
@@ -235,6 +296,7 @@ function passes_set_assignments() {
     passes_add(2000, 20, app_config_main.pxsize, [])
   }
   passes_add_widget()
+  passes_set_swapBtns()
 }
 
 
@@ -255,4 +317,19 @@ function passes_update_handler() {
     jobhandler.renderBounds()
     jobhandler.draw()
   }, 2000)
+}
+
+function passes_set_swapBtns() {
+  // this function is called after new passes or new jobs are added/loaded and disables the swap_up_btn for the first and the swap_dn_btn
+  // for the last pass
+
+  // enable all arrow btns
+  $('#job_passes').find('.btn-swap').removeClass('hidden')
+  $('#job_passes').find('.btn-swap').removeClass('hidden')
+  // disable swap_up_btn for first pass
+  $('#swap_up_btn_1').addClass('hidden')
+  // get number of passes and disable swp_btn_dn for last
+  n = $('#job_passes').children('.pass_widget').length
+  $('#swap_dn_btn_'+n).addClass('hidden')
+
 }
