@@ -311,7 +311,7 @@ class SerialLoopClass(threading.Thread):
         self.job_size += 5
 
 
-    def send_data(self, data, start, end):
+    def send_raster_data(self, data, start, end):
         count = 2
         with self.lock:
             self.tx_buffer.append(ord(CMD_RASTER_DATA_START))
@@ -615,29 +615,56 @@ class SerialLoopClass(threading.Thread):
 
 def prettify_serial(chunk, markers=markers_tx):
     string = ''
-    pdata_count = 0
-    pdata_nums = [128, 128, 128, 192]
+    if not hasattr(prettify_serial, "tx_pdata_nums"):
+        prettify_serial.rx_pdata_nums = [128, 128, 128, 192]
+        prettify_serial.rx_pdata_count = 0
+        prettify_serial.tx_pdata_nums = [128, 128, 128, 192]
+        prettify_serial.tx_pdata_count = 0
+        prettify_serial.tx_rasterstream = False
     
     if isinstance(chunk, int):
-        chunk = [chunk] # make intger inputs iterable
+        chunk = [chunk] # make integer inputs iterable
     
     for i in range(len(chunk)):
         data = chunk[i]
         if data >= 128:
             string += str(data) + ' '
-            pdata_nums[pdata_count] = data
-            pdata_count += 1
-        if data < 128 or i+1 == len(chunk):
-            if pdata_count != 0:
-                num = ((((pdata_nums[3]-128)*2097152
-                         + (pdata_nums[2]-128)*16384
-                         + (pdata_nums[1]-128)*128
-                         + (pdata_nums[0]-128) )- 134217728)/1000.0)
-                string += '(' + str(num) + ') '
-                pdata_count = 0
-                pdata_nums = [128, 128, 128, 192]
-        if data < 128:
+            if not prettify_serial.tx_rasterstream:
+                if markers == markers_tx:
+                    prettify_serial.tx_pdata_nums[prettify_serial.tx_pdata_count] = data
+                    prettify_serial.tx_pdata_count += 1
+                else:
+                    prettify_serial.rx_pdata_nums[prettify_serial.rx_pdata_count] = data
+                    prettify_serial.rx_pdata_count += 1
+        elif (data < 128):
             string += markers[chr(data)] + ', '
+            if markers == markers_tx:
+                prettify_serial.tx_pdata_count = 0
+                prettify_serial.tx_pdata_nums = [128, 128, 128, 192]
+            else:
+                prettify_serial.rx_pdata_count = 0
+                prettify_serial.rx_pdata_nums = [128, 128, 128, 192]
+
+            if markers[chr(data)] == 'CMD_RASTER_DATA_START':
+                prettify_serial.tx_rasterstream = True
+            elif markers[chr(data)] == 'CMD_RASTER_DATA_END':
+                prettify_serial.tx_rasterstream = False
+        if prettify_serial.tx_pdata_count == 4:
+            num = ((((prettify_serial.tx_pdata_nums[3]-128)*2097152
+                + (prettify_serial.tx_pdata_nums[2]-128)*16384
+                + (prettify_serial.tx_pdata_nums[1]-128)*128
+                + (prettify_serial.tx_pdata_nums[0]-128) )- 134217728)/1000.0)
+            prettify_serial.tx_pdata_count = 0
+            prettify_serial.tx_pdata_nums = [128, 128, 128, 192]
+            string += '(' + str(num) + ') '
+        elif prettify_serial.rx_pdata_count == 4:
+            num = ((((prettify_serial.rx_pdata_nums[3]-128)*2097152
+                + (prettify_serial.rx_pdata_nums[2]-128)*16384
+                + (prettify_serial.rx_pdata_nums[1]-128)*128
+                + (prettify_serial.rx_pdata_nums[0]-128) )- 134217728)/1000.0)
+            prettify_serial.rx_pdata_count = 0
+            prettify_serial.rx_pdata_nums = [128, 128, 128, 192]
+            string += '(' + str(num) + ') '
 
     if len(string) >= 2 and string[-2] == ',':
         string = string[:-2]
@@ -939,7 +966,7 @@ def rastermove(x, y, z=0.0):
 def rasterdata(data, start, end):
     # NOTE: no SerialLoop.lock
     # more granular locking in send_data
-    SerialLoop.send_data(data, start, end)
+    SerialLoop.send_raster_data(data, start, end)
 
 
 def pause():
