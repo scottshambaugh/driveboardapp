@@ -77,17 +77,14 @@ def init():
             return
 
     def update(q):
-        for line in itertools.islice(iterex(q.get_nowait, queue.Empty), 10000):
-            if line is None:
-                return  # stop updating
-            else:
-                track_text = 1
-                if scrolly.get()[1] != 1.0:
-                    track_text = 0
-                text.insert(tk.END, line)
-                if track_text:
+        if scrolly.get()[1] == 1.0:
+            for line in itertools.islice(iterex(q.get_nowait, queue.Empty), 10000):
+                if line is None:
+                    return  # stop updating
+                else:
+                    text.insert(tk.END, line)
                     text.see(tk.END)
-                root.focus()
+                    root.focus()
         global update_callback_id
         update_callback_id = root.after(40, update, q)  # schedule next update
     update(q)  # start recursive updates
