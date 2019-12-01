@@ -629,13 +629,12 @@ def prettify_serial(chunk, markers=markers_tx):
         data = chunk[i]
         if data >= 128:
             string += str(data) + ' '
-            if not prettify_serial.tx_rasterstream:
-                if markers == markers_tx:
-                    prettify_serial.tx_pdata_nums[prettify_serial.tx_pdata_count] = data
-                    prettify_serial.tx_pdata_count += 1
-                else:
-                    prettify_serial.rx_pdata_nums[prettify_serial.rx_pdata_count] = data
-                    prettify_serial.rx_pdata_count += 1
+            if (markers == markers_tx) and (not prettify_serial.tx_rasterstream):
+                prettify_serial.tx_pdata_nums[prettify_serial.tx_pdata_count] = data
+                prettify_serial.tx_pdata_count += 1
+            elif markers == markers_rx:
+                prettify_serial.rx_pdata_nums[prettify_serial.rx_pdata_count] = data
+                prettify_serial.rx_pdata_count += 1
         elif (data < 128):
             string += markers[chr(data)] + ', '
             if markers == markers_tx:
