@@ -621,6 +621,7 @@ def prettify_serial(chunk, markers=markers_tx):
         prettify_serial.tx_pdata_nums = [128, 128, 128, 192]
         prettify_serial.tx_pdata_count = 0
         prettify_serial.tx_rasterstream = False
+        prettify_serial.tx_rastercount = 0
     
     if isinstance(chunk, int):
         chunk = [chunk] # make integer inputs iterable
@@ -629,15 +630,16 @@ def prettify_serial(chunk, markers=markers_tx):
         data = chunk[i]
         if data >= 128:
             string += str(data) + ' '
-            if (markers == markers_tx) and (not prettify_serial.tx_rasterstream):
+            if (markers == markers_tx) and prettify_serial.tx_rasterstream:
+                prettify_serial.tx_rastercount += 1
+            elif markers == markers_tx:
                 prettify_serial.tx_pdata_nums[prettify_serial.tx_pdata_count] = data
                 prettify_serial.tx_pdata_count += 1
             elif markers == markers_rx:
                 prettify_serial.rx_pdata_nums[prettify_serial.rx_pdata_count] = data
                 prettify_serial.rx_pdata_count += 1
         elif (data < 128):
-            string += markers[chr(data)] + ', '
-            if markers == markers_tx:
+            if (markers == markers_tx) and (markers[chr(data)] not in ["CMD_STATUS", "CMD_SUPERSTATUS"]):
                 prettify_serial.tx_pdata_count = 0
                 prettify_serial.tx_pdata_nums = [128, 128, 128, 192]
             else:
@@ -646,8 +648,13 @@ def prettify_serial(chunk, markers=markers_tx):
 
             if markers[chr(data)] == 'CMD_RASTER_DATA_START':
                 prettify_serial.tx_rasterstream = True
+                prettify_serial.tx_rastercount = 0
             elif markers[chr(data)] == 'CMD_RASTER_DATA_END':
                 prettify_serial.tx_rasterstream = False
+                string += '(' + str(prettify_serial.tx_rastercount) + ') '
+
+            string += markers[chr(data)] + ', '
+
         if prettify_serial.tx_pdata_count == 4:
             num = ((((prettify_serial.tx_pdata_nums[3]-128)*2097152
                 + (prettify_serial.tx_pdata_nums[2]-128)*16384
@@ -1315,9 +1322,9 @@ def job_laser(jobdict):
                                 whitespace_counter = 0
 
                     # prime for next line
-                    if (raster_mode == 'Bidirectional') and (direction == 1):
+                    if (raster_mode == 'Bidirectional') and (direction == 1): # fwd
                         direction = -1 # switch to rev
-                    elif (raster_mode == 'Bidirectional') and (direction == -1): #rev
+                    elif (raster_mode == 'Bidirectional') and (direction == -1): # rev
                         direction = 1 # switch to fwd
                     line_start = line_end
                     line_y += pxsize_y
