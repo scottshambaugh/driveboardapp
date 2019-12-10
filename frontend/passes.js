@@ -280,7 +280,7 @@ function passes_update_handler() {
       $('#job_info_length').html('')
     }
 
-    var duration = (jobhandler.getActivePassesDuration()).toFixed(1)
+    var duration = (jobhandler.getActivePassesDuration() + jobhandler.getSeekPassesLength() * 1/app_config_main.seekrate).toFixed(1)
     if (duration != 0) {
       $('#job_info_duration').html(' |  min duration: '+duration+' min')
     } else {
