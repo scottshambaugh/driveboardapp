@@ -217,8 +217,6 @@ class SerialLoopClass(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
-        
-        self.verbose = False
 
         self.device = None
         self.tx_buffer = []
@@ -371,7 +369,7 @@ class SerialLoopClass(threading.Thread):
 
     def _serial_read(self):
         chunk = self.device.read(self.RX_CHUNK_SIZE)
-        if self.verbose and chunk != b'':
+        if conf['print_serial_data'] and chunk != b'':
             timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-4]
             print(timestamp + ' Receiving: ' + prettify_serial(chunk, markers=markers_rx))
         for data_num in chunk:
@@ -559,7 +557,7 @@ class SerialLoopClass(threading.Thread):
                         # to_send = ''.join(islice(self.tx_buffer, 0, self.TX_CHUNK_SIZE))
                         to_send = self.tx_buffer[self.tx_pos:self.tx_pos+self.TX_CHUNK_SIZE]
                         expectedSent = len(to_send)
-                        if self.verbose:
+                        if conf['print_serial_data']:
                             timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-4]
                             print(timestamp + ' Sending: ' + prettify_serial(to_send, markers=markers_tx))
 
@@ -596,9 +594,7 @@ class SerialLoopClass(threading.Thread):
     def _send_char(self, char):
         try:
             t_prewrite = time.time()
-            # self.device.write(char)
-            # print "send_char: [%s,%s]" % (str(ord(char)),str(ord(char)))
-            if self.verbose:
+            if conf['print_serial_data']:
                 timestamp = datetime.datetime.now().strftime('%H:%M:%S.%f')[:-4]
                 print(timestamp + ' Sending: ' + prettify_serial(ord(char), markers=markers_tx))
             self.device.write([ord(char),ord(char)])  # by protocol send twice

@@ -48,6 +48,7 @@ conf = {
     'pxsize': 0.2,                      # size (mm) of beam for rastering
     'max_jobs_in_list': 20,
     'usb_reset_hack': False,
+    'print_serial_data': False,
     'raster_mode': 'Bidirectional',     # 'Forward', 'Reverse', 'Bidirectional'
     'raster_leadin': 10,
     'fill_mode': 'Bidirectional',       # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
@@ -76,6 +77,7 @@ userconfigurable = {
     'kerf': "Typical kerf of a cut.",
     'pxsize': "Default kerf setting for rastering and filling.",
     'max_jobs_in_list': "Jobs to keep in the history list.",
+    'print_serial_data': "Print all raw serial communications to the debug window.",
     'raster_mode': "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'",
     'raster_leadin': "Leadin for raster fills in mm.",
     'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'",
