@@ -1213,6 +1213,8 @@ def job_laser(jobdict):
                 # 255 = white / transparent / no power
                 pxarray = list(imgobj.getdata())
                 pxarray[:] = (value for value in pxarray if type(value) is not str)
+                if conf['raster_invert']:
+                    pxarray = 255 - pxarray
                 pxarray_reversed = pxarray[::-1]
                 px_n = len(pxarray)
 

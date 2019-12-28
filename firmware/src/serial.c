@@ -123,8 +123,8 @@ inline void serial_write_param(uint8_t param, double val) {
   // val to be [-134217.728, 134217.727]
   // three decimals are retained
   int32_t numint = lround(val*1000)+134217728L;
-  serial_write((numint&127UL)+128);
-  serial_write(((numint&(127UL<<7))>>7)+128);
+  serial_write(( numint& 127UL          )+128);
+  serial_write(((numint&(127UL<< 7))>> 7)+128);
   serial_write(((numint&(127UL<<14))>>14)+128);
   serial_write(((numint&(127UL<<21))>>21)+128);
   serial_write(param);
