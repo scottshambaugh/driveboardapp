@@ -49,6 +49,7 @@ conf = {
     'max_jobs_in_list': 20,
     'usb_reset_hack': False,
     'print_serial_data': False,
+    'raster_invert': False,             # Set to True for materials which etch light on dark (eg slate, black marble)
     'raster_mode': 'Bidirectional',     # 'Forward', 'Reverse', 'Bidirectional'
     'raster_leadin': 10,
     'fill_mode': 'Bidirectional',       # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
@@ -71,16 +72,17 @@ userconfigurable = {
     'firmware': "Default firmware. Use designator matching the * in config.*.h",
     'workspace': "[x,y,z] dimensions of machine's work area in mm.",
     'grid_mm': "Visual grid of UI in mm.",
-    'seekrate': "Default seek rate in mm/min",
+    'seekrate': "Default seek rate in mm/min.",
     'feedrate': "Default feed rate in mm/min.",
     'intensity': "Default intensity setting 0-100.",
     'kerf': "Typical kerf of a cut.",
     'pxsize': "Default kerf setting for rastering and filling.",
     'max_jobs_in_list': "Jobs to keep in the history list.",
     'print_serial_data': "Print all raw serial communications to the debug window.",
-    'raster_mode': "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'",
+    'raster_invert': "If true, laser will set black pixels to 0%% intensity and white pixels to 100%% intensity.",
+    'raster_mode': "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'.",
     'raster_leadin': "Leadin for raster fills in mm.",
-    'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'",
+    'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'.",
     'fill_leadin': "Leadin for vector fills in mm.",
     'users': "List of user cendentials for UI access.",
     'enable_gzip': "Enable gzip compression in job uploads.",
