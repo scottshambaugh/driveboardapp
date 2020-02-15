@@ -152,7 +152,7 @@ function passes_select_html(num, idx, kind, color) {
   var html =
   '<li id="passsel_'+num+'_'+idx+'" style="background-color:'+color+'">'+
   '<a href="#" class="color_add_btn_'+num+'" style="color:'+color+'">'+
-  '<span class="label label-default kindmem">'+kind+'</span>'+
+  '<span class="label label-default kindmem">'+kind+', '+color+'</span>'+
   '<span class="idxmem" style="display:none">'+idx+'</span></a></li>'
   return html
 }
