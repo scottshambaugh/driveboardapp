@@ -221,19 +221,19 @@ class SVGReader:
                     # we have to interpret user (px) units
                     # 3. For some apps we can make a good guess.
                     svghead = svgstring[0:400]
-                    if 'Inkscape' in svghead:
+                    if 'Inkscape' in svghead.decode('utf-8'):
                         self.px2mm *= 25.4/90.0
                         log.info("SVG exported with Inkscape -> 90dpi.")
-                    elif 'Illustrator' in svghead:
+                    elif 'Illustrator' in svghead.decode('utf-8'):
                         self.px2mm *= 25.4/72.0
                         log.info("SVG exported with Illustrator -> 72dpi.")
-                    elif 'Intaglio' in svghead:
+                    elif 'Intaglio' in svghead.decode('utf-8'):
                         self.px2mm *= 25.4/72.0
                         log.info("SVG exported with Intaglio -> 72dpi.")
-                    elif 'CorelDraw' in svghead:
+                    elif 'CorelDraw' in svghead.decode('utf-8'):
                         self.px2mm *= 25.4/96.0
                         log.info("SVG exported with CorelDraw -> 96dpi.")
-                    elif 'Qt' in svghead:
+                    elif 'Qt' in svghead.decode('utf-8'):
                         self.px2mm *= 25.4/90.0
                         log.info("SVG exported with Qt lib -> 90dpi.")
                     else:
@@ -242,7 +242,7 @@ class SVGReader:
                 else:
                     log.error("SVG with unsupported unit.")
                     self.px2mm = None
-
+                    
         # 4. Get px2mm by the ratio of svg size to target size
         if not self.px2mm and (width and height):
             self.px2mm = self._target_size[0]/width
