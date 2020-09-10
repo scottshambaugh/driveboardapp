@@ -56,6 +56,7 @@ jobhandler = {
     passes_clear()
     $('#job_info_name').html('')
     $('#job_info_length').html('')
+    $('#job_info_duration').html('')
     $('#info_content').html('')
     $('#info_btn').hide()
   },
@@ -438,6 +439,44 @@ jobhandler = {
     return length
   },
 
+
+  getSeekPassesLength : function() {
+    var length = 0
+    // loop over the passes
+    this.loopPasses(function(pass, item_idxs) {
+      // loop over the items
+      for (var iPass = 0; iPass < item_idxs.length; iPass++) {
+        // loop over the individual paths in the item
+        var item = item_idxs[iPass]
+        for ( var iPath = 0; iPath < jobhandler.defs[item].data.length - 1; iPath++) {
+          path     = jobhandler.defs[item].data[iPath]
+          nextPath = jobhandler.defs[item].data[iPath+1]
+          endPoint   = path[path.length-1]
+          startPoint = nextPath[0]
+          // add distance to the seek-length
+          length += Math.sqrt((startPoint[0]-endPoint[0])*(startPoint[0]-endPoint[0])+(startPoint[1]-endPoint[1])*(startPoint[1]-endPoint[1]))
+        }
+        if (iPass < item_idxs.length-1) {
+          lastPointLastPass = nextPath[nextPath.length-1]
+          firstPointNextPass = jobhandler.defs[item_idxs[iPass+1]].data[0][0]
+          length += Math.sqrt((firstPointNextPass[0]-lastPointLastPass[0])*(firstPointNextPass[0]-lastPointLastPass[0])+(firstPointNextPass[1]-lastPointLastPass[1])*(firstPointNextPass[1]-lastPointLastPass[1]))
+        }
+      }
+    })
+    return length
+  },
+
+
+  getActivePassesDuration : function() {
+    var duration = 0
+    this.loopPasses(function(pass, item_idxs){
+      for (var i = 0; i < item_idxs.length; i++) {
+        var item = item_idxs[i]
+        duration += 1/pass.feedrate * jobhandler.stats.items[item].len
+      }
+    })
+    return duration
+  },
 
   getActivePassesBbox : function() {
     var bbox = [Infinity, Infinity, -Infinity, -Infinity]

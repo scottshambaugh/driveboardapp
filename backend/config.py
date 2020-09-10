@@ -59,7 +59,7 @@ conf = {
         'laser': 'laser',
     },
     'enable_gzip': True,                # allow gzip upload of files / jobs
-    'home_on_startup': True,
+    'home_on_startup': False,
     'mill_mode': False,
     'mill_max_rpm': 18000,
 }
