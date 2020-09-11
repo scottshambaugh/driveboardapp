@@ -191,11 +191,11 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
       'data-toggle="collapse" href="#pass_conf_'+num+'" aria-expanded="false" aria-controls="pass_conf_'+num+'"'+
       '<span class="glyphicon glyphicon-cog" style="color:#888888"></span>'+
     '</a>'+
-    '<a id="swap_up_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
-      '<span class="glyphicon glyphicon-arrow-up" style="color:#888888"></span>'+
-    '</a>'+
     '<a id="swap_dn_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
       '<span class="glyphicon glyphicon-arrow-down" style="color:#888888"></span>'+
+    '</a>'+
+    '<a id="swap_up_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
+      '<span class="glyphicon glyphicon-arrow-up" style="color:#888888"></span>'+
     '</a>'+
     '<div class="collapse" id="pass_conf_'+num+'"><div class="well" style="margin-bottom:10px">'+
       '<div class="input-group" style="margin-right:4px">'+
@@ -326,7 +326,7 @@ function passes_update_handler() {
   // called whenever passes widget changes happen (color add/remove)
   // this event handler is debounced to minimize updates
 
-  // TODO: make sure this functions is called, when any of the feedrates was changed, otherwise, passes nedd to be added
+  // TODO: make sure this functions is called, when any of the feedrates was changed, otherwise, passes need to be added
   // and removed to update the duration...
 
   clearTimeout(window.lastPassesUpdateTimer)
@@ -344,7 +344,7 @@ function passes_update_handler() {
 
     var duration = (jobhandler.getActivePassesDuration() + jobhandler.getSeekPassesLength() * 1/app_config_main.seekrate).toFixed(1)
     if (duration != 0) {
-      $('#job_info_duration').html(' |  min duration: '+duration+' min')
+      $('#job_info_duration').html(' | duration: ≥'+duration+' min')
     } else {
       $('#job_info_duration').html('')
     }
@@ -359,12 +359,12 @@ function passes_set_swapBtns() {
   // for the last pass
 
   // enable all arrow btns
-  $('#job_passes').find('.btn-swap').removeClass('hidden')
-  $('#job_passes').find('.btn-swap').removeClass('hidden')
+  $('#job_passes').find('.btn-swap').css("visibility", "visible")
+  $('#job_passes').find('.btn-swap').css("visibility", "visible")
   // disable swap_up_btn for first pass
-  $('#swap_up_btn_1').addClass('hidden')
+  $('#swap_up_btn_1').css("visibility", "hidden")
   // get number of passes and disable swp_btn_dn for last
   n = $('#job_passes').children('.pass_widget').length
-  $('#swap_dn_btn_'+n).addClass('hidden')
+  $('#swap_dn_btn_'+n).css("visibility", "hidden")
 
 }
