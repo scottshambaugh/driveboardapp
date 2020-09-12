@@ -62,6 +62,8 @@ conf = {
     'home_on_startup': True,
     'mill_mode': False,
     'mill_max_rpm': 18000,
+    'alignment_host': None,
+    'alignment_port': 80,
 }
 conf_defaults = copy.deepcopy(conf)
 
@@ -89,6 +91,8 @@ userconfigurable = {
     'home_on_startup': "Automatically perform a homing cycle when the machine first connects.",
     'mill_mode': "Activate CNC mill mode.",
     'mill_max_rpm': "Maximum spindle RPM.",
+    'alignment_host': "IP or hostname of alignment server.",
+    'alignment_port': "Port of alignment server.",
 }
 
 

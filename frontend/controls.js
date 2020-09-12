@@ -118,6 +118,16 @@ function controls_ready() {
     return false
   })
 
+  if (app_config_main.alignment_host) {
+    $("#open_align_btn").tooltip({placement:'bottom', delay: {show:1000, hide:100}})
+    $("#open_align_btn").click(function(e){
+      $('#open_align_file_fld').trigger('click')
+      return false
+    })
+  } else {
+    $("#open_align_container").hide()
+  }
+
   $("#run_btn").tooltip({placement:'bottom', delay: {show:1000, hide:100}})
   $("#run_btn").click(function(e){
     jobhandler.passes = passes_get_active()

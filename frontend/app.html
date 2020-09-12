@@ -89,6 +89,16 @@
             <input type="file" id="open_file_fld" name="data" style="visibility:hidden; position:fixed">
         </form>
 
+        <!-- open and align button -->
+        <div id="open_align_container" class="btn-group pull-left menu_btn">
+            <button id="open_align_btn" class="btn btn-default" type="submit"
+                    title="open with alignment" data-loading-text='<span class="glyphicon glyphicon-refresh spinning"></span>'>Open &amp; Align</button>
+        </div>
+        <form id="open_align_file_form" action="#" onsubmit="return false;">
+            <input type="file" id="open_align_file_fld" name="data" style="visibility:hidden; position:fixed">
+        </form>
+
+
         <!-- process buttons -->
         <div class="btn-group pull-left menu_btn">
           <button id="run_btn" class="btn btn-primary ladda-button" data-style="expand-right" style="min-width:90px">

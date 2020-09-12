@@ -7,18 +7,21 @@ from .dxf_parser import DXFParser
 from .gcode_reader import GcodeReader
 from . import pathoptimizer
 
+from .utilities import matrixApply
+
 
 __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 
 
 
-def convert(job, optimize=True, tolerance=conf['tolerance']):
+def convert(job, optimize=True, tolerance=conf['tolerance'], matrix=None):
     """Convert a job string (dba, svg, dxf, or gcode).
 
     Args:
         job: Parsed dba or job string (dba, svg, dxf, or gcode).
         optimize: Flag for optimizing path tolerances.
         tolerance: Tolerance used in convert/optimization.
+        matrix: Transformation matrix to apply to dba
 
     Returns:
         A parsed .dba job.
@@ -60,8 +63,29 @@ def convert(job, optimize=True, tolerance=conf['tolerance']):
     else:
         print("ERROR: file type not recognized")
         raise TypeError
+    if matrix:
+        apply_alignment_matrix(job, matrix)
     return job
 
+def apply_alignment_matrix(job, matrix):
+    """Transform the coordinates in the job with the supplied matrix."""
+    # Get the SVG-style 6-element vector from the 3x3 matrix
+    mat = [matrix[0][0], matrix[1][0], matrix[0][1], matrix[1][1], matrix[0][2], matrix[1][2]]
+
+    # Only the 'defs' list contains coordinates that need to be transformed
+    defs = job['defs']
+
+    for one_def in defs:
+        if one_def['kind'] == "image":
+            # TODO: raster images are not supported!
+            #       The rest of the code assumes the rows of pixel data are aligned
+            #       with the X axis, so handling rotation will require transforming
+            #       the entire image and generating new data.
+            pass
+        elif one_def['kind'] == "path":
+            for one_path in one_def['data']:
+                for one_point in one_path:
+                    matrixApply(mat, one_point)
 
 def read_svg(svg_string, workspace, tolerance, forced_dpi=None, optimize=True):
     """Read a svg file string and convert to dba job."""
