@@ -9,6 +9,9 @@ function request_get(args) {
     dataType: "json",
     username: "laser",
     password: "laser",
+    headers: {
+      "Authorization": "Basic " + btoa("laser:laser")
+    },
     statusCode: {
       400: function(s) {
         // alert(JSON.stringify(s))
@@ -65,6 +68,9 @@ function request_post(args) {
     cache: false,
     username: "laser",
     password: "laser",
+    headers: {
+      "Authorization": "Basic " + btoa("laser:laser")
+    },
     statusCode: {
       400: function(s) {
         // alert(JSON.stringify(s))
