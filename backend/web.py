@@ -593,6 +593,53 @@ def load_library(jobname):
 
 
 
+### FAVORITES
+
+def _read_favorites():
+    favorites = []
+    path = os.path.join(conf['confdir'], 'favorites.json')
+    #load
+    if os.path.exists(path):
+        with open(path) as fp:
+            try:
+                favorites = json.load(fp)
+                favorites.sort(key=lambda x: x['name'].lower())
+            except:
+                print("ERROR: failed to read favorites file")
+    return favorites
+
+
+
+@bottle.route('/listing_favorites')
+@bottle.auth_basic(checkuser)
+def listing_favorites():
+    """List all favorite settings."""
+    favorites = _read_favorites()
+
+    return json.dumps(favorites)
+
+@bottle.route('/save_favorite/<name>/<feedrate:float>/<intensity:float>')
+@bottle.auth_basic(checkuser)
+def save_favorite(name, feedrate, intensity):
+    """Save a favorite setting to favorites.json. Delete if feedrate==0 && intensity==0"""
+    favorites = _read_favorites()
+    try:
+        favorites_dict = {one_fav['name'].lower():one_fav for one_fav in favorites}
+        if name.lower() in favorites_dict and int(feedrate) == 0 and int(intensity) == 0:
+            del(favorites_dict[name.lower()])
+        elif int(feedrate) != 0 or int(intensity) != 0:
+            favorites_dict[name.lower()] = {"name":name, "feedrate":feedrate, "intensity":intensity}
+        favorites = list(favorites_dict.values())
+        favorites.sort(key=lambda x: x['name'].lower())
+        path = os.path.join(conf['confdir'], 'favorites.json')
+        with open(path, "w") as fp:
+            json.dump(favorites, fp)
+    except Exception as e :
+        print("ERROR: failed to update favorites file")
+        print(e)
+    return '{}'
+
+
 ### JOB EXECUTION
 
 @bottle.route('/run/<jobname>')
