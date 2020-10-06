@@ -595,47 +595,47 @@ def load_library(jobname):
 
 ### FAVORITES
 
-def _read_favorites():
-    favorites = []
-    path = os.path.join(conf['confdir'], 'favorites.json')
+def _read_presets():
+    presets = []
+    path = os.path.join(conf['confdir'], 'presets.json')
     #load
     if os.path.exists(path):
         with open(path) as fp:
             try:
-                favorites = json.load(fp)
-                favorites.sort(key=lambda x: x['name'].lower())
+                presets = json.load(fp)
+                presets.sort(key=lambda x: x['name'].lower())
             except:
-                print("ERROR: failed to read favorites file")
-    return favorites
+                print("ERROR: failed to read presets file")
+    return presets
 
 
 
-@bottle.route('/listing_favorites')
+@bottle.route('/listing_presets')
 @bottle.auth_basic(checkuser)
-def listing_favorites():
-    """List all favorite settings."""
-    favorites = _read_favorites()
+def listing_presets():
+    """List all preset settings."""
+    presets = _read_presets()
 
-    return json.dumps(favorites)
+    return json.dumps(presets)
 
-@bottle.route('/save_favorite/<name>/<feedrate:float>/<intensity:float>')
+@bottle.route('/save_preset/<name>/<feedrate:float>/<intensity:float>')
 @bottle.auth_basic(checkuser)
-def save_favorite(name, feedrate, intensity):
-    """Save a favorite setting to favorites.json. Delete if feedrate==0 && intensity==0"""
-    favorites = _read_favorites()
+def save_preset(name, feedrate, intensity):
+    """Save a preset setting to presets.json. Delete if feedrate==0 && intensity==0"""
+    presets = _read_presets()
     try:
-        favorites_dict = {one_fav['name'].lower():one_fav for one_fav in favorites}
-        if name.lower() in favorites_dict and int(feedrate) == 0 and int(intensity) == 0:
-            del(favorites_dict[name.lower()])
+        presets_dict = {one_preset['name'].lower():one_preset for one_preset in presets}
+        if name.lower() in presets_dict and int(feedrate) == 0 and int(intensity) == 0:
+            del(presets_dict[name.lower()])
         elif int(feedrate) != 0 or int(intensity) != 0:
-            favorites_dict[name.lower()] = {"name":name, "feedrate":feedrate, "intensity":intensity}
-        favorites = list(favorites_dict.values())
-        favorites.sort(key=lambda x: x['name'].lower())
-        path = os.path.join(conf['confdir'], 'favorites.json')
+            presets_dict[name.lower()] = {"name":name, "feedrate":feedrate, "intensity":intensity}
+        presets = list(presets_dict.values())
+        presets.sort(key=lambda x: x['name'].lower())
+        path = os.path.join(conf['confdir'], 'presets.json')
         with open(path, "w") as fp:
-            json.dump(favorites, fp)
+            json.dump(presets, fp)
     except Exception as e :
-        print("ERROR: failed to update favorites file")
+        print("ERROR: failed to update presets file")
         print(e)
     return '{}'
 

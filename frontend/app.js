@@ -139,6 +139,6 @@ function config_received() {
   library_ready()
   // call 'ready' of status
   status_ready()
-  // call 'ready' of favorites
-  favorites_ready()
+  // call 'ready' of presets
+  presets_ready()
 }

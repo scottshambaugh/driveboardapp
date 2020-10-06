@@ -118,7 +118,7 @@ function passes_add(feedrate, intensity, pxsize, items_assigned) {
   return false
   })
 
-  passes_update_favorites()
+  passes_update_presets()
 }
 
 
@@ -201,10 +201,10 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
     </a>
     <div class="dropdown" style="display:inline;">
       <button class="btn btn-default btn-sm dropdown-toggle" type="button" style="width:34px; margin-left:4px;" 
-        id="favorites_btn_${num}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="favorites [${num}]">
+        id="presets_btn_${num}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="presets [${num}]">
         <span class="glyphicon glyphicon-star-empty"></span>
       </button>
-      <ul id="favdp_${num}" data-passnum="${num}" class="dropdown-menu dropdown-menu-right favorites_dropdown" aria-labelledby="forvorites_btn_${num}">
+      <ul id="presetdp_${num}" data-passnum="${num}" class="dropdown-menu dropdown-menu-right presets_dropdown" aria-labelledby="forvorites_btn_${num}">
       </ul>
     </div>
     <div class="collapse" id="pass_conf_${num}"><div class="well" style="margin-bottom:10px">
@@ -249,27 +249,27 @@ function scale_range(val, in_min, in_max, out_min, out_max) {
 }
 
 
-function favorites_select_html() {
+function presets_select_html() {
   var html = `
     <li style="border-bottom:1px solid black">
-      <a href="#" class="favorites_new_btn">New favorite...</a>
+      <a href="#" class="presets_new_btn">New preset...</a>
     </li>
   `
-  for ( var i = 0; i < favorites.length; i++) {
+  for ( var i = 0; i < presets.length; i++) {
     html += `
     <li>
-      <a href="#" class="favorites_apply_btn">
+      <a href="#" class="presets_apply_btn">
         <span style="display:inline-block; margin-right:5px;">
           <div style="width:20px; height:0.7ex; border:1px solid gray; margin-bottom:2px;">
-            <div style="height:100%; background-color:blue; width:${scale_range(favorites[i].feedrate, 0, 6000, 0, 100)}%"></div>
+            <div style="height:100%; background-color:blue; width:${scale_range(presets[i].feedrate, 0, 6000, 0, 100)}%"></div>
           </div>
           <div style="width:20px; height:0.7ex; border:1px solid gray;">
-            <div style="height:100%; background-color:red; width:${scale_range(favorites[i].intensity, 0, 100, 0, 100)}%"></div>
+            <div style="height:100%; background-color:red; width:${scale_range(presets[i].intensity, 0, 100, 0, 100)}%"></div>
           </div>
         </span>
-        <span>${favorites[i].name}</span>
-        <span class="feedmem" style="display:none;">${favorites[i].feedrate}</span>
-        <span class="intensitymem" style="display:none;">${favorites[i].intensity}</span>
+        <span>${presets[i].name}</span>
+        <span class="feedmem" style="display:none;">${presets[i].feedrate}</span>
+        <span class="intensitymem" style="display:none;">${presets[i].intensity}</span>
       </a>
     </li>
     `
@@ -336,32 +336,32 @@ function passes_add_widget() {
 }
 
 
-function passes_update_favorites() {
-  var favorites_html = favorites_select_html()
+function passes_update_presets() {
+  var presets_html = presets_select_html()
 
-  $('.favorites_dropdown').html(favorites_html)
+  $('.presets_dropdown').html(presets_html)
 
-  // bind button for new favorite
-  $('.favorites_new_btn').click(function(e) {
+  // bind button for new preset
+  $('.presets_new_btn').click(function(e) {
     var passnum = $(this).parent().parent().data("passnum")
     var feedrate = $('#pass_'+passnum).find("input.feedrate").val()
     var intensity = $('#pass_'+passnum).find("input.intensity").val()
-    $('#favorite_feedrate').val(feedrate)
-    $('#favorite_intensity').val(intensity)
-    $('#favdp_'+passnum).dropdown("toggle")
-    $('#favorites_modal').modal('show')
-    $('#favorite_name').focus()
+    $('#preset_feedrate').val(feedrate)
+    $('#preset_intensity').val(intensity)
+    $('#presetdp_'+passnum).dropdown("toggle")
+    $('#presets_modal').modal('show')
+    $('#preset_name').focus()
     return false
   })
 
-  // bind all favorites buttons within dropdown
-  $('.favorites_apply_btn').click(function(e) {
+  // bind all presets buttons within dropdown
+  $('.presets_apply_btn').click(function(e) {
     var passnum = $(this).parent().parent().data("passnum")
     var feedrate = $(this).children('span.feedmem').text()
     var intensity = $(this).children('span.intensitymem').text()
     $('#pass_'+passnum).find("input.feedrate").val(feedrate)
     $('#pass_'+passnum).find("input.intensity").val(intensity)
-    $('#favdp_'+passnum).dropdown("toggle")
+    $('#presetdp_'+passnum).dropdown("toggle")
     $('#passform_'+passnum).hide()
     $('#passform_'+passnum).show(300)
     passes_update_handler()
