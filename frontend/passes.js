@@ -270,6 +270,7 @@ function presets_select_html() {
         <span>${presets[i].name}</span>
         <span class="feedmem" style="display:none;">${presets[i].feedrate}</span>
         <span class="intensitymem" style="display:none;">${presets[i].intensity}</span>
+        <span class="pxsizemem" style="display:none;">${presets[i].pxsize}</span>
       </a>
     </li>
     `
@@ -346,8 +347,10 @@ function passes_update_presets() {
     var passnum = $(this).parent().parent().data("passnum")
     var feedrate = $('#pass_'+passnum).find("input.feedrate").val()
     var intensity = $('#pass_'+passnum).find("input.intensity").val()
+    var pxsize = $('#pass_'+passnum).find("input.pxsize").val()
     $('#preset_feedrate').val(feedrate)
     $('#preset_intensity').val(intensity)
+    $('#preset_pxsize').val(pxsize)
     $('#presetdp_'+passnum).dropdown("toggle")
     $('#presets_modal').modal('show')
     $('#preset_name').focus()
@@ -359,8 +362,10 @@ function passes_update_presets() {
     var passnum = $(this).parent().parent().data("passnum")
     var feedrate = $(this).children('span.feedmem').text()
     var intensity = $(this).children('span.intensitymem').text()
+    var pxsize = $(this).children('span.pxsizemem').text()
     $('#pass_'+passnum).find("input.feedrate").val(feedrate)
     $('#pass_'+passnum).find("input.intensity").val(intensity)
+    $('#pass_'+passnum).find("input.pxsize").val(pxsize)
     $('#presetdp_'+passnum).dropdown("toggle")
     $('#passform_'+passnum).hide()
     $('#passform_'+passnum).show(300)
