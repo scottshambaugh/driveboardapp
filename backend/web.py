@@ -593,6 +593,53 @@ def load_library(jobname):
 
 
 
+### FAVORITES
+
+def _read_presets():
+    presets = []
+    path = os.path.join(conf['confdir'], 'presets.json')
+    #load
+    if os.path.exists(path):
+        with open(path) as fp:
+            try:
+                presets = json.load(fp)
+                presets.sort(key=lambda x: x['name'].lower())
+            except:
+                print("ERROR: failed to read presets file")
+    return presets
+
+
+
+@bottle.route('/listing_presets')
+@bottle.auth_basic(checkuser)
+def listing_presets():
+    """List all preset settings."""
+    presets = _read_presets()
+
+    return json.dumps(presets)
+
+@bottle.route('/save_preset/<name>/<feedrate:float>/<intensity:float>/<pxsize:float>')
+@bottle.auth_basic(checkuser)
+def save_preset(name, feedrate, intensity, pxsize):
+    """Save a preset setting to presets.json. Delete if feedrate==0 && intensity==0"""
+    presets = _read_presets()
+    try:
+        presets_dict = {one_preset['name'].lower():one_preset for one_preset in presets}
+        if name.lower() in presets_dict and int(feedrate) == 0 and int(intensity) == 0:
+            del(presets_dict[name.lower()])
+        elif int(feedrate) != 0 or int(intensity) != 0:
+            presets_dict[name.lower()] = {"name":name, "feedrate":feedrate, "intensity":intensity, "pxsize":pxsize}
+        presets = list(presets_dict.values())
+        presets.sort(key=lambda x: x['name'].lower())
+        path = os.path.join(conf['confdir'], 'presets.json')
+        with open(path, "w") as fp:
+            json.dump(presets, fp)
+    except Exception as e :
+        print("ERROR: failed to update presets file")
+        print(e)
+    return '{}'
+
+
 ### JOB EXECUTION
 
 @bottle.route('/run/<jobname>')

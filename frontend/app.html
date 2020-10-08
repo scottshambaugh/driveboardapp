@@ -41,6 +41,7 @@
     <script src="library.js"></script>
     <script src="status.js"></script>
     <script src="fills.js"></script>
+    <script src="presets.js"></script>
 
   </head>
 
@@ -64,6 +65,7 @@
                 <li class="divider"></li>
                 <li><a id="queue_btn" href="#" data-toggle="modal" data-target="#queue_modal" title="[Q]">Job Queue</a></li>
                 <li><a id="library_btn" href="#" data-toggle="modal" data-target="#library_modal" title="[L]">Library</a></li>
+                <li><a id="presets_btn" href="#" data-toggle="modal" data-target="#presets_modal" >Presets</a></li>
                 <!-- <li><a id="gcode_btn" href="#" data-toggle="modal" data-target="#gcode_modal" title="[G]">GCode Edior</a></li> -->
                 <li class="divider"></li>
                 <li><a href="#" data-toggle="modal" data-target="#about_modal">About</a></li>
@@ -268,6 +270,20 @@
               <h4 class="modal-title" id="library_header">Job Library</h4>
             </div>
             <div id="library_content" class="modal-body">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- preset settings modal -->
+      <div id="presets_modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+              <h4 class="modal-title" id="presets_header">Preset Settings</h4>
+            </div>
+            <div id="presets_content" class="modal-body">
             </div>
           </div>
         </div>

@@ -109,7 +109,6 @@ function passes_add(feedrate, intensity, pxsize, items_assigned) {
       passes_update_handler()
     } else {
     feedrate = this.value.match(/[-+]?[0-9]+[\.|,]?[0-9]?/);
-    console.log(feedrate)
 	if (!feedrate) {
 	  // if no match is found, null is returned for which 0 should be the replacement
 	  feedrate = 0
@@ -118,6 +117,8 @@ function passes_add(feedrate, intensity, pxsize, items_assigned) {
   }
   return false
   })
+
+  passes_update_presets()
 }
 
 
@@ -183,90 +184,142 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
     added_html += passes_added_html(num, idx, "path", path.color)
   }, "path")
 
-  // html template like it's 1999
-  var html =
-  '<div id="pass_'+num+'" class="row pass_widget" style="margin:0; margin-bottom:20px">'+
-    '<label style="color:#666666">Pass '+num+'</label>'+
-    '<a id="pass_conf_btn_'+num+'" style="margin-left:8px; position:relative; top:1px" role="button"'+
-      'data-toggle="collapse" href="#pass_conf_'+num+'" aria-expanded="false" aria-controls="pass_conf_'+num+'"'+
-      '<span class="glyphicon glyphicon-cog" style="color:#888888"></span>'+
-    '</a>'+
-    '<a id="swap_dn_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
-      '<span class="glyphicon glyphicon-arrow-down" style="color:#888888"></span>'+
-    '</a>'+
-    '<a id="swap_up_btn_'+num+'" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">'+
-      '<span class="glyphicon glyphicon-arrow-up" style="color:#888888"></span>'+
-    '</a>'+
-    '<div class="collapse" id="pass_conf_'+num+'"><div class="well" style="margin-bottom:10px">'+
-      '<div class="input-group" style="margin-right:4px">'+
-        '<div class="input-group-addon">pxsize [mm]</div>'+
-        '<input type="text" class="form-control input-sm pxsize"'+
-          'style="width:44px;" value="'+pxsize+'" title="size of physical raster pixel in mm">'+
-      '</div>'+
-    '</div></div>'+
-    '<form class="form-inline">'+
-      '<div class="form-group">'+
-        '<div class="input-group" style="margin-right:4px">'+
-          '<div class="input-group-addon" style="width:10px">F</div>'+
-          '<input type="text" class="form-control input-sm feedrate" style="width:50px;" value="'+feedrate+'" title="feedrate">'+
-        '</div>'+
-        '<div class="input-group" style="margin-right:4px">'+
-          '<div class="input-group-addon" style="width:10px">%</div>'+
-          '<input type="text" class="form-control input-sm intensity" style="width:44px" value="'+intensity+'" title="intensity 0-100%">'+
-        '</div>'+
-        '<div class="dropdown input-group">'+
-          '<button class="btn btn-primary btn-sm dropdown-toggle" type="button" style="width:34px" '+
-            'id="assign_btn_'+num+'" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="['+num+']">'+
-            '<span class="glyphicon glyphicon-plus"></span>'+
-          '</button>'+
-          '<ul id="passdp_'+num+'" class="dropdown-menu dropdown-menu-right pass_color_dropdown" aria-labelledby="assign_btn_'+num+'">'+
-            select_html+
-          '</ul>'+
-        '</div>'+
-      '</div>'+
-    '</form>'+
-    '<div class="pass_colors">'+added_html+'</div>'+
-  '</div>'
+  // html template like it's 1999,
+  // updated to use template literals and embedded expressions
+  var html = `
+  <div id="pass_${num}" class="row pass_widget" style="margin:0; margin-bottom:20px">
+    <label style="color:#666666">Pass ${num}</label>
+    <a id="pass_conf_btn_${num}" style="margin-left:8px; position:relative; top:1px" role="button"
+      data-toggle="collapse" href="#pass_conf_${num}" aria-expanded="false" aria-controls="pass_conf_${num}">
+      <span class="glyphicon glyphicon-cog" style="color:#888888"></span>
+    </a>
+    <a id="swap_dn_btn_${num}" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">
+      <span class="glyphicon glyphicon-arrow-down" style="color:#888888"></span>
+    </a>
+    <a id="swap_up_btn_${num}" class="btn btn-swap" style="margin-left:8px; position:relative; top:1px" role="button">
+      <span class="glyphicon glyphicon-arrow-up" style="color:#888888"></span>
+    </a>
+    <div class="dropdown" style="display:inline;">
+      <button class="btn btn-default btn-sm dropdown-toggle" type="button" style="width:34px; margin-left:4px;" 
+        id="presets_btn_${num}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="presets [${num}]">
+        <span class="glyphicon glyphicon-star-empty"></span>
+      </button>
+      <ul id="presetdp_${num}" data-passnum="${num}" class="dropdown-menu dropdown-menu-right presets_dropdown" aria-labelledby="forvorites_btn_${num}">
+      </ul>
+    </div>
+    <div class="collapse" id="pass_conf_${num}"><div class="well" style="margin-bottom:10px">
+      <div class="input-group" style="margin-right:4px">
+        <div class="input-group-addon">pxsize [mm]</div>
+          <input type="text" class="form-control input-sm pxsize"
+            style="width:44px;" value="${pxsize}" title="size of physical raster pixel in mm">
+        </div>
+      </div>
+    </div>
+    <form id="passform_${num}" class="form-inline">
+      <div class="form-group">
+        <div class="input-group" style="margin-right:4px">
+          <div class="input-group-addon" style="width:10px">F</div>
+          <input type="text" class="form-control input-sm feedrate" style="width:50px;" value="${feedrate}" title="feedrate">
+        </div>
+        <div class="input-group" style="margin-right:4px">
+          <div class="input-group-addon" style="width:10px">%</div>
+          <input type="text" class="form-control input-sm intensity" style="width:44px" value="${intensity}" title="intensity 0-100%">
+        </div>
+        <div class="dropdown input-group">
+          <button class="btn btn-primary btn-sm dropdown-toggle" type="button" style="width:34px" 
+            id="assign_btn_${num}" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="[${num}]">
+            <span class="glyphicon glyphicon-plus"></span>
+          </button>
+          <ul id="passdp_${num}" class="dropdown-menu dropdown-menu-right pass_color_dropdown" aria-labelledby="assign_btn_${num}">
+            ${select_html}
+          </ul>
+        </div>
+      </div>
+    </form>
+    <div class="pass_colors">${added_html}</div>
+  </div>
+  `
+  return html
+}
+
+
+function scale_range(val, in_min, in_max, out_min, out_max) {
+  var constrained_val = Math.min(Math.max(val, in_min), in_max)
+  return (constrained_val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+}
+
+
+function presets_select_html() {
+  var html = `
+    <li style="border-bottom:1px solid black">
+      <a href="#" class="presets_new_btn">New preset...</a>
+    </li>
+  `
+  for ( var i = 0; i < presets.length; i++) {
+    html += `
+    <li>
+      <a href="#" class="presets_apply_btn">
+        <span style="display:inline-block; margin-right:5px;">
+          <div style="width:20px; height:0.7ex; border:1px solid gray; margin-bottom:2px;">
+            <div style="height:100%; background-color:blue; width:${scale_range(presets[i].feedrate, 0, 6000, 0, 100)}%"></div>
+          </div>
+          <div style="width:20px; height:0.7ex; border:1px solid gray;">
+            <div style="height:100%; background-color:red; width:${scale_range(presets[i].intensity, 0, 100, 0, 100)}%"></div>
+          </div>
+        </span>
+        <span>${presets[i].name}</span>
+        <span class="feedmem" style="display:none;">${presets[i].feedrate}</span>
+        <span class="intensitymem" style="display:none;">${presets[i].intensity}</span>
+        <span class="pxsizemem" style="display:none;">${presets[i].pxsize}</span>
+      </a>
+    </li>
+    `
+  }
   return html
 }
 
 function passes_select_html(num, idx, kind, color) {
-  var html =
-  '<li id="passsel_'+num+'_'+idx+'" style="background-color:'+color+'">'+
-  '<a href="#" class="color_add_btn_'+num+'" style="color:'+color+'">'+
-  '<span class="label label-default kindmem">'+kind+', '+color+'</span>'+
-  '<span class="idxmem" style="display:none">'+idx+'</span></a></li>'
+  var html = `
+  <li id="passsel_${num}_${idx}" style="background-color:${color}">
+    <a href="#" class="color_add_btn_${num}" style="color:${color}">
+      <span class="label label-default kindmem">${kind}, ${color}</span>
+      <span class="idxmem" style="display:none">${idx}</span>
+    </a>
+  </li>
+  `
   return html
 }
 
 function passes_added_html(num, idx, kind, color) {
-  var html =
-  '<div id="pass_'+num+'_'+idx+'" class="btn-group pull-left" style="margin-top:0.5em; display:none">'+
-    '<span style="display:none" class="idxmem">'+idx+'</span>'+
-    '<button class="btn btn-default btn-sm color_select_btn_'+num+'" '+
-      'type="submit" style="width:175px; background-color:'+color+'">'+
-      '<span class="label label-default kindmem">'+kind+'</span>'+
-    '</button>'+
-    '<button class="btn btn-default btn-sm color_remove_btn_'+num+'" type="submit" style="width:34px">'+
-      '<span class="glyphicon glyphicon-remove"></span>'+
-    '</button>'+
-  '</div>'
+  var html = `
+  <div id="pass_${num}_${idx}" class="btn-group pull-left" style="margin-top:0.5em; display:none">
+    <span style="display:none" class="idxmem">${idx}</span>
+    <button class="btn btn-default btn-sm color_select_btn_${num}" 
+      type="submit" style="width:175px; background-color:${color}">
+      <span class="label label-default kindmem">${kind}, ${color}</span>
+    </button>
+    <button class="btn btn-default btn-sm color_remove_btn_${num}" type="submit" style="width:34px">
+      <span class="glyphicon glyphicon-remove"></span>
+    </button>
+  </div>
+  `
   return html
 }
 
 
 
 function passes_add_widget() {
-  var html =
-  '<div id="pass_add_widget" class="row" style="margin:0; margin-bottom:20px">'+
-    '<label style="color:#666666">More Passes</label>'+
-    '<div>'+
-      '<button class="btn btn-default btn-sm dropdown-toggle" type="button" style="width:34px" '+
-        'id="pass_add_btn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="[P]">'+
-        '<span class="glyphicon glyphicon-plus"></span>'+
-      '</button>'+
-    '</div>'+
-  '</div>'
+  var html = `
+  <div id="pass_add_widget" class="row" style="margin:0; margin-bottom:20px">
+    <label style="color:#666666">More Passes</label>
+    <div>
+      <button class="btn btn-default btn-sm dropdown-toggle" type="button" style="width:34px" 
+        id="pass_add_btn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true" title="[P]">
+        <span class="glyphicon glyphicon-plus"></span>
+      </button>
+    </div>
+  </div>
+  `
   var pass_elem = $(html).appendTo('#job_passes')
 
   // bind pass_add_btn
@@ -280,6 +333,44 @@ function passes_add_widget() {
   Mousetrap.bind(['p'], function(e) {
       $('#pass_add_btn').trigger('click')
       return false;
+  })
+}
+
+
+function passes_update_presets() {
+  var presets_html = presets_select_html()
+
+  $('.presets_dropdown').html(presets_html)
+
+  // bind button for new preset
+  $('.presets_new_btn').click(function(e) {
+    var passnum = $(this).parent().parent().data("passnum")
+    var feedrate = $('#pass_'+passnum).find("input.feedrate").val()
+    var intensity = $('#pass_'+passnum).find("input.intensity").val()
+    var pxsize = $('#pass_'+passnum).find("input.pxsize").val()
+    $('#preset_feedrate').val(feedrate)
+    $('#preset_intensity').val(intensity)
+    $('#preset_pxsize').val(pxsize)
+    $('#presetdp_'+passnum).dropdown("toggle")
+    $('#presets_modal').modal('show')
+    $('#preset_name').focus()
+    return false
+  })
+
+  // bind all presets buttons within dropdown
+  $('.presets_apply_btn').click(function(e) {
+    var passnum = $(this).parent().parent().data("passnum")
+    var feedrate = $(this).children('span.feedmem').text()
+    var intensity = $(this).children('span.intensitymem').text()
+    var pxsize = $(this).children('span.pxsizemem').text()
+    $('#pass_'+passnum).find("input.feedrate").val(feedrate)
+    $('#pass_'+passnum).find("input.intensity").val(intensity)
+    $('#pass_'+passnum).find("input.pxsize").val(pxsize)
+    $('#presetdp_'+passnum).dropdown("toggle")
+    $('#passform_'+passnum).hide()
+    $('#passform_'+passnum).show(300)
+    passes_update_handler()
+    return false
   })
 }
 
@@ -359,7 +450,6 @@ function passes_set_swapBtns() {
   // for the last pass
 
   // enable all arrow btns
-  $('#job_passes').find('.btn-swap').css("visibility", "visible")
   $('#job_passes').find('.btn-swap').css("visibility", "visible")
   // disable swap_up_btn for first pass
   $('#swap_up_btn_1').css("visibility", "hidden")
