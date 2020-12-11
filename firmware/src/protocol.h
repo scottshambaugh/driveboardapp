@@ -106,7 +106,7 @@
 #define INFO_INTENSITY 'h'
 #define INFO_DURATION 'i'
 #define INFO_PIXEL_WIDTH 'j'
-
+#define INFO_DEBUG 'k'
 
 
 // Initialize the parser.

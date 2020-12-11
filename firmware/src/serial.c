@@ -217,7 +217,7 @@ inline uint8_t serial_protocol_read() {
   // called from protocol loop
   while (raster_mode) {
     // Block while in raster mode.
-    // In this mode the serial inerrupt provides data
+    // In this mode the serial interrupt provides data
     // in the rx_buffer which get directly consumed
     // by the stepper interrupt.
     // sleep_mode();  // sleep a tiny bit

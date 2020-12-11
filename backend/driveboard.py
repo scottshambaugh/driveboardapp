@@ -109,6 +109,7 @@ INFO_FEEDRATE = 'g'
 INFO_INTENSITY = 'h'
 INFO_DURATION = 'i'
 INFO_PIXEL_WIDTH = 'j'
+INFO_DEBUG = 'k'
 ################
 
 
@@ -207,6 +208,7 @@ markers_rx = {
     'h': "INFO_INTENSITY",
     'i': "INFO_DURATION",
     'j': "INFO_PIXEL_WIDTH",
+    'k': "INFO_DEBUG",
 }
 
 SerialLoop = None
@@ -378,7 +380,7 @@ class SerialLoopClass(threading.Thread):
                 if data_char == CMD_CHUNK_PROCESSED:
                     self.firmbuf_used -= self.TX_CHUNK_SIZE
                     if self.firmbuf_used < 0:
-                        print("ERROR: firmware buffer tracking to low")
+                        print("ERROR: firmware buffer tracking too low")
                 elif data_char == STATUS_END:
                     # status frame complete, compile status
                     self._status, self._s = self._s, self._status  # flip
@@ -495,6 +497,9 @@ class SerialLoopClass(threading.Thread):
                     self._s['firmver'] = num
                 elif data_char == INFO_BUFFER_UNDERRUN:
                     self._s['underruns'] = num
+                elif data_char == INFO_DEBUG:
+                    # available for custom debugging messaging
+                    pass
                 # super status
                 elif data_char == INFO_OFFSET_X:
                     self._s['offset'][0] = num
@@ -583,6 +588,10 @@ class SerialLoopClass(threading.Thread):
                     except serial.SerialTimeoutException:
                         assumedSent = 0
                         print("ERROR: writeTimeoutError 2")
+                    except BaseException as e:
+                        print('ERROR: unknown error')
+                        print(str(e))
+
                     self.tx_pos += assumedSent
         else:
             if self.tx_buffer:  # job finished sending
