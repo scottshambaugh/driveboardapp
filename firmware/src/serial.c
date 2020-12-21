@@ -59,7 +59,7 @@ uint8_t data_prev = 0;
 bool buffer_underrun_marked = false;
 
 #define RX_CHUNK_SIZE 16
-volatile bool notify_chunk_processed = false;
+volatile uint8_t chunks_processed = 0;
 uint8_t rx_buffer_processed = 0;
 
 volatile bool raster_mode = false;
@@ -135,9 +135,9 @@ inline void serial_write_param(uint8_t param, double val) {
 SIGNAL(USART_UDRE_vect) {
   uint8_t tail = tx_buffer_tail;  // optimize for volatile
 
-  if (notify_chunk_processed) {
+  if (chunks_processed > 0) {
     UDR0 = CMD_CHUNK_PROCESSED ;
-    notify_chunk_processed = false;
+    chunks_processed--;
   } else {                    // Send a byte from the buffer
     UDR0 = tx_buffer[tail];
     if (++tail == TX_BUFFER_SIZE) {tail = 0;}  // increment
@@ -156,7 +156,7 @@ inline uint8_t serial_read() {
   // ATOMIC_BLOCK(ATOMIC_FORCEON) {
     rx_buffer_processed++;
     if (rx_buffer_processed == RX_CHUNK_SIZE) {
-      notify_chunk_processed = true;
+      chunks_processed++;
       UCSR0B |=  (1 << UDRIE0);  // enable tx interrupt
       rx_buffer_processed = 0;
     }
