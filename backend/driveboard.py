@@ -342,16 +342,19 @@ class SerialLoopClass(threading.Thread):
                         # if time.time()-last_write > 0.01:
                         #     sys.stdout.write('~')
                         # last_write = time.time()
-                    except OSError:
-                        print("ERROR: serial got disconnected 1.")
-                        self.stop_processing = True
-                        self._status['serial'] = False
-                        self._status['ready'] = False
-                    except ValueError:
-                        print("ERROR: serial got disconnected 2.")
+                    except BaseException as e:
+                        if e is OSError:
+                            print("ERROR: serial got disconnected 1.")
+                        elif e is ValueError:
+                            print("ERROR: serial got disconnected 2.")
+                        else:
+                            print('ERROR: unknown serial error')
+                            print(str(e))
+                        
                         self.stop_processing = True
                         self._status['serial'] = False
                         self._status['ready']  = False
+
                 else:
                     print("ERROR: serial got disconnected 3.")
                     self.stop_processing = True

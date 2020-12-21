@@ -222,6 +222,7 @@ inline uint8_t serial_protocol_read() {
     // by the stepper interrupt.
     // sleep_mode();  // sleep a tiny bit
     if (consume_data) {
+      // If the stepper reaches the end of a block, we consume/ignore all following raster data in the line
       // wait, buffer empty
       buffer_underrun_marked = false;
       while (rx_buffer_tail == rx_buffer_head) {
@@ -238,6 +239,7 @@ inline uint8_t serial_protocol_read() {
         raster_mode = false;
       }
     }
+
     protocol_idle();
   }
   // wait, buffer empty

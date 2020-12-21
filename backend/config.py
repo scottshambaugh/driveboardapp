@@ -83,7 +83,7 @@ userconfigurable = {
     'print_serial_data': "Print all raw serial communications to the debug window.",
     'raster_invert': "If true, laser will set black pixels to 0%% intensity and white pixels to 100%% intensity.",
     'raster_mode': "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'.",
-    'raster_leadin': "Leadin for raster fills in mm.",
+    'raster_leadin': "Leadin for raster fills in mm. Note: rastering may fail if this is 0",
     'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'.",
     'fill_leadin': "Leadin for vector fills in mm.",
     'users': "List of user cendentials for UI access.",
