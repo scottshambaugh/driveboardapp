@@ -178,7 +178,7 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   // update previous unit_vector and nominal speed
   memcpy(previous_unit_vec, unit_vec, sizeof(unit_vec)); // previous_unit_vec[] = unit_vec[]
   previous_nominal_speed = block->nominal_speed;
-  //// end of acceleeration manager calculations
+  //// end of acceleration manager calculations
 
 
   // move buffer head and update position
@@ -477,8 +477,19 @@ inline static void planner_recalculate() {
     }
     block_index = next_block_index( block_index );
   }
-  // always recalculate last (newest) block with zero exit speed
-  calculate_trapezoid_for_block( next,
-    next->entry_speed/next->nominal_speed, ZERO_SPEED/next->nominal_speed );
-  next->recalculate_flag = false;
+
+  // Recalculate last (newest) block with zero exit speed, unless it is a raster line.
+  // Reading raster data is blocking of reading in the lead-out line, and we may hit the decelerate point before
+  // raster data has finished streaming. In that instance, we cease reading in raster data, and the trailing pixels
+  // are erroneously consumed. Not setting a decelerate for the raster line on the first pass compensates for this.  
+  // The decelerate point will be updated when the lead-out line is read in.
+  if (next->type == TYPE_RASTER_LINE){
+    calculate_trapezoid_for_block( next,
+      next->entry_speed/next->nominal_speed, next->nominal_speed/next->nominal_speed );
+      next->recalculate_flag = false;
+  } else {
+    calculate_trapezoid_for_block( next,
+      next->entry_speed/next->nominal_speed, ZERO_SPEED/next->nominal_speed );
+      next->recalculate_flag = false;
+  }
 }
