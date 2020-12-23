@@ -71,7 +71,7 @@ function presets_update() {
       <td class="preset-name">${data[i].name}</td>
       <td style="text-align:right;">${data[i].feedrate}</td>
       <td style="text-align:right;">${data[i].intensity}%</td>
-      <td style="text-align:right;">${data[i].pxsize}%</td>
+      <td style="text-align:right;">${data[i].pxsize}mm</td>
       <td style="text-align:right;">
         <a id="del_preset_btn_${i}" class="btn btn-del-preset" style="margin-left:8px; position:relative; top:1px" role="button">
           <span class="glyphicon glyphicon-trash" style="color:#888888"></span>
