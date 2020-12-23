@@ -1042,13 +1042,13 @@ def pulse():
     air_on()
     # aux_on()
     # turn the laser on for a short pulse
-    intensity(50.0)
-    duration(0.25)
+    intensity(10.0)
+    duration(0.1)
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
     # keep air on for a bit longer
     intensity(0.0)
-    duration(0.75)
+    duration(1.0)
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
     air_off()

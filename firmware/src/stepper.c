@@ -56,8 +56,11 @@
 
 
 #define CYCLES_PER_MINUTE (60*F_CPU)  // 960000000
+#define CYCLES_PER_SECOND (F_CPU)     // 16000000
 #define CYCLES_PER_MICROSECOND (F_CPU/1000000)  //16000000/1000000 = 16
 #define CYCLES_PER_ACCELERATION_TICK (F_CPU/ACCELERATION_TICKS_PER_SECOND)  // 16MHz/100 = 160000
+
+#define DWELL_RATE (1000*60L) // 60000 steps/min for 1 milisecond dwell resolution
 
 
 static int32_t stepper_position[3];  // real-time position in absolute steps
@@ -85,6 +88,9 @@ static volatile uint8_t disable_limits;       // option to disable limts for hom
 #if PWM_MODE == SYNCED_FREQ
   static volatile uint8_t pwm_counter = 1;
 #endif
+
+static int32_t dwell_cycles;
+static uint32_t dwell_counter = 0;
 
 // prototypes for static functions (non-accesible from other files)
 static void adjust_laser_speed_beam_dynamics( uint32_t adjusted_rate );
@@ -246,7 +252,7 @@ ISR(TIMER1_COMPA_vect) {
   #ifdef ENABLE_INTERLOCKS
     if (!disable_limits) {
       // honor interlocks
-      // (for unlikely edge case the protocol loop stops)
+      // (for rastering or unlikely edge case the protocol loop stops)
       if (SENSE_DOOR_OPEN || SENSE_CHILLER_OFF) {
         control_laser_intensity(0);
       }
@@ -480,6 +486,23 @@ ISR(TIMER1_COMPA_vect) {
       }
       ////////// END OF SPEED ADJUSTMENT
 
+      break;
+
+    case TYPE_DWELL:
+      if (dwell_counter == 0) {
+        dwell_cycles = lround(DWELL_RATE / 60.0 * current_block->dwell_time);
+        adjust_speed( DWELL_RATE ); // initialize cycles_per_step_event
+      }
+
+      dwell_counter++;
+      if (dwell_counter < dwell_cycles) {
+        control_laser_intensity(current_block->nominal_laser_intensity);
+      }
+      else {
+        dwell_counter = 0;
+        current_block = NULL;
+        planner_discard_current_block();
+      }
       break;
 
     case TYPE_AIR_ASSIST_ENABLE:

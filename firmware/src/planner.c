@@ -71,13 +71,8 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   target[Y_AXIS] = lround(y*CONFIG_Y_STEPS_PER_MM);
   target[Z_AXIS] = lround(z*CONFIG_Z_STEPS_PER_MM);
 
-  // calculate the buffer head and check for space
-  int next_buffer_head = next_block_index( block_buffer_head );
-  while(block_buffer_tail == next_buffer_head) {  // buffer full condition
-    // good! We are well ahead of the robot. Rest here until buffer has room.
-    // sleep_mode();
-    protocol_idle();
-  }
+  // idles until there is room in the block buffer
+  int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
 
   // prepare to set up new block
   block_t *block = &block_buffer[block_buffer_head];
@@ -192,31 +187,31 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
 }
 
 
-inline void planner_dwell(double seconds, uint8_t nominal_laser_intensity) {
-// // Execute dwell in seconds. Maximum time delay is > 18 hours, more than enough for any application.
-// void mc_dwell(double seconds) {
-//    uint16_t i = floor(seconds);
-//    while(stepper_processing()) {
-//      // sleep_mode();
-//      protocol_idle();
-//    }
-//    _delay_ms(floor(1000*(seconds-i))); // Delay millisecond remainder
-//    while (i > 0) {
-//      _delay_ms(1000); // Delay one second
-//      i--;
-//    }
-// }
+// Execute dwell for dwell_time seconds. Maximum time delay is > 18 hours, more than enough for any application.
+inline void planner_dwell(double dwell_time, uint8_t nominal_laser_intensity) {
+  // idles until there is room in the block buffer
+  int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
+
+  // Prepare to set up new block
+  block_t *block = &block_buffer[block_buffer_head];
+
+  // set block information
+  block->type = TYPE_DWELL;
+  block->nominal_laser_intensity = nominal_laser_intensity;
+  block->dwell_time = dwell_time;
+
+  // Move buffer head
+  block_buffer_head = next_buffer_head;
+
+  // make sure the stepper interrupt is processing
+  stepper_start_processing();
 }
 
 
+
 inline void planner_command(uint8_t type) {
-  // calculate the buffer head and check for space
-  int next_buffer_head = next_block_index( block_buffer_head );
-  while(block_buffer_tail == next_buffer_head) {  // buffer full condition
-    // good! We are well ahead of the robot. Rest here until buffer has room.
-    // sleep_mode();
-    protocol_idle();
-  }
+  // wait until there is room in the block buffer
+  int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
 
   // Prepare to set up new block
   block_t *block = &block_buffer[block_buffer_head];
@@ -232,6 +227,17 @@ inline void planner_command(uint8_t type) {
 }
 
 
+inline int protocol_get_next_free_buffer( int block_buffer_head )
+{
+  // calculate the buffer head and check for space
+  int next_buffer_head = next_block_index( block_buffer_head );
+  while(block_buffer_tail == next_buffer_head) {  // buffer full condition
+    // good! We are well ahead of the robot. Rest here until buffer has room.
+    // sleep_mode();
+    protocol_idle();
+  }
+  return next_buffer_head;
+}
 
 inline bool planner_blocks_available() {
   return block_buffer_head != block_buffer_tail;
