@@ -580,7 +580,7 @@ inline uint32_t config_step_timer(uint32_t cycles) {
 
 
 inline void adjust_speed( uint32_t steps_per_minute ) {
-  // steps_per_minute is typicaly just adjusted_rate
+  // steps_per_minute is typically just adjusted_rate
   if (steps_per_minute < MINIMUM_STEPS_PER_MINUTE) { steps_per_minute = MINIMUM_STEPS_PER_MINUTE; }
   cycles_per_step_event = config_step_timer(CYCLES_PER_MINUTE/steps_per_minute);
 }

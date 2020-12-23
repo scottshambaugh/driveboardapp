@@ -82,7 +82,7 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   // prepare to set up new block
   block_t *block = &block_buffer[block_buffer_head];
 
-  // set block type to line command
+  // set block type
   if (pixel_width != 0.0) {
     block->type = TYPE_RASTER_LINE;
     block->pixel_steps_x1024 = lround(pixel_width*CONFIG_X_STEPS_PER_MM*1024);
@@ -126,7 +126,7 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   block->rate_delta = ceil( block->step_event_count * inverse_millimeters
                             * CONFIG_ACCELERATION / (60 * ACCELERATION_TICKS_PER_SECOND) );
 
-  //// acceleeration manager calculations
+  //// acceleration manager calculations
   // Compute path unit vector
   double unit_vec[3];
   unit_vec[X_AXIS] = delta_mm[X_AXIS]*inverse_millimeters;
@@ -470,8 +470,8 @@ inline static void planner_recalculate() {
     if (current) {
       if (current->recalculate_flag || next->recalculate_flag) {
         calculate_trapezoid_for_block( current,
-            current->entry_speed/current->nominal_speed,
-            next->entry_speed/current->nominal_speed );
+          current->entry_speed/current->nominal_speed,
+          next->entry_speed/current->nominal_speed );
         current->recalculate_flag = false;
       }
     }

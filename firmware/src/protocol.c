@@ -173,11 +173,11 @@ inline void on_cmd(uint8_t command) {
       break;
     case CMD_LINE:
       planner_line( st.target[X_AXIS], st.target[Y_AXIS], st.target[Z_AXIS],
-        st.feedrate, st.intensity, 0.0 );
+                    st.feedrate, st.intensity, 0.0 );
       break;
     case CMD_RASTER:
-        planner_line( st.target[X_AXIS], st.target[Y_AXIS], st.target[Z_AXIS],
-                      st.feedrate, st.intensity, st.pixel_width );
+      planner_line( st.target[X_AXIS], st.target[Y_AXIS], st.target[Z_AXIS],
+                    st.feedrate, st.intensity, st.pixel_width );
       break;
     case CMD_DWELL:
       planner_dwell(st.duration, st.intensity);
@@ -231,7 +231,6 @@ inline void on_cmd(uint8_t command) {
   }
 
 }
-
 
 
 inline void on_param(uint8_t parameter) {
@@ -465,7 +464,7 @@ inline double get_curent_value() {
   //// char2 = ((num&(127<<14))>>14)+128
   //// char3 = ((num&(127<<21))>>21)+128
   return ((((pdata.chars[3]-128L)*2097152L +  // 2097152 = 128*128*128
-            (pdata.chars[2]-128L)*16384L +   //   16384 = 128*128
+            (pdata.chars[2]-128L)*16384L +    //   16384 = 128*128
             (pdata.chars[1]-128L)*128L +
             (pdata.chars[0]-128L))-134217728L ) / 1000.0);  // 134217728 = 2**27
 }
