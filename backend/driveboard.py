@@ -11,6 +11,7 @@ import itertools
 import serial
 import serial.tools.list_ports
 import datetime
+import platform
 from config import conf, write_config_fields
 
 if not conf['mill_mode']:
@@ -326,10 +327,12 @@ class SerialLoopClass(threading.Thread):
 
     def run(self):
         """Main loop of the serial thread."""
-        last_write = 0
+        # last_write = 0
         last_status_request = 0
+        disable_computer_sleep()
         while True:
             if self.stop_processing:
+                enable_computer_sleep()
                 break
             with self.lock:
                 # read/write
@@ -343,6 +346,9 @@ class SerialLoopClass(threading.Thread):
                         #     sys.stdout.write('~')
                         # last_write = time.time()
                     except BaseException as e:
+                        self.stop_processing = True
+                        self._status['serial'] = False
+                        self._status['ready']  = False
                         if e is OSError:
                             print("ERROR: serial got disconnected 1.")
                         elif e is ValueError:
@@ -350,16 +356,11 @@ class SerialLoopClass(threading.Thread):
                         else:
                             print('ERROR: unknown serial error')
                             print(str(e))
-                        
-                        self.stop_processing = True
-                        self._status['serial'] = False
-                        self._status['ready']  = False
-
                 else:
-                    print("ERROR: serial got disconnected 3.")
                     self.stop_processing = True
                     self._status['serial'] = False
                     self._status['ready']  = False
+                    print("ERROR: serial got disconnected 3.")
                 # status request
                 if time.time()-last_status_request > 0.5:
                     if self._status['ready']:
@@ -369,7 +370,7 @@ class SerialLoopClass(threading.Thread):
                     last_status_request = time.time()
                 # flush stdout, so print shows up timely
                 sys.stdout.flush()
-            time.sleep(0.004)
+            time.sleep(0.004)  # 250 Hz
 
 
     def _serial_read(self):
@@ -1161,7 +1162,7 @@ def job_laser(jobdict):
             pxsize_y = float(conf['pxsize'])
         pxsize_y = max(pxsize_y, 0.01)  # prevent div by 0
         intensity(0.0)
-        pxsize_x = pxsize_y/2.0  # use 2x horiz resol.
+        pxsize_x = pxsize_y/2.0  # use 2x horiz resolution
         pixelwidth(pxsize_x)
         # assists on, beginning of pass if set to 'pass'
         if 'air_assist' in pass_:
@@ -1363,7 +1364,7 @@ def job_laser(jobdict):
                             move(polyline[0][0], polyline[0][1])
                         else:
                             move(polyline[0][0], polyline[0][1], polyline[0][2])
-                        # remaining verteces -> feed
+                        # remaining vertices -> feed
                         if len(polyline) > 1:
                             feedrate(feedrate_)
                             intensity(intensity_)
@@ -1373,7 +1374,6 @@ def job_laser(jobdict):
                                 air_on()
                             # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
                             #     aux_on()
-                            # TODO dwell according to pierce time
                             if is_2d:
                                 for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1])
@@ -1480,6 +1480,33 @@ def job_mill(jobdict):
     intensity(0.0)
     supermove(z=0)
     supermove(x=0, y=0)
+
+
+# Functions to keep the computer from sleeping in the middle of a long job
+# https://stackoverflow.com/questions/57647034/prevent-sleep-mode-python-wakelock-on-python
+def disable_computer_sleep():
+    system = platform.system()
+    if system == 'Windows':
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)
+    elif system == 'Linux':
+        import subprocess
+        args = ['sleep.target', 'suspend.target', 'hibernate.target', 'hybrid-sleep.target']
+        subprocess.run(['systemctl', 'mask', *args])
+    else: # if system == 'Darwin':
+        print(f'Display disabling not implemented in {system}')
+
+def enable_computer_sleep():
+    system = platform.system()
+    if system == 'Windows':
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
+    elif system == 'Linux':
+        import subprocess
+        args = ['sleep.target', 'suspend.target', 'hibernate.target', 'hybrid-sleep.target']
+        subprocess.run(['systemctl', 'unmask', *args])
+    else: # if system == 'Darwin':
+        print(f'Display disabling not implemented in {system}')
 
 
 if __name__ == "__main__":
