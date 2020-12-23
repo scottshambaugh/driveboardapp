@@ -87,6 +87,7 @@ static volatile uint8_t disable_limits;       // option to disable limts for hom
 #endif
 
 // prototypes for static functions (non-accesible from other files)
+static void adjust_laser_speed_beam_dynamics( uint32_t adjusted_rate );
 static bool acceleration_tick();
 static void adjust_speed( uint32_t steps_per_minute );
 static void adjust_beam_dynamics( uint32_t steps_per_minute );
@@ -349,12 +350,9 @@ ISR(TIMER1_COMPA_vect) {
       // starting on new line block
       adjusted_rate = current_block->initial_rate;
       acceleration_tick_counter = CYCLES_PER_ACCELERATION_TICK/2; // start halfway, midpoint rule.
-      adjust_speed( adjusted_rate ); // initialize cycles_per_step_event
+      adjust_laser_speed_beam_dynamics( adjusted_rate ); // initialize cycles_per_step_event
       if (current_block->type == TYPE_RASTER_LINE) {
-        control_laser_intensity(0);  // set only through raster data
         next_pixel_at_steps = 0;
-      } else {
-        adjust_beam_dynamics(adjusted_rate);
       }
       counter_x = -(current_block->step_event_count >> 1);
       counter_y = counter_x;
@@ -418,12 +416,7 @@ ISR(TIMER1_COMPA_vect) {
             if (adjusted_rate > current_block->nominal_rate) {  // overshot
               adjusted_rate = current_block->nominal_rate;
             }
-            adjust_speed( adjusted_rate );
-            if (current_block->type == TYPE_RASTER_LINE) {
-              control_laser_intensity(0);  // set only through raster data
-            } else {
-              adjust_beam_dynamics(adjusted_rate);
-            }
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
 
         // deceleration start
@@ -443,12 +436,7 @@ ISR(TIMER1_COMPA_vect) {
             if (adjusted_rate < current_block->final_rate) {  // overshot
               adjusted_rate = current_block->final_rate;
             }
-            adjust_speed( adjusted_rate );
-            if (current_block->type == TYPE_RASTER_LINE) {
-              control_laser_intensity(0);  // set only through raster data
-            } else {
-              adjust_beam_dynamics(adjusted_rate);
-            }
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
 
         // cruising
@@ -456,7 +444,7 @@ ISR(TIMER1_COMPA_vect) {
           // No accelerations. Make sure we cruise exactly at the nominal rate.
           if (adjusted_rate != current_block->nominal_rate) {
             adjusted_rate = current_block->nominal_rate;
-            adjust_speed( adjusted_rate );
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
           // Special case raster line.
           // Adjust intensity according raster buffer.
@@ -524,7 +512,6 @@ ISR(TIMER1_COMPA_vect) {
 
 
 
-
 // This function determines an acceleration velocity change every CYCLES_PER_ACCELERATION_TICK by
 // keeping track of the number of elapsed cycles during a de/ac-celeration. The code assumes that
 // step_events occur significantly more often than the acceleration velocity iterations.
@@ -579,6 +566,16 @@ inline uint32_t config_step_timer(uint32_t cycles) {
 }
 
 
+static void adjust_laser_speed_beam_dynamics(uint32_t adjusted_rate) {
+  adjust_speed( adjusted_rate );
+  if (current_block->type == TYPE_RASTER_LINE) {
+    control_laser_intensity(0);  // set only through raster data
+  } else {
+    adjust_beam_dynamics(adjusted_rate);
+  }
+}
+
+
 inline void adjust_speed( uint32_t steps_per_minute ) {
   // steps_per_minute is typically just adjusted_rate
   if (steps_per_minute < MINIMUM_STEPS_PER_MINUTE) { steps_per_minute = MINIMUM_STEPS_PER_MINUTE; }
@@ -604,7 +601,6 @@ inline void adjust_beam_dynamics( uint32_t steps_per_minute ) {
   control_laser_intensity(current_block->nominal_laser_intensity);
   #endif
 }
-
 
 
 inline void homing_move(double xfar, double yfar, double zfar,
