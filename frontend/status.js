@@ -183,7 +183,7 @@ function status_set_refresh() {
 // these functions are called when the various data points change /////////////
 
 var status_handlers = {
-  //// always, evn when no hardware connected
+  //// always, even when no hardware connected
   'server': function (status) {
     if (status.server) {  // server connected
       $().uxmessage('success', "Server says HELLO!")
@@ -215,21 +215,23 @@ var status_handlers = {
       app_run_btn.stop()
       $('#boundary_btn').removeClass('disabled')
       $('#boundary_btn').prop('disabled', false) // required
+      $('#pulse_btn').removeClass('disabled')      
       $('#origin_btn').removeClass('disabled')
       $('#homing_btn').removeClass('disabled')
-	  $('#moveBy_btn').removeClass('disabled')
+	    $('#moveBy_btn').removeClass('disabled')
       $('#offset_set_btn').removeClass('disabled')
-	  $('#offset_reset_btn').removeClass('disabled')
+	    $('#offset_reset_btn').removeClass('disabled')
       $('#motion_btn').removeClass('disabled')
       $('#jog_btn').removeClass('disabled')
     } else {
       app_run_btn.start()
       $('#boundary_btn').addClass('disabled')
+      $('#pulse_btn').addClass('disabled')      
       $('#origin_btn').addClass('disabled')
       $('#homing_btn').addClass('disabled')
-	  $('#moveBy_btn').addClass('disabled')
+	    $('#moveBy_btn').addClass('disabled')
       $('#offset_set_btn').addClass('disabled')
-	  $('#offset_reset_btn').addClass('disabled')
+	    $('#offset_reset_btn').addClass('disabled')
       $('#motion_btn').addClass('disabled')
       $('#jog_btn').addClass('disabled')
     }
@@ -317,6 +319,7 @@ var status_handlers = {
     $('#boundary_btn').removeClass('disabled')
     $('#pause_btn').removeClass('disabled')
     $('#stop_btn').removeClass('disabled')
+    $('#pulse_btn').removeClass('disabled')
     $('#origin_btn').removeClass('disabled')
     $('#offset_btn').removeClass('disabled')
     $('#motion_btn').removeClass('disabled')
@@ -342,6 +345,7 @@ var status_handlers = {
         $('#boundary_btn').addClass('disabled')
         $('#pause_btn').addClass('disabled')
         $('#stop_btn').addClass('disabled')
+        $('#pulse_btn').addClass('disabled')
         $('#origin_btn').addClass('disabled')
         $('#offset_btn').addClass('disabled')
         $('#motion_btn').addClass('disabled')
@@ -356,10 +360,17 @@ var status_handlers = {
     $(".status_hw").removeClass("label-default")
     $('#status_door').removeClass("label-warning").addClass("label-success")
     $('#status_chiller').removeClass("label-warning").addClass("label-success")
+    $('#pulse_btn').removeClass('disabled')
     // set info indicators
     if ('info' in status) {
-      if (status.info.door) {$('#status_door').removeClass("label-success").addClass("label-warning")}
-      if (status.info.chiller) {$('#status_chiller').removeClass("label-success").addClass("label-warning")}
+      if (status.info.door) {
+        $('#status_door').removeClass("label-success").addClass("label-warning")
+        $('#pulse_btn').addClass('disabled')
+      }
+      if (status.info.chiller) {
+        $('#status_chiller').removeClass("label-success").addClass("label-warning")
+        $('#pulse_btn').addClass('disabled')   
+      }
     }
     status_set_main_button(status)
   },
