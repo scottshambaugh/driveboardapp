@@ -650,7 +650,7 @@ def prettify_serial(chunk, markers=markers_tx):
             if (markers == markers_tx) and (markers[chr(data)] not in ["CMD_STATUS", "CMD_SUPERSTATUS"]):
                 prettify_serial.tx_pdata_count = 0
                 prettify_serial.tx_pdata_nums = [128, 128, 128, 192]
-            else:
+            elif (markers[chr(data)] not in ["CMD_CHUNK_PROCESSED"]):
                 prettify_serial.rx_pdata_count = 0
                 prettify_serial.rx_pdata_nums = [128, 128, 128, 192]
 
@@ -1042,13 +1042,13 @@ def pulse():
     air_on()
     # aux_on()
     # turn the laser on for a short pulse
-    intensity(50.0)
-    duration(0.25)
+    intensity(10.0)
+    duration(0.1)
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
     # keep air on for a bit longer
     intensity(0.0)
-    duration(0.75)
+    duration(1.0)
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
     air_off()

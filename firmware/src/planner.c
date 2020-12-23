@@ -71,18 +71,13 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   target[Y_AXIS] = lround(y*CONFIG_Y_STEPS_PER_MM);
   target[Z_AXIS] = lround(z*CONFIG_Z_STEPS_PER_MM);
 
-  // calculate the buffer head and check for space
-  int next_buffer_head = next_block_index( block_buffer_head );
-  while(block_buffer_tail == next_buffer_head) {  // buffer full condition
-    // good! We are well ahead of the robot. Rest here until buffer has room.
-    // sleep_mode();
-    protocol_idle();
-  }
+  // idles until there is room in the block buffer
+  int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
 
   // prepare to set up new block
   block_t *block = &block_buffer[block_buffer_head];
 
-  // set block type to line command
+  // set block type
   if (pixel_width != 0.0) {
     block->type = TYPE_RASTER_LINE;
     block->pixel_steps_x1024 = lround(pixel_width*CONFIG_X_STEPS_PER_MM*1024);
@@ -126,7 +121,7 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   block->rate_delta = ceil( block->step_event_count * inverse_millimeters
                             * CONFIG_ACCELERATION / (60 * ACCELERATION_TICKS_PER_SECOND) );
 
-  //// acceleeration manager calculations
+  //// acceleration manager calculations
   // Compute path unit vector
   double unit_vec[3];
   unit_vec[X_AXIS] = delta_mm[X_AXIS]*inverse_millimeters;
@@ -178,7 +173,7 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
   // update previous unit_vector and nominal speed
   memcpy(previous_unit_vec, unit_vec, sizeof(unit_vec)); // previous_unit_vec[] = unit_vec[]
   previous_nominal_speed = block->nominal_speed;
-  //// end of acceleeration manager calculations
+  //// end of acceleration manager calculations
 
 
   // move buffer head and update position
@@ -192,31 +187,31 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
 }
 
 
-inline void planner_dwell(double seconds, uint8_t nominal_laser_intensity) {
-// // Execute dwell in seconds. Maximum time delay is > 18 hours, more than enough for any application.
-// void mc_dwell(double seconds) {
-//    uint16_t i = floor(seconds);
-//    while(stepper_processing()) {
-//      // sleep_mode();
-//      protocol_idle();
-//    }
-//    _delay_ms(floor(1000*(seconds-i))); // Delay millisecond remainder
-//    while (i > 0) {
-//      _delay_ms(1000); // Delay one second
-//      i--;
-//    }
-// }
+// Execute dwell for dwell_time seconds. Maximum time delay is > 18 hours, more than enough for any application.
+inline void planner_dwell(double dwell_time, uint8_t nominal_laser_intensity) {
+  // idles until there is room in the block buffer
+  int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
+
+  // Prepare to set up new block
+  block_t *block = &block_buffer[block_buffer_head];
+
+  // set block information
+  block->type = TYPE_DWELL;
+  block->nominal_laser_intensity = nominal_laser_intensity;
+  block->dwell_time = dwell_time;
+
+  // Move buffer head
+  block_buffer_head = next_buffer_head;
+
+  // make sure the stepper interrupt is processing
+  stepper_start_processing();
 }
 
 
+
 inline void planner_command(uint8_t type) {
-  // calculate the buffer head and check for space
-  int next_buffer_head = next_block_index( block_buffer_head );
-  while(block_buffer_tail == next_buffer_head) {  // buffer full condition
-    // good! We are well ahead of the robot. Rest here until buffer has room.
-    // sleep_mode();
-    protocol_idle();
-  }
+  // wait until there is room in the block buffer
+  int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
 
   // Prepare to set up new block
   block_t *block = &block_buffer[block_buffer_head];
@@ -232,6 +227,17 @@ inline void planner_command(uint8_t type) {
 }
 
 
+inline int protocol_get_next_free_buffer( int block_buffer_head )
+{
+  // calculate the buffer head and check for space
+  int next_buffer_head = next_block_index( block_buffer_head );
+  while(block_buffer_tail == next_buffer_head) {  // buffer full condition
+    // good! We are well ahead of the robot. Rest here until buffer has room.
+    // sleep_mode();
+    protocol_idle();
+  }
+  return next_buffer_head;
+}
 
 inline bool planner_blocks_available() {
   return block_buffer_head != block_buffer_tail;
@@ -470,15 +476,26 @@ inline static void planner_recalculate() {
     if (current) {
       if (current->recalculate_flag || next->recalculate_flag) {
         calculate_trapezoid_for_block( current,
-            current->entry_speed/current->nominal_speed,
-            next->entry_speed/current->nominal_speed );
+          current->entry_speed/current->nominal_speed,
+          next->entry_speed/current->nominal_speed );
         current->recalculate_flag = false;
       }
     }
     block_index = next_block_index( block_index );
   }
-  // always recalculate last (newest) block with zero exit speed
-  calculate_trapezoid_for_block( next,
-    next->entry_speed/next->nominal_speed, ZERO_SPEED/next->nominal_speed );
-  next->recalculate_flag = false;
+
+  // Recalculate last (newest) block with zero exit speed, unless it is a raster line.
+  // Reading raster data is blocking of reading in the lead-out line, and we may hit the decelerate point before
+  // raster data has finished streaming. In that instance, we cease reading in raster data, and the trailing pixels
+  // are erroneously consumed. Not setting a decelerate for the raster line on the first pass compensates for this.  
+  // The decelerate point will be updated when the lead-out line is read in.
+  if (next->type == TYPE_RASTER_LINE){
+    calculate_trapezoid_for_block( next,
+      next->entry_speed/next->nominal_speed, next->nominal_speed/next->nominal_speed );
+      next->recalculate_flag = false;
+  } else {
+    calculate_trapezoid_for_block( next,
+      next->entry_speed/next->nominal_speed, ZERO_SPEED/next->nominal_speed );
+      next->recalculate_flag = false;
+  }
 }

@@ -27,10 +27,11 @@
 // Command types the planner and stepper can schedule for execution
 #define TYPE_LINE 0
 #define TYPE_RASTER_LINE 1
-#define TYPE_AIR_ASSIST_ENABLE 2
-#define TYPE_AIR_ASSIST_DISABLE 3
-#define TYPE_AUX_ASSIST_ENABLE 4
-#define TYPE_AUX_ASSIST_DISABLE 5
+#define TYPE_DWELL 2
+#define TYPE_AIR_ASSIST_ENABLE 3
+#define TYPE_AIR_ASSIST_DISABLE 4
+#define TYPE_AUX_ASSIST_ENABLE 5
+#define TYPE_AUX_ASSIST_DISABLE 6
 
 #define planner_control_air_assist_enable() planner_command(TYPE_AIR_ASSIST_ENABLE)
 #define planner_control_air_assist_disable() planner_command(TYPE_AIR_ASSIST_DISABLE)
@@ -62,6 +63,8 @@ typedef struct {
   uint32_t decelerate_after;          // The index of the step event on which to start decelerating
   // raster
   uint32_t pixel_steps_x1024;         // Number of steps for each raster pixel * 1024 (only in TYPE_RASTER_LINE)
+  // dwell
+  double dwell_time;                  // Dwell time in seconds
 } block_t;
 
 // Initialize the motion plan subsystem
@@ -73,14 +76,17 @@ void planner_init();
 void planner_line(double x, double y, double z, double feed_rate, uint8_t nominal_laser_intensity, double pixel_width);
 
 // Add a new piercing action, lasing at one spot.
-void planner_dwell(double seconds, uint8_t nominal_laser_intensity);
+void planner_dwell(double dwell_time, uint8_t nominal_laser_intensity);
 
 // Add a non-motion command to the queue.
 // Typical types are: TYPE_AIR_ASSIST_ENABLE, TYPE_AIR_ASSIST_DISABLE, ...
 // This call is blocking when the block buffer is full.
 void planner_command(uint8_t type);
 
+// Idles until there is a buffer slot open, and returns that buffer position
+int protocol_get_next_free_buffer( int block_buffer_head );
 
+// Returns true if there are blocks available to read from the buffer
 bool planner_blocks_available();
 
 // Gets the current block. Returns NULL if buffer empty
@@ -92,7 +98,6 @@ void planner_discard_current_block();
 
 // purge all command in the buffer
 void planner_reset_block_buffer();
-
 
 // Reset the position vector
 void planner_set_position(double x, double y, double z);

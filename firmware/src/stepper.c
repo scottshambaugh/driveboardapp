@@ -56,8 +56,11 @@
 
 
 #define CYCLES_PER_MINUTE (60*F_CPU)  // 960000000
+#define CYCLES_PER_SECOND (F_CPU)     // 16000000
 #define CYCLES_PER_MICROSECOND (F_CPU/1000000)  //16000000/1000000 = 16
 #define CYCLES_PER_ACCELERATION_TICK (F_CPU/ACCELERATION_TICKS_PER_SECOND)  // 16MHz/100 = 160000
+
+#define DWELL_RATE (1000*60L) // 60000 steps/min for 1 milisecond dwell resolution
 
 
 static int32_t stepper_position[3];  // real-time position in absolute steps
@@ -86,7 +89,11 @@ static volatile uint8_t disable_limits;       // option to disable limts for hom
   static volatile uint8_t pwm_counter = 1;
 #endif
 
+static int32_t dwell_cycles;
+static uint32_t dwell_counter = 0;
+
 // prototypes for static functions (non-accesible from other files)
+static void adjust_laser_speed_beam_dynamics( uint32_t adjusted_rate );
 static bool acceleration_tick();
 static void adjust_speed( uint32_t steps_per_minute );
 static void adjust_beam_dynamics( uint32_t steps_per_minute );
@@ -245,7 +252,7 @@ ISR(TIMER1_COMPA_vect) {
   #ifdef ENABLE_INTERLOCKS
     if (!disable_limits) {
       // honor interlocks
-      // (for unlikely edge case the protocol loop stops)
+      // (for rastering or unlikely edge case the protocol loop stops)
       if (SENSE_DOOR_OPEN || SENSE_CHILLER_OFF) {
         control_laser_intensity(0);
       }
@@ -349,12 +356,9 @@ ISR(TIMER1_COMPA_vect) {
       // starting on new line block
       adjusted_rate = current_block->initial_rate;
       acceleration_tick_counter = CYCLES_PER_ACCELERATION_TICK/2; // start halfway, midpoint rule.
-      adjust_speed( adjusted_rate ); // initialize cycles_per_step_event
+      adjust_laser_speed_beam_dynamics( adjusted_rate ); // initialize cycles_per_step_event
       if (current_block->type == TYPE_RASTER_LINE) {
-        control_laser_intensity(0);  // set only through raster data
         next_pixel_at_steps = 0;
-      } else {
-        adjust_beam_dynamics(adjusted_rate);
       }
       counter_x = -(current_block->step_event_count >> 1);
       counter_y = counter_x;
@@ -418,12 +422,7 @@ ISR(TIMER1_COMPA_vect) {
             if (adjusted_rate > current_block->nominal_rate) {  // overshot
               adjusted_rate = current_block->nominal_rate;
             }
-            adjust_speed( adjusted_rate );
-            if (current_block->type == TYPE_RASTER_LINE) {
-              control_laser_intensity(0);  // set only through raster data
-            } else {
-              adjust_beam_dynamics(adjusted_rate);
-            }
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
 
         // deceleration start
@@ -443,12 +442,7 @@ ISR(TIMER1_COMPA_vect) {
             if (adjusted_rate < current_block->final_rate) {  // overshot
               adjusted_rate = current_block->final_rate;
             }
-            adjust_speed( adjusted_rate );
-            if (current_block->type == TYPE_RASTER_LINE) {
-              control_laser_intensity(0);  // set only through raster data
-            } else {
-              adjust_beam_dynamics(adjusted_rate);
-            }
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
 
         // cruising
@@ -456,7 +450,7 @@ ISR(TIMER1_COMPA_vect) {
           // No accelerations. Make sure we cruise exactly at the nominal rate.
           if (adjusted_rate != current_block->nominal_rate) {
             adjusted_rate = current_block->nominal_rate;
-            adjust_speed( adjusted_rate );
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
           // Special case raster line.
           // Adjust intensity according raster buffer.
@@ -494,6 +488,23 @@ ISR(TIMER1_COMPA_vect) {
 
       break;
 
+    case TYPE_DWELL:
+      if (dwell_counter == 0) {
+        dwell_cycles = lround(DWELL_RATE / 60.0 * current_block->dwell_time);
+        adjust_speed( DWELL_RATE ); // initialize cycles_per_step_event
+      }
+
+      dwell_counter++;
+      if (dwell_counter < dwell_cycles) {
+        control_laser_intensity(current_block->nominal_laser_intensity);
+      }
+      else {
+        dwell_counter = 0;
+        current_block = NULL;
+        planner_discard_current_block();
+      }
+      break;
+
     case TYPE_AIR_ASSIST_ENABLE:
       control_air_assist(true);
       current_block = NULL;
@@ -521,7 +532,6 @@ ISR(TIMER1_COMPA_vect) {
 
   busy = false;
 }
-
 
 
 
@@ -579,8 +589,18 @@ inline uint32_t config_step_timer(uint32_t cycles) {
 }
 
 
+static void adjust_laser_speed_beam_dynamics(uint32_t adjusted_rate) {
+  adjust_speed( adjusted_rate );
+  if (current_block->type == TYPE_RASTER_LINE) {
+    control_laser_intensity(0);  // set only through raster data
+  } else {
+    adjust_beam_dynamics(adjusted_rate);
+  }
+}
+
+
 inline void adjust_speed( uint32_t steps_per_minute ) {
-  // steps_per_minute is typicaly just adjusted_rate
+  // steps_per_minute is typically just adjusted_rate
   if (steps_per_minute < MINIMUM_STEPS_PER_MINUTE) { steps_per_minute = MINIMUM_STEPS_PER_MINUTE; }
   cycles_per_step_event = config_step_timer(CYCLES_PER_MINUTE/steps_per_minute);
 }
@@ -604,7 +624,6 @@ inline void adjust_beam_dynamics( uint32_t steps_per_minute ) {
   control_laser_intensity(current_block->nominal_laser_intensity);
   #endif
 }
-
 
 
 inline void homing_move(double xfar, double yfar, double zfar,

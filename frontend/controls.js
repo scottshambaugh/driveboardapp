@@ -149,6 +149,7 @@ function controls_ready() {
     // button feedback
     app_run_btn.start()
     $('#boundary_btn').prop('disabled', true)
+    $('#pulse_btn').addClass('disabled')
     status_cache.ready = true  // prevent ready update
     // save job to queue, in-place
     var load_request = {
@@ -253,6 +254,19 @@ function controls_ready() {
     return false
   })
 
+
+  $("#pulse_btn").tooltip({placement:'bottom', delay: {show:1000, hide:100}})
+  $("#pulse_btn").click(function(e){
+    if (!$(this).hasClass('disabled')){
+      request_get({
+        url:'/pulse',
+        success: function (data) {
+          // $().uxmessage('notice', "Pulsed laser.")
+        }
+      })  
+    }
+    return false
+  })
 
 
   // footer buttons /////////////////////////////////////////////////////////
@@ -539,6 +553,10 @@ function controls_ready() {
       return false;
   })
 
+  Mousetrap.bind(['ctrl+p', 'command+p'], function(e) {
+    $('#pulse_btn').trigger('click')
+    return false;
+})
 
   Mousetrap.bind(['0'], function(e) {
       $('#origin_btn').trigger('click')
