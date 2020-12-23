@@ -1013,6 +1013,12 @@ def unstop():
         SerialLoop.request_resume = True
 
 
+def dwell():
+    global SerialLoop
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_DWELL)
+
+
 def air_on():
     global SerialLoop
     with SerialLoop.lock:
@@ -1037,22 +1043,19 @@ def aux_off():
         SerialLoop.send_command(CMD_AUX_DISABLE)
 
 def pulse():
-    print('pulse')
-    global SerialLoop
+    print("Pulsing laser")
     air_on()
-    # aux_on()
+
     # turn the laser on for a short pulse
     intensity(10.0)
     duration(0.1)
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_DWELL)
-    # keep air on for a bit longer
+    dwell()
+    # dwell without firing to keep air on for a full second
     intensity(0.0)
-    duration(1.0)
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_DWELL)
+    duration(0.9)
+    dwell()
+
     air_off()
-    # aux_off()
 
 
 def offset(x=None, y=None, z=None):
