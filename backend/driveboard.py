@@ -1211,7 +1211,8 @@ def job_laser(jobdict):
                 # create image obj, convert to grayscale, scale, loop through lines
                 imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
                 imgobj = imgobj.resize((px_w,px_h), resample=Image.BICUBIC)
-                if imgobj.mode == 'RGBA':
+                if imgobj.mode in ['PA', 'LA', 'RGBA', 'La', 'RBGa']:
+                    imgobj = imgobj.convert("RGBA")
                     imgbg = Image.new('RGBA', imgobj.size, (255, 255, 255))
                     imgbg.paste(imgobj, imgobj)
                     imgobj = imgbg.convert("L")
