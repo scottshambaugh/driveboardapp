@@ -318,7 +318,7 @@ class SerialLoopClass(threading.Thread):
             self.tx_buffer.append(ord(CMD_RASTER_DATA_START))
         for val in itertools.islice(data, start, end):
             with self.lock:
-                self.tx_buffer.append(int(0.5*(255-val))+128)
+                self.tx_buffer.append(int((255 - val)/2) + 128)
             count += 1
         with self.lock:
             self.tx_buffer.append(ord(CMD_RASTER_DATA_END))
@@ -1203,6 +1203,11 @@ def job_laser(jobdict):
                 data = def_["data"]  # in base64, format: jpg, png, gif
                 px_w = int(size[0]/pxsize_x)
                 px_h = int(size[1]/pxsize_y)
+
+                # note that 0-255 pixel data is halved for serial protocol, so we only get 128 levels max
+                n_raster_levels = max(min(round(conf['raster_levels']), 128), 2)
+                if n_raster_levels != conf['raster_levels']:
+                    print(f"WARN: config raster_levels={conf['raster_levels']} invalid, set to {n_raster_levels}")
                 raster_mode = conf['raster_mode']
                 if raster_mode not in ['Forward', 'Reverse', 'Bidirectional']:
                     raster_mode = 'Bidirectional'
@@ -1232,6 +1237,8 @@ def job_laser(jobdict):
                 pxarray[:] = (value for value in pxarray if type(value) is not str)
                 if conf['raster_invert']:
                     pxarray = [255 - px for px in pxarray]
+                if n_raster_levels < 128: # skip dithering if max resolution
+                    pxarray = raster_dither(px_w, px_h, pxarray, n_raster_levels)
                 pxarray_reversed = pxarray[::-1]
                 px_n = len(pxarray)
 
@@ -1481,6 +1488,40 @@ def job_mill(jobdict):
     intensity(0.0)
     supermove(z=0)
     supermove(x=0, y=0)
+
+
+# Floyd-Steinberg dithering algorithm for raster data
+'''
+Floyd-Steinberg dithering coefficients (1/16):
+-------------------
+|     |  X  |  7  |
+-------------------
+|  1  |  5  |  3  |
+-------------------
+'''
+def raster_dither(px_w, px_h, pxarray, n_levels=2):
+    pxarray_dithered = pxarray.copy()
+    levels = [255 * x / (n_levels-1) for x in range(0, n_levels)]
+    cutoffs = [x + 255/(n_levels-1)/2 for x in levels]
+
+    for i in range(len(pxarray)):
+        for j, cutoff in enumerate(cutoffs):
+            if pxarray_dithered[i] <= cutoff:
+                residual = pxarray_dithered[i] - levels[j]
+                pxarray_dithered[i] = levels[j]
+                break
+        row = i // px_w
+        col = i % px_w
+        if col != px_w - 1:
+            pxarray_dithered[i + 1] += residual * 7/16
+        if row != px_h - 1:
+            if col != 0:
+                pxarray_dithered[i + px_w - 1] += residual * 1/16
+            pxarray_dithered[i + px_w] += residual * 5/16
+            if col != px_w - 1:
+                pxarray_dithered[i + px_w + 1] += residual * 3/16
+
+    return pxarray_dithered
 
 
 # Functions to keep the computer from sleeping in the middle of a long job

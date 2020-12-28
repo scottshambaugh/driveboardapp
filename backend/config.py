@@ -50,6 +50,7 @@ conf = {
     'usb_reset_hack': False,
     'print_serial_data': False,
     'raster_invert': False,             # Set to True for materials which etch light on dark (eg slate, black marble)
+    'raster_levels': 128, 
     'raster_mode': 'Bidirectional',     # 'Forward', 'Reverse', 'Bidirectional'
     'raster_leadin': 10,
     'fill_mode': 'Bidirectional',       # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
@@ -82,6 +83,7 @@ userconfigurable = {
     'max_jobs_in_list': "Jobs to keep in the history list.",
     'print_serial_data': "Print all raw serial communications to the debug window.",
     'raster_invert': "If true, laser will set black pixels to 0%% intensity and white pixels to 100%% intensity.",
+    'raster_levels': "Number of raster dithering levels, from 2 for complete on/off dithering, to 128 for a smooth image",
     'raster_mode': "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'.",
     'raster_leadin': "Leadin for raster fills in mm. Note: rastering may fail if this is 0",
     'fill_mode': "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'.",
@@ -131,7 +133,6 @@ if not os.path.exists(directory):
 conf['confdir'] = directory
 #
 ###
-
 
 
 ### auto-check hardware
