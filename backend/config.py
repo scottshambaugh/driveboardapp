@@ -166,13 +166,11 @@ elif conf['hardware'] == 'beaglebone':
     if os.path.exists("/sys/kernel/debug/omap_mux/uart1_txd"):
         # we are not on the beaglebone black, setup uart1
         # echo 0 > /sys/kernel/debug/omap_mux/uart1_txd
-        fw = file("/sys/kernel/debug/omap_mux/uart1_txd", "w")
-        fw.write("%X" % (0))
-        fw.close()
+        with open("/sys/kernel/debug/omap_mux/uart1_txd", "w") as fw:
+            fw.write("%X" % (0))
         # echo 20 > /sys/kernel/debug/omap_mux/uart1_rxd
-        fw = file("/sys/kernel/debug/omap_mux/uart1_rxd", "w")
-        fw.write("%X" % ((1 << 5) | 0))
-        fw.close()
+        with open("/sys/kernel/debug/omap_mux/uart1_rxd", "w") as fw:
+            fw.write("%X" % ((1 << 5) | 0))
 
     ### if running on BBB/Ubuntu 14.04, setup pin muxing UART1
     pin24list = glob.glob("/sys/devices/ocp.*/P9_24_pinmux.*/state")
@@ -195,23 +193,20 @@ elif conf['hardware'] == 'beaglebone':
         os.system("echo gpio > %s" % (pin46))
 
     try:
-        fw = file("/sys/class/gpio/export", "w")
-        fw.write("%d" % (71))
-        fw.close()
+        with open("/sys/class/gpio/export", "w") as fw:
+            fw.write("%d" % (71))
     except IOError:
         # probably already exported
         pass
     # set the gpio pin to output
     # echo out > /sys/class/gpio/gpio71/direction
-    fw = file("/sys/class/gpio/gpio71/direction", "w")
-    fw.write("out")
-    fw.close()
+    with open("/sys/class/gpio/gpio71/direction", "w") as fw:
+        fw.write("out")
     # set the gpio pin high
     # echo 1 > /sys/class/gpio/gpio71/value
-    fw = file("/sys/class/gpio/gpio71/value", "w")
-    fw.write("1")
-    fw.flush()
-    fw.close()
+    with open("/sys/class/gpio/gpio71/value", "w") as fw:
+        fw.write("1")
+        fw.flush()
 
     ### Set up atmega328 reset control - BeagleBone Black
     # The reset pin is connected to GPIO2_9 (2*32+9 = 73).
@@ -224,23 +219,20 @@ elif conf['hardware'] == 'beaglebone':
         os.system("echo gpio > %s" % (pin44))
 
     try:
-        fw = file("/sys/class/gpio/export", "w")
-        fw.write("%d" % (73))
-        fw.close()
+        with open("/sys/class/gpio/export", "w") as fw:
+            fw.write("%d" % (73))
     except IOError:
         # probably already exported
         pass
     # set the gpio pin to output
     # echo out > /sys/class/gpio/gpio73/direction
-    fw = file("/sys/class/gpio/gpio73/direction", "w")
-    fw.write("out")
-    fw.close()
+    with open("/sys/class/gpio/gpio73/direction", "w") as fw:
+        fw.write("out")
     # set the gpio pin high
     # echo 1 > /sys/class/gpio/gpio73/value
-    fw = file("/sys/class/gpio/gpio73/value", "w")
-    fw.write("1")
-    fw.flush()
-    fw.close()
+    with open("/sys/class/gpio/gpio73/value", "w") as fw:
+        fw.write("1")
+        fw.flush()
 
     ### read stepper driver configure pin GPIO2_12 (2*32+12 = 76).
     # Low means Geckos, high means SMC11s
@@ -251,21 +243,18 @@ elif conf['hardware'] == 'beaglebone':
         os.system("echo gpio > %s" % (pin39))
 
     try:
-        fw = file("/sys/class/gpio/export", "w")
-        fw.write("%d" % (76))
-        fw.close()
+        with open("/sys/class/gpio/export", "w") as fw:
+            fw.write("%d" % (76))
     except IOError:
         # probably already exported
         pass
     # set the gpio pin to input
-    fw = file("/sys/class/gpio/gpio76/direction", "w")
-    fw.write("in")
-    fw.close()
+    with open("/sys/class/gpio/gpio76/direction", "w") as fw:
+        fw.write("in")
     # set the gpio pin high
-    fw = file("/sys/class/gpio/gpio76/value", "r")
-    ret = fw.read()
-    fw.close()
-    # print "Stepper driver configure pin is: " + str(ret)
+    with open("/sys/class/gpio/gpio76/value", "r") as fw:
+        ret = fw.read()
+        # print "Stepper driver configure pin is: " + str(ret)
 
 elif conf['hardware'] == 'raspberrypi':
     if not conf['firmware']:
