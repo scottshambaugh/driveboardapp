@@ -152,7 +152,7 @@ def simplify(pathseg, tolerance2):
 
     # STAGE 2.  Douglas-Peucker polyline simplification
     mk = [None for i in range(k)]    # marker buffer, ints
-    mk[0] = mk[k-1] = 1;              # mark the first and last vertices
+    mk[0] = mk[k-1] = 1              # mark the first and last vertices
     simplifyDP(tolerance2, tPathseg, 0, k-1, mk)
 
     # copy marked vertices to the output simplified polyline
@@ -213,6 +213,7 @@ def remove_waypoints(path):
             inds.append(i)
     for i in inds[::-1]:
         del path[i]
+
 
 def reverse_path(path):
     path_unsorted = path.copy()

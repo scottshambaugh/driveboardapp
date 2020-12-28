@@ -1,11 +1,13 @@
 # -*- coding: UTF-8 -*-
 import os
+import sys
 import time
 import random
 import unittest
 import json
 import threading
 import pprint
+from PIL import Image
 
 import web
 import lasersaur
@@ -39,7 +41,7 @@ thislocation = os.path.dirname(os.path.realpath(__file__))
 
 
 def setUpModule():
-    web.start(threaded=True, debug=False)
+    web.start(debug=False)
     time.sleep(0.5)
     lasersaur.local()
 

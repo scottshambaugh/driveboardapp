@@ -13,7 +13,6 @@ from .utilities import matrixApply
 __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 
 
-
 def convert(job, optimize=True, tolerance=conf['tolerance'], matrix=None):
     """Convert a job string (dba, svg, dxf, or gcode).
 
@@ -67,6 +66,7 @@ def convert(job, optimize=True, tolerance=conf['tolerance'], matrix=None):
         apply_alignment_matrix(job, matrix)
     return job
 
+
 def apply_alignment_matrix(job, matrix):
     """Transform the coordinates in the job with the supplied matrix."""
     # Get the SVG-style 6-element vector from the 3x3 matrix
@@ -86,6 +86,7 @@ def apply_alignment_matrix(job, matrix):
             for one_path in one_def['data']:
                 for one_point in one_path:
                     matrixApply(mat, one_point)
+
 
 def read_svg(svg_string, workspace, tolerance, forced_dpi=None, optimize=True):
     """Read a svg file string and convert to dba job."""
@@ -144,6 +145,7 @@ def read_svg(svg_string, workspace, tolerance, forced_dpi=None, optimize=True):
                 })
     return job
 
+
 def read_dxf(dxf_string, tolerance, optimize=True):
     """Read a dxf file string and optimize returned value."""
     dxfParser = DXFParser(tolerance)
@@ -155,6 +157,7 @@ def read_dxf(dxf_string, tolerance, optimize=True):
             pathoptimizer.dxf_optimize(vec['paths'], tolerance)
             vec['optimized'] = tolerance
     return job
+
 
 def read_gcode(gcode_string, tolerance, optimize=False):
     """Read a gcode file string and convert to dba job."""

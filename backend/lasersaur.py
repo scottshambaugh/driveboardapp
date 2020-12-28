@@ -76,7 +76,6 @@ class Lasersaur(object):
 
 
 
-
     ### LOW-LEVEL
 
     def config(self):

@@ -20,7 +20,6 @@ def init():
     root.geometry('1200x400')
     # root.iconify()  # not working as expected on osx
 
-
     # text widget
     text = tk.Text(root, wrap=tk.NONE)
     text.pack(expand=True, side=tk.LEFT, fill=tk.BOTH) 
@@ -39,7 +38,6 @@ def init():
             root.clipboard_append(selected)
     text.bind("<Control-c>", copy)
 
-
     # open frontend button
     def open_browser():
         print('Opening browser interface...')
@@ -48,7 +46,6 @@ def init():
         except webbrowser.Error:
             print("Cannot open Webbrowser, please do so manually. Address: http://127.0.0.1:4444")
     tk.Button(text, text="Open Browser Interface", command=open_browser).pack(side=tk.BOTTOM)
-
 
     # output queue, required because of tkinter thread issues
     q = queue.Queue()
@@ -76,6 +73,7 @@ def init():
         except exception:
             return
 
+
     def update(q):
         if scrolly.get()[1] == 1.0:
             for line in itertools.islice(iterex(q.get_nowait, queue.Empty), 10000):
@@ -97,10 +95,10 @@ def init():
         sys.stdout = stdout_old
         sys.stderr = stderr_old
         root.destroy()
+
+
     root.protocol("WM_DELETE_WINDOW", quit)
     root.bind("<Control-q>", lambda event: quit())
-
-
     return root
 
 

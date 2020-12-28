@@ -15,7 +15,6 @@ import jobimport
 __author__  = 'Stefan Hechenberger <stefan@nortd.com>'
 
 
-
 class PyApp(gtk.Window):
 
     def __init__(self):
@@ -106,8 +105,6 @@ class PyApp(gtk.Window):
 
         seeks.stroke()
         cr.stroke()
-
-
 
 
 

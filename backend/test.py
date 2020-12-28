@@ -49,7 +49,7 @@ thislocation = os.path.dirname(os.path.realpath(__file__))
 
 
 def setUpModule():
-    web.start(threaded=True, debug=False)
+    web.start(debug=False)
     time.sleep(0.5)
     lasersaur.local()
 
@@ -160,8 +160,6 @@ def stepY(val, off1=0, off2=Y_ORIGIN_OFFSET):
     return (round((val+off1+off2)*Y_STEPS_PER_MM)/Y_STEPS_PER_MM)-off1-off2
 def stepZ(val, off1=0, off2=Z_ORIGIN_OFFSET):
     return (round((val+off1+off2)*Z_STEPS_PER_MM)/Z_STEPS_PER_MM)-off1-off2
-
-
 
 
 

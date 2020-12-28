@@ -1,13 +1,12 @@
 
-- image raster cuts off some 5mm at the end
-- when serial port ato changes, fails to do so in flash module
+- when serial port auto changes, fails to do so in flash module
 
 
 bugs
 ----
 - stall between certain x-axis jogs
   - send a pierce command in between
-- unplugging usb is not always ahndled gracfully
+- unplugging usb is not always handled gracfully
 
 beauty bugs
 -----------
@@ -16,6 +15,7 @@ beauty bugs
 optimizations
 -------------
 - consider changing laser drive board for more frequency control
+- scale rastering for speed
 
 
 features
