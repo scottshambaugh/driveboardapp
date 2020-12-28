@@ -97,7 +97,7 @@ function presets_update() {
       $('.btn-del-preset').click(function(e) {
         var name = $(this).parent().parent().find('td.preset-name').text()
         request_get({
-          url:`/save_preset/${name}/0/0`,
+          url:`/save_preset/${name}/0/0/0`,
           success: function() {
             presets_update()
           }
