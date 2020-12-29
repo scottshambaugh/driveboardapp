@@ -401,12 +401,15 @@ function passes_set_assignments() {
   // set passes in gui from current job
   if (jobhandler.hasPasses()) {
     jobhandler.loopPasses(function(pass, items){
+      if (pass.feedrate  == undefined){ pass.feedrate  = app_config_main.feedrate; }
+      if (pass.intensity == undefined){ pass.intensity = app_config_main.intensity; }
+      if (pass.pxsize    == undefined){ pass.pxsize    = app_config_main.pxsize; }
       passes_add(pass.feedrate, pass.intensity, pass.pxsize, items)
     })
   } else {
-    passes_add(2000, 20, app_config_main.pxsize, [])
-    passes_add(2000, 20, app_config_main.pxsize, [])
-    passes_add(2000, 20, app_config_main.pxsize, [])
+    passes_add(app_config_main.feedrate, app_config_main.intensity, app_config_main.pxsize, [])
+    passes_add(app_config_main.feedrate, app_config_main.intensity, app_config_main.pxsize, [])
+    passes_add(app_config_main.feedrate, app_config_main.intensity, app_config_main.pxsize, [])
   }
   passes_add_widget()
   passes_set_swapBtns()
