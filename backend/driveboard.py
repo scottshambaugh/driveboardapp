@@ -1160,7 +1160,9 @@ def job_laser(jobdict):
             pxsize_y = float(pass_['pxsize'])
         else:
             pxsize_y = float(conf['pxsize'])
-        pxsize_y = max(pxsize_y, 0.01)  # prevent div by 0
+        if pxsize_y < 0.01:
+            print(f'WARN: pxsize of {pxsize_y} mm/px is too small. Setting to 0.01 mm/px')
+            pxsize_y = 0.01  # prevent div by 0
         intensity(0.0)
         pxsize_x = pxsize_y/2.0  # use 2x horiz resolution
         pixelwidth(pxsize_x)
