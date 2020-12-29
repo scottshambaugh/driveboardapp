@@ -60,7 +60,7 @@
 #define CYCLES_PER_MICROSECOND (F_CPU/1000000)  //16000000/1000000 = 16
 #define CYCLES_PER_ACCELERATION_TICK (F_CPU/ACCELERATION_TICKS_PER_SECOND)  // 16MHz/100 = 160000
 
-#define DWELL_RATE (1000*60L) // 60000 steps/min for 1 milisecond dwell resolution
+#define DWELL_RATE (1000*60L) // 60000 steps/min for 1 millisecond dwell resolution
 
 
 static int32_t stepper_position[3];  // real-time position in absolute steps
@@ -468,8 +468,9 @@ ISR(TIMER1_COMPA_vect) {
               uint8_t chr = serial_raster_read();
               sei();
               // map [128,255] -> [0, nominal_laser_intensity]
-              // (chr-128)*2 * (current_block->nominal_laser_intensity/255)
-              control_laser_intensity( (chr-128)*2*current_block->nominal_laser_intensity/255 );  // TODO: Maybe do this in preprocessing
+              // (chr-128)*2/255 * (current_block->nominal_laser_intensity)
+              // Note: this will go from 0 - 254/255 = 0 - 99.6% of nominal_laser_intensity
+              control_laser_intensity( (chr-128)*2/255*current_block->nominal_laser_intensity );  // TODO: Maybe do this in preprocessing
             }
           // otherwise make sure intensity at nominal
           } else {
@@ -494,9 +495,9 @@ ISR(TIMER1_COMPA_vect) {
         adjust_speed( DWELL_RATE ); // initialize cycles_per_step_event
       }
 
-      dwell_counter++;
       if (dwell_counter < dwell_cycles) {
         control_laser_intensity(current_block->nominal_laser_intensity);
+        dwell_counter++;
       }
       else {
         dwell_counter = 0;
