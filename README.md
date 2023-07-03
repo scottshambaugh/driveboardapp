@@ -13,12 +13,13 @@ The original codebase at nortd/driveboardapp is no longer maintained. Here are s
 * Your current X-Y coordinates are shown on screen
 * “Set Offset” now sets the offset to the current head position
 * The head position is now set in relative dx, dy coordinates
-* Many small bugfixes 
+* Many small bugfixes
+* Tested on Windows and Linux
 
 Outstanding issues:
 * Building a Windows executable isn’t currently working
 * Documentation needs to be updated
-* Not tested on Mac or Linux yet
+* Not tested on Mac
 
 Many thanks to scottshambaugh, FREILab, makermusings, vanillasoap, and martinxyz for keeping this project alive. Below is the original documentation.
 
