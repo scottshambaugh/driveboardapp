@@ -1,3 +1,29 @@
+**Notes on this fork:**
+
+The original codebase at nortd/driveboardapp is no longer maintained. Here are some of the highlights in this fork, see this thread for more details https://groups.google.com/g/lasersaur/c/n54LNN86H-c:
+* Upgrade from python2 to python3
+* Rastering completely rewritten: skips over large whitespace for speed, option for inverting, can select number of gray levels (set to 2-3 for dithering, max of 128)
+* Bidirectional and nearest neighbor pathing algorithms for fill and rastering speedups
+* Added a 'pulse' functionality for the laser (all safety interlocks still work)
+* You can save material preset laser settings through the UI and easily load them back up
+* The debug terminal can now be resized, scroll, and will not auto-jump back down when scrolling around
+* Option to print out human-readable versions of the tx/rx serial commands
+* Option for the head to auto-home when the interface is first started
+* You can now jog in 1 mm increments by holding the ctrl key with the arrows
+* Your current X-Y coordinates are shown on screen
+* “Set Offset” now sets the offset to the current head position
+* The head position is now set in relative dx, dy coordinates
+* Many small bugfixes 
+
+Outstanding issues:
+* Building a Windows executable isn’t currently working
+* Documentation needs to be updated
+* Not tested on Mac or Linux yet
+
+Many thanks to scottshambaugh, FREILab, makermusings, vanillasoap, and martinxyz for keeping this project alive. Below is the original documentation.
+
+-------------
+
 DriveboardApp
 =============
 
