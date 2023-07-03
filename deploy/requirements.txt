@@ -3,3 +3,4 @@ bottle>=0.12.16
 Pillow>=6.2.1
 PyInstaller>=3.5
 pyserial>=3.4
+dxfgrabber>=1.0
