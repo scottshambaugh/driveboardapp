@@ -1048,12 +1048,12 @@ def pulse():
     air_on()
 
     # turn the laser on for a short pulse
-    intensity(10.0)
-    duration(0.1)
+    intensity(float(conf['pulse_intensity']))
+    duration(float(conf['pulse_duration']))
     dwell()
-    # dwell without firing to keep air on for a full second
+    # dwell without firing for a second to keep air on
     intensity(0.0)
-    duration(0.9)
+    duration(1)
     dwell()
 
     air_off()

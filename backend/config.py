@@ -46,6 +46,8 @@ conf = {
     'intensity': 0,
     'kerf': 0.3,
     'pxsize': 0.2,                      # size (mm) of beam for rastering
+    'pulse_intensity': 10,
+    'pulse_duration': 0.1,
     'max_jobs_in_list': 20,
     'usb_reset_hack': False,
     'print_serial_data': False,
@@ -80,6 +82,8 @@ userconfigurable = {
     'intensity': "Default intensity setting 0-100.",
     'kerf': "Typical kerf of a cut.",
     'pxsize': "Default kerf setting for rastering and filling.",
+    'pulse_intensity': "Default pulse intensity setting 0-100.",
+    'pulse_duration': "Default pulse duration in seconds.",
     'max_jobs_in_list': "Jobs to keep in the history list.",
     'print_serial_data': "Print all raw serial communications to the debug window.",
     'raster_invert': "If true, laser will set black pixels to 0%% intensity and white pixels to 100%% intensity.",
