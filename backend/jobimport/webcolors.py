@@ -686,9 +686,11 @@ def rgb_to_name(rgb_triplet, spec='css3'):
 
 def rgb_to_hex(rgb_triplet):
     """
-    Convert a 3-tuple of integers, suitable for use in an ``rgb()``
+    Convert a 3-tuple of numbers, suitable for use in an ``rgb()``
     color triplet, to a normalized hexadecimal value for that color.
-    
+
+    Numbers which are not integers will be converted to integers.
+
     Examples:
     
     >>> rgb_to_hex((255, 255, 255))
@@ -699,6 +701,7 @@ def rgb_to_hex(rgb_triplet):
     '#2138c0'
     
     """
+    rgb_triplet = (int(rgb_triplet[0]), int(rgb_triplet[1]), int(rgb_triplet[2]))
     return '#%02x%02x%02x' % rgb_triplet
 
 def rgb_to_rgb_percent(rgb_triplet):
