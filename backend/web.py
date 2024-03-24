@@ -360,7 +360,7 @@ def _get_sorted(globpattern, library=False, stripext=False):
             files = list(filter(os.path.isfile, glob.glob(globpattern)))
             files.sort()
         else:
-            os.chdir(conf['confdir'])
+            os.chdir(conf['stordir'])
             files = list(filter(os.path.isfile, glob.glob(globpattern)))
             files.sort(key=lambda x: os.path.getmtime(x))
         if stripext:
@@ -378,7 +378,7 @@ def _get(jobname, library=False):
     if library:
         jobpath = os.path.join(conf['rootdir'], 'library', jobname.strip('/\\'))
     else:
-        jobpath = os.path.join(conf['confdir'], jobname.strip('/\\'))
+        jobpath = os.path.join(conf['stordir'], jobname.strip('/\\'))
     if os.path.exists(jobpath+'.dba'):
         jobpath = jobpath+'.dba'
     elif os.path.exists(jobpath + '.dba.starred'):
@@ -393,7 +393,7 @@ def _get_path(jobname, library=False):
     if library:
         jobpath = os.path.join(conf['rootdir'], 'library', jobname.strip('/\\'))
     else:
-        jobpath = os.path.join(conf['confdir'], jobname.strip('/\\'))
+        jobpath = os.path.join(conf['stordir'], jobname.strip('/\\'))
     if os.path.exists(jobpath+'.dba'):
         return jobpath+'.dba'
     elif os.path.exists(jobpath+'.dba.starred'):
@@ -402,7 +402,7 @@ def _get_path(jobname, library=False):
         bottle.abort(400, "No such file.")
 
 def _exists(jobname):
-    namepath = os.path.join(conf['confdir'], jobname.strip('/\\'))
+    namepath = os.path.join(conf['stordir'], jobname.strip('/\\'))
     if os.path.exists(namepath+'.dba') or os.path.exists(namepath+'.dba.starred'):
         bottle.abort(400, "File name exists.")
 
@@ -413,7 +413,7 @@ def _clear(limit=None):
     for filename in files:
         if type(limit) is int and limit <= 0:
             break
-        filename = os.path.join(conf['confdir'], filename)
+        filename = os.path.join(conf['stordir'], filename)
         os.remove(filename);
         print("file deleted: " + filename)
         if type(limit) is int:
@@ -422,7 +422,7 @@ def _clear(limit=None):
 def _add(job, name):
     # add job (dba string)
     # overwrites file if already exists, use _unique_name(name) to avoid
-    namepath = os.path.join(conf['confdir'], name.strip('/\\')+'.dba')
+    namepath = os.path.join(conf['stordir'], name.strip('/\\')+'.dba')
     with open(namepath, 'w') as fp:
         fp.write(job)
         print("file saved: " + namepath)
@@ -812,6 +812,7 @@ def start(browser=False, debug=False):
         bottle.debug(True)
     print("Library Directory: " + conf['rootdir'])
     print("Config Directory: " + conf['confdir'])
+    print("Queue Directory: " + conf['stordir'])
     print("-----------------------------------------------------------------------------")
     print("Starting server at http://%s:%d/" % ('127.0.0.1', conf['network_port']))
     print("-----------------------------------------------------------------------------")

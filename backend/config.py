@@ -19,6 +19,7 @@ import sys
 import glob
 import json
 import copy
+import tempfile
 
 from encodings import hex_codec  # explicit for pyinstaller
 from encodings import ascii  # explicit for pyinstaller
@@ -36,6 +37,7 @@ conf = {
     'baudrate': 57600,
     'rootdir': None,                    # defined further down (../)
     'confdir': None,                    # defined further down
+    'stordir': None,                    # defined further down
     'hardware': None,                   # defined further down
     'firmware': None,                   # defined further down
     'tolerance': 0.01,
@@ -123,6 +125,12 @@ else:
 
 ### stordir
 # This is to be used to store queue files and similar
+conf['stordir'] = tempfile.mkdtemp('driveboardapp')
+#
+###
+
+### confdir
+# This is to be used to store the configuration file
 if sys.platform == 'darwin':
     directory = os.path.join(os.path.expanduser('~'),
                              'Library', 'Application Support',
