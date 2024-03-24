@@ -19,7 +19,6 @@ import sys
 import glob
 import json
 import copy
-import tempfile
 
 from encodings import hex_codec  # explicit for pyinstaller
 from encodings import ascii  # explicit for pyinstaller
@@ -124,7 +123,18 @@ else:
 
 ### stordir
 # This is to be used to store queue files and similar
-conf['confdir'] = tempfile.mkdtemp('driveboardapp')
+if sys.platform == 'darwin':
+    directory = os.path.join(os.path.expanduser('~'),
+                             'Library', 'Application Support',
+                             conf['company_name'], conf['appname'])
+elif sys.platform == 'win32':
+    directory = os.path.join(os.path.expandvars('%APPDATA%'),
+                             conf['company_name'], conf['appname'])
+else:
+    directory = os.path.join(os.path.expanduser('~'), "." + conf['appname'])
+if not os.path.exists(directory):
+    os.makedirs(directory)
+conf['confdir'] = directory
 #
 ###
 
