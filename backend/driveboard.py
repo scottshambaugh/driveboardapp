@@ -1536,7 +1536,10 @@ def disable_computer_sleep():
     elif system == 'Linux':
         import subprocess
         args = ['sleep.target', 'suspend.target', 'hibernate.target', 'hybrid-sleep.target']
-        subprocess.run(['systemctl', 'mask', *args])
+        try:
+            subprocess.run(['systemctl', 'mask', *args])
+        except:
+            print('Failed to disable hibernation')
     else: # if system == 'Darwin':
         print(f'Display disabling not implemented in {system}')
 
@@ -1548,7 +1551,10 @@ def enable_computer_sleep():
     elif system == 'Linux':
         import subprocess
         args = ['sleep.target', 'suspend.target', 'hibernate.target', 'hybrid-sleep.target']
-        subprocess.run(['systemctl', 'unmask', *args])
+        try:
+            subprocess.run(['systemctl', 'unmask', *args])
+        except:
+            print('Failed to reenable hibernation')
     else: # if system == 'Darwin':
         print(f'Display disabling not implemented in {system}')
 
