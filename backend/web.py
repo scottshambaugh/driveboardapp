@@ -488,6 +488,8 @@ def load():
     except TypeError:
         if DEBUG: traceback.print_exc()
         bottle.abort(400, "Invalid file type.")
+    except ValueError as e:
+        bottle.abort(422, str(e))
 
     if not overwrite:
         name = _unique_name(name)

@@ -69,6 +69,7 @@ conf = {
     'mill_max_rpm': 18000,
     'alignment_host': None,
     'alignment_port': 80,
+    'require_unit': False,
 }
 conf_defaults = copy.deepcopy(conf)
 
@@ -101,6 +102,7 @@ userconfigurable = {
     'mill_max_rpm': "Maximum spindle RPM.",
     'alignment_host': "IP or hostname of alignment server.",
     'alignment_port': "Port of alignment server.",
+    'require_unit': "Whether a physical unit (cm, mm, in) should be required to load SVG files.",
 }
 
 

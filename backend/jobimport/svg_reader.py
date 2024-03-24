@@ -102,7 +102,7 @@ class SVGReader:
 
 
 
-    def parse(self, svgstring, force_dpi=None):
+    def parse(self, svgstring, force_dpi=None, require_unit=False):
         """ Parse a SVG document.
 
         This traverses through the document tree and collects all path
@@ -216,6 +216,8 @@ class SVGReader:
                     # prime for cm to mm conversion
                     self.px2mm *= 10.0
                     log.info("px2mm by svg cm unit")
+                elif require_unit:
+                    raise ValueError("Invalid or no unit in SVG data, must be 'mm', 'cm' or 'in'.")
                 elif unit == 'px' or unit == '':
                     # no physical units in file
                     # we have to interpret user (px) units

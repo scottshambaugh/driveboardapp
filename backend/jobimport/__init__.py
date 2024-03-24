@@ -91,7 +91,7 @@ def apply_alignment_matrix(job, matrix):
 def read_svg(svg_string, workspace, tolerance, forced_dpi=None, optimize=True):
     """Read a svg file string and convert to dba job."""
     svgReader = SVGReader(tolerance, workspace)
-    res = svgReader.parse(svg_string, forced_dpi)
+    res = svgReader.parse(svg_string, forced_dpi, conf['require_unit'])
     # {'boundarys':b, 'dpi':d, 'lasertags':l, 'rasters':r}
 
     # create an dba job from res
