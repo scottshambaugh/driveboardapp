@@ -53,8 +53,7 @@ def convert(job, optimize=True, tolerance=conf['tolerance'], matrix=None):
                     job['head'] = {}
                 job['head']['optimized'] = tolerance
     elif type_ == 'svg':
-        job = read_svg(job, conf['workspace'],
-                       tolerance, optimize=optimize)
+        job = read_svg(job, tolerance, optimize=optimize)
     elif type_ == 'dxf':
         job = read_dxf(job, tolerance, optimize=optimize)
     elif type_ == 'gcode':
@@ -88,10 +87,10 @@ def apply_alignment_matrix(job, matrix):
                     matrixApply(mat, one_point)
 
 
-def read_svg(svg_string, workspace, tolerance, forced_dpi=None, optimize=True):
+def read_svg(svg_string, tolerance, forced_dpi=None, optimize=True):
     """Read a svg file string and convert to dba job."""
-    svgReader = SVGReader(tolerance, workspace)
-    res = svgReader.parse(svg_string, forced_dpi)
+    svgReader = SVGReader(tolerance, conf['workspace'])
+    res = svgReader.parse(svg_string, forced_dpi, conf['require_unit'])
     # {'boundarys':b, 'dpi':d, 'lasertags':l, 'rasters':r}
 
     # create an dba job from res

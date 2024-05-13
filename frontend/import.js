@@ -102,7 +102,7 @@ $(document).ready(function(){
       },
       error: function (data) {
         $().uxmessage('error', "/load error.")
-        $().uxmessage('error', JSON.stringify(data), false)
+        $().uxmessage('error', data.responseText, false)
       },
       complete: function (data) {
         $('#open_btn').button('reset')
@@ -125,7 +125,7 @@ $(document).ready(function(){
       url:'http://' + app_config_main.alignment_host + ':' + app_config_main.alignment_port + '/align/' + encodeURI(window.location.hostname) + '/' + window.location.port,
       error: function (data) {
         $().uxmessage('error', "/align error.")
-        $().uxmessage('error', JSON.stringify(data), false)
+        $().uxmessage('error', data.responseText, false)
       },
       complete: function (data) {
         $('#open_align_btn').button('reset')
@@ -143,7 +143,7 @@ $(document).ready(function(){
           },
           error: function (data) {
             $().uxmessage('error', "/load error.")
-            $().uxmessage('error', JSON.stringify(data), false)
+            $().uxmessage('error', data.responseText, false)
           }
         })
       }
@@ -172,7 +172,7 @@ function import_open(jobname, from_library) {
         jobhandler.render()
         jobhandler.draw()
       }
-      
+
       jobhandler.set(job, jobname, true, jobhandler_done)
 
       // debug, show image, stats
@@ -192,7 +192,7 @@ function import_open(jobname, from_library) {
     },
     error: function (data) {
       $().uxmessage('error', "/get error.")
-      $().uxmessage('error', JSON.stringify(data), false)
+      $().uxmessage('error', data.responseText, false)
     }
   })
 }
