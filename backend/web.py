@@ -43,7 +43,7 @@ def checkserial(func):
             if driveboard.connected():
                 return func(*args, **kwargs)
             else:
-                bottle.abort(400, "No machine.")
+                raise bottle.HTTPResponse("No machine.", 400)
     return _decorator
 
 
@@ -309,7 +309,7 @@ def pulse():
 @checkserial
 def offset(x, y, z):
     if not driveboard.status()['ready']:
-        bottle.abort(400, "Machine not ready.")
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.offset(x, y, z)
     return '{}'
 @bottle.route('/offsetx/<x:float>')
@@ -317,7 +317,7 @@ def offset(x, y, z):
 @checkserial
 def offset(x):
     if not driveboard.status()['ready']:
-        bottle.abort(400, "Machine not ready.")
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.offset(x=x)
     return '{}'
 @bottle.route('/offsety/<y:float>')
@@ -325,7 +325,7 @@ def offset(x):
 @checkserial
 def offsety(y):
     if not driveboard.status()['ready']:
-        bottle.abort(400, "Machine not ready.")
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.offset(y=y)
     return '{}'
 @bottle.route('/offsetz/<z:float>')
@@ -333,7 +333,7 @@ def offsety(y):
 @checkserial
 def offsetz(z):
     if not driveboard.status()['ready']:
-        bottle.abort(400, "Machine not ready.")
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.offset(z=z)
     return '{}'
 
@@ -342,7 +342,7 @@ def offsetz(z):
 @checkserial
 def offset(x, y, z):
     if not driveboard.status()['ready']:
-        bottle.abort(400, "Machine not ready.")
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.absoffset(x, y, z)
     return '{}'
 
@@ -384,7 +384,7 @@ def _get(jobname, library=False):
     elif os.path.exists(jobpath + '.dba.starred'):
         jobpath = jobpath + '.dba.starred'
     else:
-        bottle.abort(400, "No such file.")
+        raise bottle.HTTPResponse("No such file.", 400)
     with open(jobpath) as fp:
         job = fp.read()
     return job
@@ -399,12 +399,12 @@ def _get_path(jobname, library=False):
     elif os.path.exists(jobpath+'.dba.starred'):
         return jobpath+'.dba.starred'
     else:
-        bottle.abort(400, "No such file.")
+        raise bottle.HTTPResponse("No such file.", 400)
 
 def _exists(jobname):
     namepath = os.path.join(conf['stordir'], jobname.strip('/\\'))
     if os.path.exists(namepath+'.dba') or os.path.exists(namepath+'.dba.starred'):
-        bottle.abort(400, "File name exists.")
+        raise bottle.HTTPResponse("File name exists.", 400)
 
 def _clear(limit=None):
     files = _get_sorted('*.dba')
@@ -481,15 +481,15 @@ def load():
         matrix = None
     # sanity check
     if job is None or name is None:
-        bottle.abort(400, "Invalid request data.")
+        raise bottle.HTTPResponse("Invalid request data.", 400)
     # convert
     try:
         job = jobimport.convert(job, optimize=optimize, matrix=matrix)
     except TypeError:
         if DEBUG: traceback.print_exc()
-        bottle.abort(400, "Invalid file type.")
+        raise bottle.HTTPResponse("Invalid file type.", 400)
     except ValueError as e:
-        bottle.abort(422, str(e))
+        raise bottle.HTTPResponse(str(e), 422)
 
     if not overwrite:
         name = _unique_name(name)
@@ -511,7 +511,7 @@ def listing(kind=None):
     elif kind == 'unstarred':
         files = _get_sorted('*.dba', stripext=True)
     else:
-        bottle.abort(400, "Invalid kind.")
+        raise bottle.HTTPResponse("Invalid kind.", 400)
     return json.dumps(files)
 
 
@@ -531,7 +531,7 @@ def star(jobname):
     if jobpath.endswith('.dba'):
         os.rename(jobpath, jobpath + '.starred')
     else:
-        bottle.abort(400, "No such file.")
+        raise bottle.HTTPResponse("No such file.", 400)
     return '{}'
 
 
@@ -543,7 +543,7 @@ def unstar(jobname):
     if jobpath.endswith('.starred'):
         os.rename(jobpath, jobpath[:-8])
     else:
-        bottle.abort(400, "No such file.")
+        raise bottle.HTTPResponse("No such file.", 400)
     return '{}'
 
 
@@ -651,7 +651,7 @@ def run(jobname):
     """Send job from queue to the machine."""
     job = _get(jobname)
     if not driveboard.status()['ready']:
-        bottle.abort(400, "Machine not ready.")
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.job(json.loads(job))
     return '{}'
 
@@ -669,7 +669,7 @@ def run_direct():
     job = load_request.get('job')  # always a string
     # sanity check
     if job is None:
-        bottle.abort(400, "Invalid request data.")
+        raise bottle.HTTPResponse("Invalid request data.", 400)
     driveboard.job(json.loads(job))
     return '{}'
 
@@ -720,7 +720,7 @@ def build():
     """Build firmware from firmware/src files (for all config files)."""
     return_code = driveboard.build()
     if return_code != 0:
-        bottle.abort(400, "Build failed.")
+        raise bottle.HTTPResponse("Build failed.", 400)
     else:
         return '{}'
 
@@ -735,7 +735,7 @@ def flash(firmware=None):
     else:
         return_code = driveboard.flash(firmware=firmware)
     if return_code != 0:
-        bottle.abort(400, "Flashing failed.")
+        raise bottle.HTTPResponse("Flashing failed.", 400)
     else:
         return '{}'
 
@@ -747,7 +747,7 @@ def reset():
     try:
         driveboard.reset()
     except IOError:
-        bottle.abort(400, "Reset failed.")
+        raise bottle.HTTPResponse("Reset failed.", 400)
     return '{}'
 
 

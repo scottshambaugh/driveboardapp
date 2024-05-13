@@ -16,9 +16,7 @@ function request_get(args) {
       400: function(s) {
         // alert(JSON.stringify(s))
         if ('responseText' in s) {
-          r = s.responseText;
-          var error_txt = r.slice(r.indexOf('<pre>')+5,r.lastIndexOf('</pre>'))
-          $().uxmessage('error', error_txt)
+          $().uxmessage('error', s.responseText)
         }
       },
       401: function() {
@@ -75,9 +73,7 @@ function request_post(args) {
       400: function(s) {
         // alert(JSON.stringify(s))
         if ('responseText' in s) {
-          r = s.responseText;
-          var error_txt = r.slice(r.indexOf('<pre>')+5,r.lastIndexOf('</pre>'))
-          $().uxmessage('error', error_txt)
+          $().uxmessage('error', s.responseText)
         }
       },
       401: function() {

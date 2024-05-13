@@ -34,7 +34,7 @@ function controls_ready() {
       //   },
       //   error: function (data) {
       //     $().uxmessage('error', "/temp error.")
-      //     $().uxmessage('error', JSON.stringify(data), false)
+      //     $().uxmessage('error', data.responseText, false)
       //   }
       // })
       // $('#hamburger').dropdown("toggle")
@@ -181,7 +181,7 @@ function controls_ready() {
       },
       error: function (data) {
         $().uxmessage('error', "/load error.")
-        $().uxmessage('error', JSON.stringify(data), false)
+        $().uxmessage('error', data.responseText, false)
         app_run_btn.stop()
       },
       complete: function (data) {
