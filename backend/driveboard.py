@@ -22,7 +22,6 @@ if not conf['mill_mode']:
 
 __author__  = 'Stefan Hechenberger <stefan@nortd.com>'
 
-
 ################ SENDING PROTOCOL
 CMD_STOP = chr(1)
 CMD_RESUME = chr(2)
@@ -112,7 +111,6 @@ INFO_DURATION = 'i'
 INFO_PIXEL_WIDTH = 'j'
 INFO_DEBUG = 'k'
 ################
-
 
 # reverse lookup for commands, for debugging
 # NOTE: have to be in sync with above definitions
@@ -215,7 +213,6 @@ markers_rx = {
 SerialLoop = None
 fallback_msg_thread = None
 
-
 class SerialLoopClass(threading.Thread):
 
     def __init__(self):
@@ -257,7 +254,6 @@ class SerialLoopClass(threading.Thread):
         # see: http://effbot.org/zone/thread-synchronization.htm
         self.lock = threading.Lock()
 
-
     def reset_status(self):
         self._status = {
             'ready': False,                 # is hardware idle (and not stop mode)
@@ -290,11 +286,9 @@ class SerialLoopClass(threading.Thread):
         }
         self._s = copy.deepcopy(self._status)
 
-
     def send_command(self, command):
         self.tx_buffer.append(ord(command))
         self.job_size += 1
-
 
     def send_param(self, param, val):
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
@@ -311,7 +305,6 @@ class SerialLoopClass(threading.Thread):
         self.tx_buffer.append(ord(param))
         self.job_size += 5
 
-
     def send_raster_data(self, data, start, end):
         count = 2
         with self.lock:
@@ -323,7 +316,6 @@ class SerialLoopClass(threading.Thread):
         with self.lock:
             self.tx_buffer.append(ord(CMD_RASTER_DATA_END))
             self.job_size += count
-
 
     def run(self):
         """Main loop of the serial thread."""
@@ -371,7 +363,6 @@ class SerialLoopClass(threading.Thread):
                 # flush stdout, so print shows up timely
                 sys.stdout.flush()
             time.sleep(0.004)  # 250 Hz
-
 
     def _serial_read(self):
         chunk = self.device.read(self.RX_CHUNK_SIZE)
@@ -942,7 +933,6 @@ def move(x=None, y=None, z=None):
             SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_LINE)
 
-
 def supermove(x=None, y=None, z=None):
     """Moves in machine coordinates bypassing any offsets."""
     global SerialLoop
@@ -968,7 +958,6 @@ def supermove(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_OFFSET_RESTORE)
         SerialLoop.send_command(CMD_LINE)
 
-
 def rastermove(x, y, z=0.0):
     global SerialLoop
     with SerialLoop.lock:
@@ -977,12 +966,10 @@ def rastermove(x, y, z=0.0):
         SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_RASTER)
 
-
 def rasterdata(data, start, end):
     # NOTE: no SerialLoop.lock
     # more granular locking in send_data
     SerialLoop.send_raster_data(data, start, end)
-
 
 def pause():
     global SerialLoop
@@ -990,12 +977,10 @@ def pause():
         if SerialLoop.tx_buffer:
             SerialLoop._paused = True
 
-
 def unpause():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop._paused = False
-
 
 def stop():
     """Force stop condition."""
@@ -1006,37 +991,31 @@ def stop():
         SerialLoop.job_size = 0
         SerialLoop.request_stop = True
 
-
 def unstop():
     """Resume from stop condition."""
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.request_resume = True
 
-
 def dwell():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
-
 
 def air_on():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_ENABLE)
 
-
 def air_off():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_DISABLE)
 
-
 def aux_on():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AUX_ENABLE)
-
 
 def aux_off():
     global SerialLoop
@@ -1058,7 +1037,6 @@ def pulse():
 
     air_off()
 
-
 def offset(x=None, y=None, z=None):
     """Sets an offset relative to present pos."""
     global SerialLoop
@@ -1072,7 +1050,6 @@ def offset(x=None, y=None, z=None):
         if z is not None:
             SerialLoop.send_param(PARAM_OFFSET_Z, z)
         SerialLoop.send_command(CMD_REF_RESTORE)
-
 
 def absoffset(x=None, y=None, z=None):
     """Sets an offset in machine coordinates."""
@@ -1088,11 +1065,9 @@ def absoffset(x=None, y=None, z=None):
             SerialLoop.send_param(PARAM_OFFSET_Z, z)
         SerialLoop.send_command(CMD_REF_RESTORE)
 
-
 def jobfile(filepath):
     jobdict = json.load(open(filepath))
     job(jobdict)
-
 
 def job(jobdict):
     if 'head' in jobdict:
@@ -1102,7 +1077,6 @@ def job(jobdict):
             job_laser(jobdict)
     else:
         print("INFO: not a valid job, 'head' entry missing")
-
 
 def job_laser(jobdict):
     """Queue a .dba laser job.
@@ -1214,7 +1188,7 @@ def job_laser(jobdict):
                 if raster_mode not in ['Forward', 'Reverse', 'Bidirectional']:
                     raster_mode = 'Bidirectional'
                     print("WARN: raster_mode not recognized. Please check your config file.")
-                
+
                 # create image obj, convert to grayscale, scale, loop through lines
                 imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
                 imgobj = imgobj.resize((px_w,px_h), resample=Image.BICUBIC)
@@ -1232,7 +1206,7 @@ def job_laser(jobdict):
                 # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
                 #     aux_on()
 
-                # extract raw pixel data into one large list 
+                # extract raw pixel data into one large list
                 # 0 = black / full power
                 # 255 = white / transparent / no power
                 pxarray = list(imgobj.getdata())
@@ -1259,7 +1233,7 @@ def job_laser(jobdict):
                 if pos_leadout > conf['workspace'][0]:
                     print("WARN: not enough leadout space")
                     pos_leadout = conf['workspace'][0]
-                
+
                 # print("mm: %s|%s|%s  h:%s" % ( posx + 0.5*pxsize_x - pos_leadin, size[0], pos_leadout - (posx + size[0] - 0.5*pxsize_x), size[1]))
                 # print("px: |%s|  raster_size:%s" % (px_w, pxsize_y))
                 # print(len(pxarray))
@@ -1269,7 +1243,7 @@ def job_laser(jobdict):
                 if raster_mode == 'Reverse':
                     direction = -1 # 1 is forward, -1 is reverse
                 else: # if 'Forward' or 'Bidirectional'
-                    direction = 1 
+                    direction = 1
 
                 # we don't want to waste time at low speeds travelling over whitespace where there is no engraving going on
                 # so, chop off all whitespace at the beginning and end of each line
@@ -1293,7 +1267,7 @@ def job_laser(jobdict):
                             segment_end += 1*direction
                             if line[j] == 255:
                                 whitespace_counter += 1
-                            elif on_starting_edge: 
+                            elif on_starting_edge:
                                 # make the first non-white pixel our starting point
                                 segment_start = segment_end
                                 on_starting_edge = False
@@ -1301,7 +1275,7 @@ def job_laser(jobdict):
                             elif whitespace_counter*pxsize_x <= 2*conf['raster_leadin']:
                                 # if the interior whitespace is too small, ignore it and travel at normal speeds
                                 whitespace_counter = 0
-                            
+
                             segment_ended = False
                             if j == (len(line) - 1):
                                 segment_ended = True
@@ -1323,11 +1297,11 @@ def job_laser(jobdict):
                                     pos_end = posx + (segment_end - line_start + 0.5)*pxsize_x
                                     pos_leadin = min(posx + (segment_start - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0]) # ensure we stay in the workspace
                                     pos_leadout = max(posx + (segment_end - line_start)*pxsize_x - conf['raster_leadin'], 0) # ensure we stay in the workspace
-                                
+
                                 # write out the movement and engraving info for the segment
                                 intensity(0.0) # intensity for seek and lead-in
                                 feedrate(seekrate) # feedrate for seek
-                                move(pos_leadin, line_y) # seek to lead-in start              
+                                move(pos_leadin, line_y) # seek to lead-in start
                                 feedrate(feedrate_) # feedrate for lead-in, raster, and lead-out
                                 move(pos_start, line_y) # lead-in
                                 intensity(intensity_) # intensity for raster move
@@ -1338,7 +1312,7 @@ def job_laser(jobdict):
                                     rasterdata(pxarray_reversed, px_n - segment_start, px_n - segment_end) # stream raster data for above rastermove
                                 intensity(0.0) # intensity for lead-out
                                 move(pos_leadout, line_y) # lead-out
-                                
+
                                 # prime for next segment
                                 segment_start = segment_end + whitespace_counter*direction
                                 segment_end = segment_start - 1*direction
@@ -1418,7 +1392,6 @@ def job_laser(jobdict):
     else:
         move(0, 0, 0)
 
-
 def job_mill(jobdict):
     """Queue a .dba mill job.
     A typical mill job dict looks like this:
@@ -1491,7 +1464,6 @@ def job_mill(jobdict):
     supermove(z=0)
     supermove(x=0, y=0)
 
-
 # Floyd-Steinberg dithering algorithm for raster data
 '''
 Floyd-Steinberg dithering coefficients (1/16):
@@ -1525,7 +1497,6 @@ def raster_dither(px_w, px_h, pxarray, n_levels=2):
 
     return pxarray_dithered
 
-
 # Functions to keep the computer from sleeping in the middle of a long job
 # https://stackoverflow.com/questions/57647034/prevent-sleep-mode-python-wakelock-on-python
 def disable_computer_sleep():
@@ -1557,7 +1528,6 @@ def enable_computer_sleep():
             print('Failed to reenable hibernation')
     else: # if system == 'Darwin':
         print(f'Display disabling not implemented in {system}')
-
 
 if __name__ == "__main__":
     # run like this to profile: python -m cProfile driveboard.py
