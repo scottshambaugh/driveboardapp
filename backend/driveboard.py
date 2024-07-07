@@ -1078,32 +1078,32 @@ def job_laser(jobdict):
     ###########################################################################
     {
       "head": {
-          "noreturn": True,          # do not return to origin, default: False
-          "optimized": 0.08,         # optional, tolerance to which it was optimized, default: 0 (not optimized)
-       },
+        "noreturn": True,          # do not return to origin, default: False
+        "optimized": 0.08,         # optional, tolerance to which it was optimized, default: 0 (not optimized)
+      },
       "passes": [
-          {
-              "items": [0],          # item by index
-              "relative": True,      # optional, default: False
-              "seekrate": 6000,      # optional, rate to first vertex
-              "feedrate": 2000,      # optional, rate to other vertices
-              "intensity": 100,      # optional, default: 0 (in percent)
-              "seekzero": False,     # optional, default: True
-              "pierce_time": 0,      # optional, default: 0
-              "pxsize": [0.4],       # optional
-              "air_assist": "pass",  # optional (feed, pass, off), default: pass
-          }
+        {
+          "items": [0],            # item by index
+          "relative": True,        # optional, default: False
+          "seekrate": 6000,        # optional, rate to first vertex
+          "feedrate": 2000,        # optional, rate to other vertices
+          "intensity": 100,        # optional, default: 0 (in percent)
+          "seekzero": False,       # optional, default: True
+          "pierce_time": 0,        # optional, default: 0
+          "pxsize": [0.4],         # optional
+          "air_assist": "pass",    # optional (feed, pass, off), default: pass
+        }
       ],
-     "items": [
+      "items": [
         {"def":0, "translate":[0,0,0], "color":"#BADA55"}
-     ],
-     "defs": [
+      ],
+      "defs": [
         {"kind":"path", "data":[[[0,10,0]]]},
         {"kind":"fill", "data":[[[0,10,0]]], "pxsize":0.4},
         {"kind":"image", "data":<data in base64>, "pos":[0,0], "size":[300,200]},
         {"kind":"mill", "data":[('G0',(x,y,z)), ('F', 1000), ('G1', (x,y,z))]},
-     ],
-     "stats":{"items":[{"bbox":[x1,y1,x2,y2], "len":100}], "all":{}}
+      ],
+      "stats":{"items":[{"bbox":[x1,y1,x2,y2], "len":100}], "all":{}}
     }
     ###########################################################################
     """
