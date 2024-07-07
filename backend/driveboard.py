@@ -395,25 +395,18 @@ class SerialLoopClass(threading.Thread):
                 # chr is in [!-@], process flag
                 if data_char == ERROR_LIMIT_HIT_X1:
                     self._s['stops']['x1'] = True
-                    # print "ERROR firmware: limit hit x1"
                 elif data_char == ERROR_LIMIT_HIT_X2:
                     self._s['stops']['x2'] = True
-                    # print "ERROR firmware: limit hit x2"
                 elif data_char == ERROR_LIMIT_HIT_Y1:
                     self._s['stops']['y1'] = True
-                    # print "ERROR firmware: limit hit y1"
                 elif data_char == ERROR_LIMIT_HIT_Y2:
                     self._s['stops']['y2'] = True
-                    # print "ERROR firmware: limit hit y2"
                 elif data_char == ERROR_LIMIT_HIT_Z1:
                     self._s['stops']['z1'] = True
-                    # print "ERROR firmware: limit hit z1"
                 elif data_char == ERROR_LIMIT_HIT_Z2:
                     self._s['stops']['z2'] = True
-                    # print "ERROR firmware: limit hit z2"
                 elif data_char == ERROR_SERIAL_STOP_REQUEST:
                     self._s['stops']['requested'] = True
-                    # print "ERROR firmware: stop request"
                     print("INFO firmware: stop request")
                 elif data_char == ERROR_RX_BUFFER_OVERFLOW:
                     self._s['stops']['buffer'] = True
@@ -604,7 +597,6 @@ class SerialLoopClass(threading.Thread):
             self.device.write([ord(char),ord(char)])  # by protocol send twice
             if time.time() - t_prewrite > 0.1:
                 pass
-                # print "WARN: write delay 2"
         except serial.SerialTimeoutException:
             print("ERROR: writeTimeoutError 1")
 
@@ -1126,7 +1118,6 @@ def job_laser(jobdict):
 
     # reset valves
     air_off()
-    # aux_off()
 
     # loop passes
     for pass_ in jobdict['passes']:
@@ -1146,8 +1137,6 @@ def job_laser(jobdict):
                 air_on()
         else:
             air_on()    # also default this behavior
-        # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'pass':
-        #     aux_on()
         # seekrate
         if 'seekrate' in pass_:
             seekrate = pass_['seekrate']
@@ -1203,8 +1192,6 @@ def job_laser(jobdict):
                 # assists on, beginning of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                     air_on()
-                # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                #     aux_on()
 
                 # extract raw pixel data into one large list
                 # 0 = black / full power
@@ -1233,11 +1220,6 @@ def job_laser(jobdict):
                 if pos_leadout > conf['workspace'][0]:
                     print("WARN: not enough leadout space")
                     pos_leadout = conf['workspace'][0]
-
-                # print("mm: %s|%s|%s  h:%s" % ( posx + 0.5*pxsize_x - pos_leadin, size[0], pos_leadout - (posx + size[0] - 0.5*pxsize_x), size[1]))
-                # print("px: |%s|  raster_size:%s" % (px_w, pxsize_y))
-                # print(len(pxarray))
-                # print((px_w*px_h))
 
                 # set direction
                 if raster_mode == 'Reverse':
@@ -1330,8 +1312,6 @@ def job_laser(jobdict):
                 # assists off, end of feed if set to 'feed'
                 if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                     air_off()
-                # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                #     aux_off()
 
             elif kind == "fill" or kind == "path":
                 path = def_['data']
@@ -1356,8 +1336,6 @@ def job_laser(jobdict):
                             # also air_assist defaults to 'feed'
                             if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                                 air_on()
-                            # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                            #     aux_on()
                             if is_2d:
                                 for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1])
@@ -1367,8 +1345,6 @@ def job_laser(jobdict):
                             # turn off assists if set to 'feed'
                             if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
                                 air_off()
-                            # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                            #     aux_off()
 
         # assists off, end of pass if set to 'pass'
         if 'air_assist' in pass_:
@@ -1376,8 +1352,6 @@ def job_laser(jobdict):
                 air_off()
         else:
             air_off()  # also default this behavior
-        # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'pass':
-        #     aux_off()
 
     # leave machine in absolute mode
     absolute()
