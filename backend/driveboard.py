@@ -1121,10 +1121,7 @@ def job_laser(jobdict):
 
     # loop passes
     for pass_ in jobdict['passes']:
-        if 'pxsize' in pass_:
-            pxsize_y = float(pass_['pxsize'])
-        else:
-            pxsize_y = float(conf['pxsize'])
+        pxsize_y = float(pass_.setdefault('pxsize', conf['pxsize']))
         if pxsize_y < 0.01:
             print(f'WARN: pxsize of {pxsize_y} mm/px is too small. Setting to 0.01 mm/px')
             pxsize_y = 0.01  # prevent div by 0
@@ -1132,28 +1129,14 @@ def job_laser(jobdict):
         pxsize_x = pxsize_y/2.0  # use 2x horiz resolution
         pixelwidth(pxsize_x)
         # assists on, beginning of pass if set to 'pass'
-        if 'air_assist' in pass_:
-            if pass_['air_assist'] == 'pass':
-                air_on()
-        else:
-            air_on()    # also default this behavior
-        # seekrate
-        if 'seekrate' in pass_:
-            seekrate = pass_['seekrate']
-        else:
-            seekrate = conf['seekrate']
-        # feedrate
-        if 'feedrate' in pass_:
-            feedrate_ = pass_['feedrate']
-        else:
-            feedrate_ = conf['feedrate']
-        # intensity
-        if 'intensity' in pass_:
-            intensity_ = pass_['intensity']
-        else:
-            intensity_ = 0.0
+        if pass_.setdefault('air_assist', 'pass') == 'pass':
+            air_on()
+        pass_.setdefault('seekzero', True)
+        seekrate = pass_.setdefault('seekrate', conf['seekrate'])
+        feedrate_ = pass_.setdefault('feedrate', conf['feedrate'])
+        intensity_ = pass_.setdefault('intensity', 0.0)
         # set absolute/relative
-        if 'relative' not in pass_ or not pass_['relative']:
+        if not pass_.setdefault('relative', False):
             absolute()
         else:
             relative()
@@ -1190,7 +1173,7 @@ def job_laser(jobdict):
                     imgobj = imgobj.convert("L")
 
                 # assists on, beginning of feed if set to 'feed'
-                if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                if pass_['air_assist'] == 'feed':
                     air_on()
 
                 # extract raw pixel data into one large list
@@ -1310,7 +1293,7 @@ def job_laser(jobdict):
                     line_y += pxsize_y
 
                 # assists off, end of feed if set to 'feed'
-                if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                if pass_['air_assist'] == 'feed':
                     air_off()
 
             elif kind == "fill" or kind == "path":
@@ -1319,7 +1302,7 @@ def job_laser(jobdict):
                     if len(polyline) > 0:
                         # first vertex -> seek
                         feedrate(seekrate)
-                        if 'seekzero' in pass_ and not pass_['seekzero']:
+                        if not pass_['seekzero']:
                             intensity(intensity_)
                         else:
                             intensity(0.0)
@@ -1334,7 +1317,7 @@ def job_laser(jobdict):
                             intensity(intensity_)
                             # turn on assists if set to 'feed'
                             # also air_assist defaults to 'feed'
-                            if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                            if pass_['air_assist'] == 'feed':
                                 air_on()
                             if is_2d:
                                 for i in range(1, len(polyline)):
@@ -1343,15 +1326,12 @@ def job_laser(jobdict):
                                 for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1], polyline[i][2])
                             # turn off assists if set to 'feed'
-                            if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                            if pass_['air_assist'] == 'feed':
                                 air_off()
 
         # assists off, end of pass if set to 'pass'
-        if 'air_assist' in pass_:
-            if pass_['air_assist'] == 'pass':
-                air_off()
-        else:
-            air_off()  # also default this behavior
+        if pass_['air_assist'] == 'pass':
+            air_off()
 
     # leave machine in absolute mode
     absolute()
