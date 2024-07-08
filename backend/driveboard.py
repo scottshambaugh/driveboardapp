@@ -1084,25 +1084,25 @@ def job_laser_validate(jobdict):
     x_lim = conf['workspace'][0] - x_off
     y_lim = conf['workspace'][1] - y_off
 
+    def check_point(point, passidx, kind):
+        # len(point) is not guaranteed to be 2
+        x, y = point[0], point[1]
+        err_str = ''
+        if y < -y_off:
+            err_str = 'top '
+        elif y > y_lim:
+            err_str = 'bottom '
+        if x < -x_off:
+            err_str += 'left'
+        elif x > x_lim:
+            err_str += 'right'
+        if err_str != '':
+            err_str = err_str.strip()
+            # the frontend displays the first pass as "pass 1" so use passidx+1
+            raise ValueError(f'pass {passidx+1}: point in {kind} beyond {err_str} of work area')
+
     # loop passes
     for passidx, pass_ in enumerate(jobdict['passes']):
-        def check_point(point, kind):
-            # len(point) is not guaranteed to be 2
-            x, y = point[0], point[1]
-            err_str = ''
-            if y < -y_off:
-                err_str = 'top '
-            elif y > y_lim:
-                err_str = 'bottom '
-            if x < -x_off:
-                err_str += 'left'
-            elif x > x_lim:
-                err_str += 'right'
-            if err_str != '':
-                err_str = err_str.strip()
-                # the frontend displays the first pass as "pass 1" so use passidx+1
-                raise ValueError(f'pass {passidx+1}: point in {kind} beyond {err_str} of work area')
-
         # set absolute/relative
         is_relative = pass_.get('relative', False)
 
@@ -1119,13 +1119,13 @@ def job_laser_validate(jobdict):
                 # whether the image fits in the work area, its enough to check
                 # two opposite corners
                 # first top left
-                check_point(pos, kind)
+                check_point(pos, passidx, kind)
 
                 # add pos + size to get bottom right
                 size = def_["size"]
                 pos[0] += size[0]
                 pos[1] += size[1]
-                check_point(pos, kind)
+                check_point(pos, passidx, kind)
 
             elif kind == "fill" or kind == "path":
                 path = def_['data']
@@ -1135,9 +1135,9 @@ def job_laser_validate(jobdict):
                         if is_relative:
                             point[0] += pos[0]
                             point[1] += pos[1]
-                            check_point(point, kind)
+                            check_point(point, passidx, kind)
                         else:
-                            check_point(pos, kind)
+                            check_point(pos, passidx, kind)
 
 def job_laser(jobdict):
     """Queue a .dba laser job.
