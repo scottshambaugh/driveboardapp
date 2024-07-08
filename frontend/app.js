@@ -47,7 +47,7 @@ var app_visibility = true
       $('#log_content').children('div').first().show('blind');
       if ($("#log_content").is(':hidden')) {
         $().toastmessage('showToast',
-          {text: text, sticky: false, position: 'top-center', type: 'error'}
+          {text: text, sticky: false, position: 'top-center', type: 'error', stayTime: 6000}
         )
       }
     }
