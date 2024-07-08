@@ -172,6 +172,7 @@ function controls_ready() {
           },
           error: function (data) {
             $().uxmessage('error', "/run error.")
+            $().uxmessage('error', data.responseText, false)
             app_run_btn.stop()
           },
           complete: function (data) {

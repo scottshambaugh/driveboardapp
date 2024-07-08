@@ -1070,6 +1070,75 @@ def job(jobdict):
     else:
         print("INFO: not a valid job, 'head' entry missing")
 
+def job_laser_validate(jobdict):
+    """
+    Validate that the defined passes stay within the work area.
+
+    Raises a ValueError with a descriptive message if the job is not valid.
+    """
+    global SerialLoop
+
+    with SerialLoop.lock:
+        x_off = SerialLoop._status['offset'][0]
+        y_off = SerialLoop._status['offset'][1]
+    x_lim = conf['workspace'][0] - x_off
+    y_lim = conf['workspace'][1] - y_off
+
+    # loop passes
+    for passidx, pass_ in enumerate(jobdict['passes']):
+        def check_point(point, kind):
+            # len(point) is not guaranteed to be 2
+            x, y = point[0], point[1]
+            err_str = ''
+            if y < -y_off:
+                err_str = 'top '
+            elif y > y_lim:
+                err_str = 'bottom '
+            if x < -x_off:
+                err_str += 'left'
+            elif x > x_lim:
+                err_str += 'right'
+            if err_str != '':
+                err_str = err_str.strip()
+                # the frontend displays the first pass as "pass 1" so use passidx+1
+                raise ValueError(f'pass {passidx+1}: point in {kind} beyond {err_str} of work area')
+
+        # set absolute/relative
+        is_relative = pass_.get('relative', False)
+
+        # loop pass' items
+        for itemidx in pass_['items']:
+            item = jobdict['items'][itemidx]
+            def_ = jobdict['defs'][item['def']]
+            kind = def_['kind']
+
+            if kind == "image":
+                pos = def_["pos"]
+
+                # the image must be aligned with the axes, so to determine
+                # whether the image fits in the work area, its enough to check
+                # two opposite corners
+                # first top left
+                check_point(pos, kind)
+
+                # add pos + size to get bottom right
+                size = def_["size"]
+                pos[0] += size[0]
+                pos[1] += size[1]
+                check_point(pos, kind)
+
+            elif kind == "fill" or kind == "path":
+                path = def_['data']
+                for polyline in path:
+                    point = [0, 0]
+                    for pos in polyline:
+                        if is_relative:
+                            point[0] += pos[0]
+                            point[1] += pos[1]
+                            check_point(point, kind)
+                        else:
+                            check_point(pos, kind)
+
 def job_laser(jobdict):
     """Queue a .dba laser job.
     A job dictionary can define vector and raster passes.
@@ -1115,6 +1184,9 @@ def job_laser(jobdict):
     if not 'passes' in jobdict:
         print("NOTICE: no passes defined")
         return
+
+    # raises an exception if the job is not valid
+    job_laser_validate(jobdict)
 
     # reset valves
     air_off()

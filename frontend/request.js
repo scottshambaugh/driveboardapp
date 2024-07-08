@@ -31,6 +31,8 @@ function request_get(args) {
     error: function (data) {
       if ('error' in args) {
         args.error(data)
+      } else {
+        $().uxmessage('error', data.responseText, false)
       }
     },
     complete: function (data) {
