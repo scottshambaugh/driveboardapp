@@ -21,7 +21,7 @@ Outstanding issues:
 * Documentation needs to be updated
 * Not tested on Mac
 
-Many thanks to scottshambaugh, FREILab, makermusings, vanillasoap, and martinxyz for keeping this project alive. Below is the original documentation.
+Many thanks to scottshambaugh, FREILab, Johann150, makermusings, vanillasoap, and martinxyz for keeping this project alive. Below is the original documentation.
 
 -------------
 
