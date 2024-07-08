@@ -652,7 +652,10 @@ def run(jobname):
     job = _get(jobname)
     if not driveboard.status()['ready']:
         raise bottle.HTTPResponse("Machine not ready.", 400)
-    driveboard.job(json.loads(job))
+    try:
+        driveboard.job(json.loads(job))
+    except ValueError as e:
+        raise bottle.HTTPResponse(str(e), 422)
     return '{}'
 
 
@@ -670,7 +673,10 @@ def run_direct():
     # sanity check
     if job is None:
         raise bottle.HTTPResponse("Invalid request data.", 400)
-    driveboard.job(json.loads(job))
+    try:
+        driveboard.job(json.loads(job))
+    except ValueError as e:
+        raise bottle.HTTPResponse(str(e), 422)
     return '{}'
 
 

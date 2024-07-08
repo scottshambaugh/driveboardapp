@@ -22,7 +22,6 @@ if not conf['mill_mode']:
 
 __author__  = 'Stefan Hechenberger <stefan@nortd.com>'
 
-
 ################ SENDING PROTOCOL
 CMD_STOP = chr(1)
 CMD_RESUME = chr(2)
@@ -112,7 +111,6 @@ INFO_DURATION = 'i'
 INFO_PIXEL_WIDTH = 'j'
 INFO_DEBUG = 'k'
 ################
-
 
 # reverse lookup for commands, for debugging
 # NOTE: have to be in sync with above definitions
@@ -215,7 +213,6 @@ markers_rx = {
 SerialLoop = None
 fallback_msg_thread = None
 
-
 class SerialLoopClass(threading.Thread):
 
     def __init__(self):
@@ -257,7 +254,6 @@ class SerialLoopClass(threading.Thread):
         # see: http://effbot.org/zone/thread-synchronization.htm
         self.lock = threading.Lock()
 
-
     def reset_status(self):
         self._status = {
             'ready': False,                 # is hardware idle (and not stop mode)
@@ -290,11 +286,9 @@ class SerialLoopClass(threading.Thread):
         }
         self._s = copy.deepcopy(self._status)
 
-
     def send_command(self, command):
         self.tx_buffer.append(ord(command))
         self.job_size += 1
-
 
     def send_param(self, param, val):
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
@@ -311,7 +305,6 @@ class SerialLoopClass(threading.Thread):
         self.tx_buffer.append(ord(param))
         self.job_size += 5
 
-
     def send_raster_data(self, data, start, end):
         count = 2
         with self.lock:
@@ -323,7 +316,6 @@ class SerialLoopClass(threading.Thread):
         with self.lock:
             self.tx_buffer.append(ord(CMD_RASTER_DATA_END))
             self.job_size += count
-
 
     def run(self):
         """Main loop of the serial thread."""
@@ -372,7 +364,6 @@ class SerialLoopClass(threading.Thread):
                 sys.stdout.flush()
             time.sleep(0.004)  # 250 Hz
 
-
     def _serial_read(self):
         chunk = self.device.read(self.RX_CHUNK_SIZE)
         if conf['print_serial_data'] and chunk != b'':
@@ -404,25 +395,18 @@ class SerialLoopClass(threading.Thread):
                 # chr is in [!-@], process flag
                 if data_char == ERROR_LIMIT_HIT_X1:
                     self._s['stops']['x1'] = True
-                    # print "ERROR firmware: limit hit x1"
                 elif data_char == ERROR_LIMIT_HIT_X2:
                     self._s['stops']['x2'] = True
-                    # print "ERROR firmware: limit hit x2"
                 elif data_char == ERROR_LIMIT_HIT_Y1:
                     self._s['stops']['y1'] = True
-                    # print "ERROR firmware: limit hit y1"
                 elif data_char == ERROR_LIMIT_HIT_Y2:
                     self._s['stops']['y2'] = True
-                    # print "ERROR firmware: limit hit y2"
                 elif data_char == ERROR_LIMIT_HIT_Z1:
                     self._s['stops']['z1'] = True
-                    # print "ERROR firmware: limit hit z1"
                 elif data_char == ERROR_LIMIT_HIT_Z2:
                     self._s['stops']['z2'] = True
-                    # print "ERROR firmware: limit hit z2"
                 elif data_char == ERROR_SERIAL_STOP_REQUEST:
                     self._s['stops']['requested'] = True
-                    # print "ERROR firmware: stop request"
                     print("INFO firmware: stop request")
                 elif data_char == ERROR_RX_BUFFER_OVERFLOW:
                     self._s['stops']['buffer'] = True
@@ -613,7 +597,6 @@ class SerialLoopClass(threading.Thread):
             self.device.write([ord(char),ord(char)])  # by protocol send twice
             if time.time() - t_prewrite > 0.1:
                 pass
-                # print "WARN: write delay 2"
         except serial.SerialTimeoutException:
             print("ERROR: writeTimeoutError 1")
 
@@ -942,7 +925,6 @@ def move(x=None, y=None, z=None):
             SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_LINE)
 
-
 def supermove(x=None, y=None, z=None):
     """Moves in machine coordinates bypassing any offsets."""
     global SerialLoop
@@ -968,7 +950,6 @@ def supermove(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_OFFSET_RESTORE)
         SerialLoop.send_command(CMD_LINE)
 
-
 def rastermove(x, y, z=0.0):
     global SerialLoop
     with SerialLoop.lock:
@@ -977,12 +958,10 @@ def rastermove(x, y, z=0.0):
         SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_RASTER)
 
-
 def rasterdata(data, start, end):
     # NOTE: no SerialLoop.lock
     # more granular locking in send_data
     SerialLoop.send_raster_data(data, start, end)
-
 
 def pause():
     global SerialLoop
@@ -990,12 +969,10 @@ def pause():
         if SerialLoop.tx_buffer:
             SerialLoop._paused = True
 
-
 def unpause():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop._paused = False
-
 
 def stop():
     """Force stop condition."""
@@ -1006,37 +983,31 @@ def stop():
         SerialLoop.job_size = 0
         SerialLoop.request_stop = True
 
-
 def unstop():
     """Resume from stop condition."""
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.request_resume = True
 
-
 def dwell():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
-
 
 def air_on():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_ENABLE)
 
-
 def air_off():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_DISABLE)
 
-
 def aux_on():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AUX_ENABLE)
-
 
 def aux_off():
     global SerialLoop
@@ -1058,7 +1029,6 @@ def pulse():
 
     air_off()
 
-
 def offset(x=None, y=None, z=None):
     """Sets an offset relative to present pos."""
     global SerialLoop
@@ -1072,7 +1042,6 @@ def offset(x=None, y=None, z=None):
         if z is not None:
             SerialLoop.send_param(PARAM_OFFSET_Z, z)
         SerialLoop.send_command(CMD_REF_RESTORE)
-
 
 def absoffset(x=None, y=None, z=None):
     """Sets an offset in machine coordinates."""
@@ -1088,11 +1057,9 @@ def absoffset(x=None, y=None, z=None):
             SerialLoop.send_param(PARAM_OFFSET_Z, z)
         SerialLoop.send_command(CMD_REF_RESTORE)
 
-
 def jobfile(filepath):
     jobdict = json.load(open(filepath))
     job(jobdict)
-
 
 def job(jobdict):
     if 'head' in jobdict:
@@ -1103,6 +1070,74 @@ def job(jobdict):
     else:
         print("INFO: not a valid job, 'head' entry missing")
 
+def job_laser_validate(jobdict):
+    """
+    Validate that the defined passes stay within the work area.
+
+    Raises a ValueError with a descriptive message if the job is not valid.
+    """
+    global SerialLoop
+
+    with SerialLoop.lock:
+        x_off = SerialLoop._status['offset'][0]
+        y_off = SerialLoop._status['offset'][1]
+    x_lim = conf['workspace'][0] - x_off
+    y_lim = conf['workspace'][1] - y_off
+
+    def check_point(point, passidx, kind):
+        # len(point) is not guaranteed to be 2
+        x, y = point[0], point[1]
+        err_str = ''
+        if y < -y_off:
+            err_str = 'top '
+        elif y > y_lim:
+            err_str = 'bottom '
+        if x < -x_off:
+            err_str += 'left'
+        elif x > x_lim:
+            err_str += 'right'
+        if err_str != '':
+            err_str = err_str.strip()
+            # the frontend displays the first pass as "pass 1" so use passidx+1
+            raise ValueError(f'pass {passidx+1}: point in {kind} beyond {err_str} of work area')
+
+    # loop passes
+    for passidx, pass_ in enumerate(jobdict['passes']):
+        # set absolute/relative
+        is_relative = pass_.get('relative', False)
+
+        # loop pass' items
+        for itemidx in pass_['items']:
+            item = jobdict['items'][itemidx]
+            def_ = jobdict['defs'][item['def']]
+            kind = def_['kind']
+
+            if kind == "image":
+                pos = def_["pos"]
+
+                # the image must be aligned with the axes, so to determine
+                # whether the image fits in the work area, its enough to check
+                # two opposite corners
+                # first top left
+                check_point(pos, passidx, kind)
+
+                # add pos + size to get bottom right
+                size = def_["size"]
+                pos[0] += size[0]
+                pos[1] += size[1]
+                check_point(pos, passidx, kind)
+
+            elif kind == "fill" or kind == "path":
+                path = def_['data']
+                for polyline in path:
+                    point = [0, 0]
+                    for pos in polyline:
+                        if is_relative:
+                            point[0] += pos[0]
+                            point[1] += pos[1]
+                            check_point(point, passidx, kind)
+                        else:
+                            check_point(pos, passidx, kind)
 
 def job_laser(jobdict):
     """Queue a .dba laser job.
@@ -1112,32 +1147,32 @@ def job_laser(jobdict):
     ###########################################################################
     {
       "head": {
-          "noreturn": True,          # do not return to origin, default: False
-          "optimized": 0.08,         # optional, tolerance to which it was optimized, default: 0 (not optimized)
-       },
+        "noreturn": True,          # do not return to origin, default: False
+        "optimized": 0.08,         # optional, tolerance to which it was optimized, default: 0 (not optimized)
+      },
       "passes": [
-          {
-              "items": [0],          # item by index
-              "relative": True,      # optional, default: False
-              "seekrate": 6000,      # optional, rate to first vertex
-              "feedrate": 2000,      # optional, rate to other vertices
-              "intensity": 100,      # optional, default: 0 (in percent)
-              "seekzero": False,     # optional, default: True
-              "pierce_time": 0,      # optional, default: 0
-              "pxsize": [0.4],       # optional
-              "air_assist": "pass",  # optional (feed, pass, off), default: pass
-          }
+        {
+          "items": [0],            # item by index
+          "relative": True,        # optional, default: False
+          "seekrate": 6000,        # optional, rate to first vertex
+          "feedrate": 2000,        # optional, rate to other vertices
+          "intensity": 100,        # optional, default: 0 (in percent)
+          "seekzero": False,       # optional, default: True
+          "pierce_time": 0,        # optional, default: 0
+          "pxsize": [0.4],         # optional
+          "air_assist": "pass",    # optional (feed, pass, off), default: pass
+        }
       ],
-     "items": [
+      "items": [
         {"def":0, "translate":[0,0,0], "color":"#BADA55"}
-     ],
-     "defs": [
+      ],
+      "defs": [
         {"kind":"path", "data":[[[0,10,0]]]},
         {"kind":"fill", "data":[[[0,10,0]]], "pxsize":0.4},
         {"kind":"image", "data":<data in base64>, "pos":[0,0], "size":[300,200]},
         {"kind":"mill", "data":[('G0',(x,y,z)), ('F', 1000), ('G1', (x,y,z))]},
-     ],
-     "stats":{"items":[{"bbox":[x1,y1,x2,y2], "len":100}], "all":{}}
+      ],
+      "stats":{"items":[{"bbox":[x1,y1,x2,y2], "len":100}], "all":{}}
     }
     ###########################################################################
     """
@@ -1150,16 +1185,15 @@ def job_laser(jobdict):
         print("NOTICE: no passes defined")
         return
 
+    # raises an exception if the job is not valid
+    job_laser_validate(jobdict)
+
     # reset valves
     air_off()
-    # aux_off()
 
     # loop passes
     for pass_ in jobdict['passes']:
-        if 'pxsize' in pass_:
-            pxsize_y = float(pass_['pxsize'])
-        else:
-            pxsize_y = float(conf['pxsize'])
+        pxsize_y = float(pass_.setdefault('pxsize', conf['pxsize']))
         if pxsize_y < 0.01:
             print(f'WARN: pxsize of {pxsize_y} mm/px is too small. Setting to 0.01 mm/px')
             pxsize_y = 0.01  # prevent div by 0
@@ -1167,30 +1201,14 @@ def job_laser(jobdict):
         pxsize_x = pxsize_y/2.0  # use 2x horiz resolution
         pixelwidth(pxsize_x)
         # assists on, beginning of pass if set to 'pass'
-        if 'air_assist' in pass_:
-            if pass_['air_assist'] == 'pass':
-                air_on()
-        else:
-            air_on()    # also default this behavior
-        # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'pass':
-        #     aux_on()
-        # seekrate
-        if 'seekrate' in pass_:
-            seekrate = pass_['seekrate']
-        else:
-            seekrate = conf['seekrate']
-        # feedrate
-        if 'feedrate' in pass_:
-            feedrate_ = pass_['feedrate']
-        else:
-            feedrate_ = conf['feedrate']
-        # intensity
-        if 'intensity' in pass_:
-            intensity_ = pass_['intensity']
-        else:
-            intensity_ = 0.0
+        if pass_.setdefault('air_assist', 'pass') == 'pass':
+            air_on()
+        pass_.setdefault('seekzero', True)
+        seekrate = pass_.setdefault('seekrate', conf['seekrate'])
+        feedrate_ = pass_.setdefault('feedrate', conf['feedrate'])
+        intensity_ = pass_.setdefault('intensity', 0.0)
         # set absolute/relative
-        if 'relative' not in pass_ or not pass_['relative']:
+        if not pass_.setdefault('relative', False):
             absolute()
         else:
             relative()
@@ -1214,7 +1232,7 @@ def job_laser(jobdict):
                 if raster_mode not in ['Forward', 'Reverse', 'Bidirectional']:
                     raster_mode = 'Bidirectional'
                     print("WARN: raster_mode not recognized. Please check your config file.")
-                
+
                 # create image obj, convert to grayscale, scale, loop through lines
                 imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
                 imgobj = imgobj.resize((px_w,px_h), resample=Image.BICUBIC)
@@ -1227,12 +1245,10 @@ def job_laser(jobdict):
                     imgobj = imgobj.convert("L")
 
                 # assists on, beginning of feed if set to 'feed'
-                if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                if pass_['air_assist'] == 'feed':
                     air_on()
-                # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                #     aux_on()
 
-                # extract raw pixel data into one large list 
+                # extract raw pixel data into one large list
                 # 0 = black / full power
                 # 255 = white / transparent / no power
                 pxarray = list(imgobj.getdata())
@@ -1259,17 +1275,12 @@ def job_laser(jobdict):
                 if pos_leadout > conf['workspace'][0]:
                     print("WARN: not enough leadout space")
                     pos_leadout = conf['workspace'][0]
-                
-                # print("mm: %s|%s|%s  h:%s" % ( posx + 0.5*pxsize_x - pos_leadin, size[0], pos_leadout - (posx + size[0] - 0.5*pxsize_x), size[1]))
-                # print("px: |%s|  raster_size:%s" % (px_w, pxsize_y))
-                # print(len(pxarray))
-                # print((px_w*px_h))
 
                 # set direction
                 if raster_mode == 'Reverse':
                     direction = -1 # 1 is forward, -1 is reverse
                 else: # if 'Forward' or 'Bidirectional'
-                    direction = 1 
+                    direction = 1
 
                 # we don't want to waste time at low speeds travelling over whitespace where there is no engraving going on
                 # so, chop off all whitespace at the beginning and end of each line
@@ -1293,7 +1304,7 @@ def job_laser(jobdict):
                             segment_end += 1*direction
                             if line[j] == 255:
                                 whitespace_counter += 1
-                            elif on_starting_edge: 
+                            elif on_starting_edge:
                                 # make the first non-white pixel our starting point
                                 segment_start = segment_end
                                 on_starting_edge = False
@@ -1301,7 +1312,7 @@ def job_laser(jobdict):
                             elif whitespace_counter*pxsize_x <= 2*conf['raster_leadin']:
                                 # if the interior whitespace is too small, ignore it and travel at normal speeds
                                 whitespace_counter = 0
-                            
+
                             segment_ended = False
                             if j == (len(line) - 1):
                                 segment_ended = True
@@ -1323,11 +1334,11 @@ def job_laser(jobdict):
                                     pos_end = posx + (segment_end - line_start + 0.5)*pxsize_x
                                     pos_leadin = min(posx + (segment_start - line_start)*pxsize_x + conf['raster_leadin'], conf['workspace'][0]) # ensure we stay in the workspace
                                     pos_leadout = max(posx + (segment_end - line_start)*pxsize_x - conf['raster_leadin'], 0) # ensure we stay in the workspace
-                                
+
                                 # write out the movement and engraving info for the segment
                                 intensity(0.0) # intensity for seek and lead-in
                                 feedrate(seekrate) # feedrate for seek
-                                move(pos_leadin, line_y) # seek to lead-in start              
+                                move(pos_leadin, line_y) # seek to lead-in start
                                 feedrate(feedrate_) # feedrate for lead-in, raster, and lead-out
                                 move(pos_start, line_y) # lead-in
                                 intensity(intensity_) # intensity for raster move
@@ -1338,7 +1349,7 @@ def job_laser(jobdict):
                                     rasterdata(pxarray_reversed, px_n - segment_start, px_n - segment_end) # stream raster data for above rastermove
                                 intensity(0.0) # intensity for lead-out
                                 move(pos_leadout, line_y) # lead-out
-                                
+
                                 # prime for next segment
                                 segment_start = segment_end + whitespace_counter*direction
                                 segment_end = segment_start - 1*direction
@@ -1354,10 +1365,8 @@ def job_laser(jobdict):
                     line_y += pxsize_y
 
                 # assists off, end of feed if set to 'feed'
-                if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                if pass_['air_assist'] == 'feed':
                     air_off()
-                # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                #     aux_off()
 
             elif kind == "fill" or kind == "path":
                 path = def_['data']
@@ -1365,7 +1374,7 @@ def job_laser(jobdict):
                     if len(polyline) > 0:
                         # first vertex -> seek
                         feedrate(seekrate)
-                        if 'seekzero' in pass_ and not pass_['seekzero']:
+                        if not pass_['seekzero']:
                             intensity(intensity_)
                         else:
                             intensity(0.0)
@@ -1380,10 +1389,8 @@ def job_laser(jobdict):
                             intensity(intensity_)
                             # turn on assists if set to 'feed'
                             # also air_assist defaults to 'feed'
-                            if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                            if pass_['air_assist'] == 'feed':
                                 air_on()
-                            # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                            #     aux_on()
                             if is_2d:
                                 for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1])
@@ -1391,19 +1398,12 @@ def job_laser(jobdict):
                                 for i in range(1, len(polyline)):
                                     move(polyline[i][0], polyline[i][1], polyline[i][2])
                             # turn off assists if set to 'feed'
-                            if 'air_assist' in pass_ and pass_['air_assist'] == 'feed':
+                            if pass_['air_assist'] == 'feed':
                                 air_off()
-                            # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'feed':
-                            #     aux_off()
 
         # assists off, end of pass if set to 'pass'
-        if 'air_assist' in pass_:
-            if pass_['air_assist'] == 'pass':
-                air_off()
-        else:
-            air_off()  # also default this behavior
-        # if 'aux_assist' in pass_ and pass_['aux_assist'] == 'pass':
-        #     aux_off()
+        if pass_['air_assist'] == 'pass':
+            air_off()
 
     # leave machine in absolute mode
     absolute()
@@ -1417,7 +1417,6 @@ def job_laser(jobdict):
         pass
     else:
         move(0, 0, 0)
-
 
 def job_mill(jobdict):
     """Queue a .dba mill job.
@@ -1491,7 +1490,6 @@ def job_mill(jobdict):
     supermove(z=0)
     supermove(x=0, y=0)
 
-
 # Floyd-Steinberg dithering algorithm for raster data
 '''
 Floyd-Steinberg dithering coefficients (1/16):
@@ -1525,7 +1523,6 @@ def raster_dither(px_w, px_h, pxarray, n_levels=2):
 
     return pxarray_dithered
 
-
 # Functions to keep the computer from sleeping in the middle of a long job
 # https://stackoverflow.com/questions/57647034/prevent-sleep-mode-python-wakelock-on-python
 def disable_computer_sleep():
@@ -1557,7 +1554,6 @@ def enable_computer_sleep():
             print('Failed to reenable hibernation')
     else: # if system == 'Darwin':
         print(f'Display disabling not implemented in {system}')
-
 
 if __name__ == "__main__":
     # run like this to profile: python -m cProfile driveboard.py
