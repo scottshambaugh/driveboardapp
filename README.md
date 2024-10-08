@@ -1,6 +1,6 @@
 **Notes on this fork:**
 
-The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboardapp) is no longer maintained. Here are some of the highlights in this fork, see this thread for more details https://groups.google.com/g/lasersaur/c/n54LNN86H-c:
+The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboardapp) is no longer maintained. Here are some of the highlights in this fork, see [this thread](https://groups.google.com/g/lasersaur/c/n54LNN86H-c) or [this blog post](https://theshamblog.com/software-mods-to-the-lasersaur/) for more details:
 * Upgrade from python2 to python3
 * Rastering completely rewritten: skips over large whitespace for speed, option for inverting, can select number of gray levels (set to 2-3 for dithering, max of 128)
 * Bidirectional and nearest neighbor pathing algorithms for fill and rastering speedups
