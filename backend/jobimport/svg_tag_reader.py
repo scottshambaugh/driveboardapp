@@ -205,8 +205,21 @@ class SVGTagReader:
         if width <= 0 or height <= 0:
             return
 
+        if data is None:
+            log.error("image tag skipped: no href attribute found")
+            return
+
         if data.startswith('data:image/'):
-            image = data
+            # Clean base64 data: remove whitespace that may have been introduced
+            # by XML entity encoding (e.g., &#10; converted to newlines)
+            # Split at comma to preserve the data URI prefix
+            prefix, _, b64data = data.partition(',')
+            if b64data:
+                # Remove all whitespace from base64 portion
+                b64data = ''.join(b64data.split())
+                image = prefix + ',' + b64data
+            else:
+                image = data
         else:
             image = ''
             log.error("ERROR: Only embedded images are supported.")
@@ -221,17 +234,16 @@ class SVGTagReader:
 
 
     def defs(self, node):
-        # not supported
+        # not supported (contains gradients, patterns, symbols, etc.)
         # http://www.w3.org/TR/SVG11/struct.html#Head
         # has transform and style attributes
-        log.warn("'defs' tag is not supported, ignored")
+        log.debug("'defs' tag is not supported, ignored")
 
     def style(self, node):
         # not supported: embedded style sheets
         # http://www.w3.org/TR/SVG11/styling.html#StyleElement
         # instead presentation attributes and the 'style' attribute
-        log.warn("'style' tag is not supported, use presentation \
-                      attributes or the style attribute instead")
+        log.debug("'style' tag is not supported, use presentation attributes or the style attribute instead")
 
 
 

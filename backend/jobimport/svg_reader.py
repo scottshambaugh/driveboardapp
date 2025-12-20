@@ -4,17 +4,23 @@ __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 import re
 import math
 import logging
+import base64
+import io
 
 from .webcolors import hex_to_rgb, rgb_to_hex
 from .utilities import matrixMult, matrixApply, matrixApplyScale
 from .utilities import vertexScale, parseFloats, parseScalar
 from .svg_tag_reader import SVGTagReader
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 logging.basicConfig()
 log = logging.getLogger("svg_reader")
-log.setLevel(logging.DEBUG)
-# log.setLevel(logging.INFO)
+# log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 # log.setLevel(logging.WARN)
 
 
@@ -100,6 +106,45 @@ class SVGReader:
 
         self.rasters = []
 
+
+    def _flip_image_data(self, data_uri, flip_h, flip_v):
+        """Flip image data horizontally and/or vertically.
+        
+        Args:
+            data_uri: Base64 data URI string (e.g., 'data:image/png;base64,...')
+            flip_h: Flip horizontally if True
+            flip_v: Flip vertically if True
+            
+        Returns:
+            Modified data URI with flipped image, or original if processing fails
+        """
+        try:
+            # Parse the data URI
+            if ',' not in data_uri:
+                return data_uri
+            header, b64data = data_uri.split(',', 1)
+            
+            # Decode base64 to image
+            img_bytes = base64.b64decode(b64data)
+            img = Image.open(io.BytesIO(img_bytes))
+            
+            # Apply flips
+            if flip_h:
+                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            if flip_v:
+                img = img.transpose(Image.FLIP_TOP_BOTTOM)
+            
+            # Re-encode to base64
+            buffer = io.BytesIO()
+            img_format = 'PNG' if 'png' in header.lower() else 'JPEG'
+            img.save(buffer, format=img_format)
+            new_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            
+            return header + ',' + new_b64
+            
+        except Exception as e:
+            log.warning(f"Failed to flip image: {e}")
+            return data_uri
 
 
     def parse(self, svgstring, force_dpi=None, require_unit=False):
@@ -354,6 +399,26 @@ class SVGReader:
                     # size to world scale and then to mm units
                     matrixApplyScale(node['xformToWorld'], raster['size'])
                     vertexScale(raster['size'], self.px2mm)
+                    
+                    # Check for flips (negative scale in transform)
+                    # If size becomes negative, we need to flip the image data
+                    flip_h = raster['size'][0] < 0
+                    flip_v = raster['size'][1] < 0
+                    
+                    # Ensure size is always positive
+                    raster['size'][0] = abs(raster['size'][0])
+                    raster['size'][1] = abs(raster['size'][1])
+                    
+                    # Adjust position to compensate for flip
+                    # When flipping, the anchor point shifts by the size
+                    if flip_h:
+                        raster['pos'][0] -= raster['size'][0]
+                    if flip_v:
+                        raster['pos'][1] -= raster['size'][1]
+                    
+                    # Apply flip to image data if needed
+                    if (flip_h or flip_v) and Image is not None and raster['data']:
+                        raster['data'] = self._flip_image_data(raster['data'], flip_h, flip_v)
 
                     self.rasters.append(raster)
 

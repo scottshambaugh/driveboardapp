@@ -219,6 +219,18 @@ jobhandler = {
 
   getImageThumb : function(imgitem, width, height) {
     var img = this.defs[imgitem.def]
+    
+    // Safety check for valid size values
+    if (!img.size || !img.size[0] || !img.size[1] || img.size[0] <= 0 || img.size[1] <= 0) {
+      console.error("getImageThumb: Invalid img.size", img.size)
+      // Fall back to image natural dimensions
+      if (img.data && img.data.width > 0 && img.data.height > 0) {
+        img.size = [img.data.width, img.data.height]
+      } else {
+        return new Image()  // Return empty image
+      }
+    }
+    
     if (width <= 0 ) {
       // scale proportionally by height
       var w = img.size[0]*(height/img.size[1])
@@ -238,12 +250,17 @@ jobhandler = {
         height = h
       }
     }
+    
+    // Ensure we have valid dimensions
+    width = Math.max(1, Math.round(width))
+    height = Math.max(1, Math.round(height))
+    
     var canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
     canvas.getContext('2d').drawImage(img.data, 0, 0, width, height)
     var thumb = new Image()
-  	thumb.src = canvas.toDataURL("image/png")
+    thumb.src = canvas.toDataURL("image/png")
     return thumb
   },
 
@@ -269,6 +286,13 @@ jobhandler = {
       var pos_y = img.pos[1]*jobview_mm2px
       var img_w = img.size[0]*jobview_mm2px
       var img_h = img.size[1]*jobview_mm2px
+      
+      // Safety check: ensure valid dimensions before scaling
+      if (!img.data.width || !img.data.height || img.data.width <= 0 || img.data.height <= 0) {
+        console.error("Image " + i + " has invalid dimensions: " + img.data.width + "x" + img.data.height)
+        return
+      }
+      
       var img_paper = new paper.Raster(img.data)
       group.addChild(img_paper);
       img_paper.scale(img_w/img.data.width, img_h/img.data.height)
