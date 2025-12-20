@@ -1176,6 +1176,7 @@ def job_laser_validate(jobdict):
                 check_point(pos, passidx, kind)
 
                 # add pos + size to get bottom right
+                pos = pos.copy()
                 size = def_["size"]
                 pos[0] += size[0]
                 pos[1] += size[1]
