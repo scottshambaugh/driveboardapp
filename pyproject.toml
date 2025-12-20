@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "driveboardapp"
+version = "20.12"
+description = "Control software for Driveboard-based CNC machines like Lasersaur"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "bottle>=0.12.16",
+    "pillow>=6.2.1",
+    "pyserial>=3.4",
+    "dxfgrabber>=1.0",
+    "requests>=2.21.0",
+]
+
+[project.optional-dependencies]
+visualization = ["PyGObject>=3.42.0"]
+raspberrypi = ["RPi.GPIO>=0.7.0"]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=3.5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
