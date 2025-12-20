@@ -145,10 +145,10 @@ class GcodeReader:
         self.floods = False
 
         # regexes
-        self.re_parts = re.compile('(X|Y|Z|G|M|T|S|F)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)').findall
-        self.re_toolchange = re.compile('(M6)').findall
-        self.re_T = re.compile('(T)([0-9]+)').findall
-        self.re_toolinfo = re.compile('\((T[0-9]+) *(.+) *\)').findall
+        self.re_parts = re.compile(r'(X|Y|Z|G|M|T|S|F)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)').findall
+        self.re_toolchange = re.compile(r'(M6)').findall
+        self.re_T = re.compile(r'(T)([0-9]+)').findall
+        self.re_toolinfo = re.compile(r'\((T[0-9]+) *(.+) *\)').findall
 
         # output job
         self.job = {'head':{'kind':'mill'}, 'defs':[]}

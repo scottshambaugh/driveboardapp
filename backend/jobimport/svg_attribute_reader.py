@@ -50,9 +50,9 @@ class SVGAttributeReader:
             'href': self.stringAttrib
         }
 
-        self.re_findall_transforms = re.compile('(([a-z]+)\s*\(([^)]*)\))', re.IGNORECASE).findall
-        self.re_findall_pathelems = re.compile('([A-Za-z]|-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)').findall
-        self.re_findall_unitparts = re.compile('(-?[0-9]*\.?[0-9]*(?:e-?[0-9]+)?)(cm|mm|pt|pc|in|%|em|ex)?').findall
+        self.re_findall_transforms = re.compile(r'(([a-z]+)\s*\(([^)]*)\))', re.IGNORECASE).findall
+        self.re_findall_pathelems = re.compile(r'([A-Za-z]|-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)').findall
+        self.re_findall_unitparts = re.compile(r'(-?[0-9]*\.?[0-9]*(?:e-?[0-9]+)?)(cm|mm|pt|pc|in|%|em|ex)?').findall
 
 
     def read_attrib(self, node, attr, value):
@@ -276,6 +276,3 @@ class SVGAttributeReader:
         else:
             log.warn("invalid color, skipped: " + str(val))
             return 'inherit'
-
-
-

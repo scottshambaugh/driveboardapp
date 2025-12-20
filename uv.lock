@@ -157,7 +157,7 @@ wheels = [
 [[package]]
 name = "driveboardapp"
 version = "20.12"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "bottle" },
     { name = "dxfgrabber" },
