@@ -25,12 +25,23 @@ class SVGPathReader:
         self._tolerance2 = self.svgreader.tolerance2
 
 
-    def add_path(self, d, node):
+    def _append_subpath(self, subpath):
+        """Helper to append a subpath with its color to the node's paths list."""
+        self._current_node['paths'].append({
+            'data': subpath,
+            'color': self._current_color
+        })
+
+    def add_path(self, d, node, color=None):
         """Convert svg path data to normalized polylines.
 
         d is the path data as a list of elements.
+        color is the color to use for this path (defaults to node['stroke'])
         """
         # http://www.w3.org/TR/SVG11/paths.html#PathData
+        # Store the color to use for paths added during this call
+        self._current_color = color if color else node.get('stroke')
+        self._current_node = node
 
         def _matrixExtractScale(mat):
             # extract absolute scale from matrix
@@ -81,7 +92,7 @@ class SVGPathReader:
             if cmd == 'M':  # moveto absolute
                 # start new subpath
                 if subpath:
-                    node['paths'].append(subpath)
+                    self._append_subpath(subpath)
                     subpath = []
                 while _nextIsNum(d, idx, 2):
                     # subsequent coords are treated 
@@ -92,7 +103,7 @@ class SVGPathReader:
             elif cmd == 'm':  # moveto relative
                 # start new subpath
                 if subpath:
-                    node['paths'].append(subpath)
+                    self._append_subpath(subpath)
                     subpath = []
                 if cmdPrev == '':
                     # first treated absolute
@@ -109,7 +120,7 @@ class SVGPathReader:
                 # loop and finalize subpath
                 if subpath:
                     subpath.append([subpath[0][0],subpath[0][1]])  # close
-                    node['paths'].append(subpath)
+                    self._append_subpath(subpath)
                     x = subpath[-1][0]
                     y = subpath[-1][1]
                     subpath = []
@@ -292,9 +303,9 @@ class SVGPathReader:
 
         # finalize subpath
         if subpath:
-            node['paths'].append(subpath)
+            self._append_subpath(subpath)
             subpath = []
-        
+    
     
 
     def addCubicBezier(self, subpath, x1, y1, x2, y2, x3, y3, x4, y4, level):

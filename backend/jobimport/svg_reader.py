@@ -372,7 +372,10 @@ class SVGReader:
                 self._tagReader.read_tag(child, node)
 
                 # 3. compile boundarys + conversions
-                for path in node['paths']:
+                for path_entry in node['paths']:
+                    # path_entry is {'data': [...], 'color': '#...'}
+                    path = path_entry['data']
+                    hexcolor = path_entry['color']
                     if path:  # skip if empty subpath
                         # 3a.) convert to world coordinates and then to mm units
                         for vert in path:
@@ -380,7 +383,6 @@ class SVGReader:
                             matrixApply(node['xformToWorld'], vert)
                             vertexScale(vert, self.px2mm)
                         # 3b.) sort output by color
-                        hexcolor = node['stroke']
                         if hexcolor in self.boundarys:
                             self.boundarys[hexcolor].append(path)
                         else:

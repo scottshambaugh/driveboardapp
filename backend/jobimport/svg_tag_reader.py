@@ -88,110 +88,140 @@ class SVGTagReader:
     def path(self, node):
         # http://www.w3.org/TR/SVG11/paths.html
         # has transform and style attributes
+        d = node.get("d")
         if self._has_valid_stroke(node):
-            d = node.get("d")
             self._pathReader.add_path(d, node)
+        if self._has_valid_fill(node):
+            self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def polygon(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#PolygonElement
         # has transform and style attributes
+        d = ['M'] + node['points'] + ['z']
+        node['points'] = None
         if self._has_valid_stroke(node):
-            d = ['M'] + node['points'] + ['z']
-            node['points'] = None
             self._pathReader.add_path(d, node)
+        if self._has_valid_fill(node):
+            self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def polyline(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#PolylineElement
         # has transform and style attributes
+        d = ['M'] + node['points']
+        node['points'] = None
         if self._has_valid_stroke(node):
-            d = ['M'] + node['points']
-            node['points'] = None
             self._pathReader.add_path(d, node)
+        if self._has_valid_fill(node):
+            self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def rect(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#RectElement
         # has transform and style attributes
-        if self._has_valid_stroke(node):
-            w = node.get('width') or 0.0
-            h = node.get('height') or 0.0
-            x = node.get('x') or 0.0
-            y = node.get('y') or 0.0
-            rx = node.get('rx')
-            ry = node.get('ry')
-            if rx is None and ry is None:  # no rounded corners
-                d = ['M', x, y, 'h', w, 'v', h, 'h', -w, 'z']
-                self._pathReader.add_path(d, node)
-            else:                         # rounded corners
-                if rx is None:
-                    rx = ry
-                elif ry is None:
-                    ry = rx
-                if rx > w/2.0:
-                    rx = w/2.0
-                if ry > h/2.0:
-                    rx = h/2.0
-                if rx < 0.0: rx *=-1
-                if ry < 0.0: ry *=-1
-                d = ['M', x+rx , y ,
-                     'h', w-2*rx,
-                     'c', rx, 0.0, rx, ry, rx, ry,
-                     'v', h-2*ry,
-                     'c', 0.0, ry, -rx, ry, -rx, ry,
-                     'h', -w+2*rx,
-                     'c', -rx, 0.0, -rx, -ry, -rx, -ry,
-                     'v', -h+2*ry,
-                     'c', 0.0, 0.0, 0.0, -ry, rx, -ry,
-                     'z']
-                self._pathReader.add_path(d, node)
+        has_stroke = self._has_valid_stroke(node)
+        has_fill = self._has_valid_fill(node)
+        if not has_stroke and not has_fill:
+            return
+        w = node.get('width') or 0.0
+        h = node.get('height') or 0.0
+        x = node.get('x') or 0.0
+        y = node.get('y') or 0.0
+        rx = node.get('rx')
+        ry = node.get('ry')
+        if rx is None and ry is None:  # no rounded corners
+            d = ['M', x, y, 'h', w, 'v', h, 'h', -w, 'z']
+        else:                         # rounded corners
+            if rx is None:
+                rx = ry
+            elif ry is None:
+                ry = rx
+            if rx > w/2.0:
+                rx = w/2.0
+            if ry > h/2.0:
+                rx = h/2.0
+            if rx < 0.0: rx *=-1
+            if ry < 0.0: ry *=-1
+            d = ['M', x+rx , y ,
+                 'h', w-2*rx,
+                 'c', rx, 0.0, rx, ry, rx, ry,
+                 'v', h-2*ry,
+                 'c', 0.0, ry, -rx, ry, -rx, ry,
+                 'h', -w+2*rx,
+                 'c', -rx, 0.0, -rx, -ry, -rx, -ry,
+                 'v', -h+2*ry,
+                 'c', 0.0, 0.0, 0.0, -ry, rx, -ry,
+                 'z']
+        if has_stroke:
+            self._pathReader.add_path(d, node)
+        if has_fill:
+            self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def line(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#LineElement
         # has transform and style attributes
-        if self._has_valid_stroke(node):
-            x1 = node.get('x1') or 0.0
-            y1 = node.get('y1') or 0.0
-            x2 = node.get('x2') or 0.0
-            y2 = node.get('y2') or 0.0
-            d = ['M', x1, y1, 'L', x2, y2]
+        # Note: lines can't really have fills, but we check anyway for consistency
+        has_stroke = self._has_valid_stroke(node)
+        has_fill = self._has_valid_fill(node)
+        if not has_stroke and not has_fill:
+            return
+        x1 = node.get('x1') or 0.0
+        y1 = node.get('y1') or 0.0
+        x2 = node.get('x2') or 0.0
+        y2 = node.get('y2') or 0.0
+        d = ['M', x1, y1, 'L', x2, y2]
+        if has_stroke:
             self._pathReader.add_path(d, node)
+        if has_fill:
+            self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def circle(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#CircleElement
         # has transform and style attributes
-        if self._has_valid_stroke(node):
-            r = node.get('r')
-            cx = node.get('cx') or 0.0
-            cy = node.get('cy') or 0.0
-            if r > 0.0:
-                d = ['M', cx-r, cy,
-                     'A', r, r, 0.0, 0.0, 0.0, cx, cy+r,
-                     'A', r, r, 0.0, 0.0, 0.0, cx+r, cy,
-                     'A', r, r, 0.0, 0.0, 0.0, cx, cy-r,
-                     'A', r, r, 0.0, 0.0, 0.0, cx-r, cy,
-                     'Z']
+        has_stroke = self._has_valid_stroke(node)
+        has_fill = self._has_valid_fill(node)
+        if not has_stroke and not has_fill:
+            return
+        r = node.get('r')
+        cx = node.get('cx') or 0.0
+        cy = node.get('cy') or 0.0
+        if r > 0.0:
+            d = ['M', cx-r, cy,
+                 'A', r, r, 0.0, 0.0, 0.0, cx, cy+r,
+                 'A', r, r, 0.0, 0.0, 0.0, cx+r, cy,
+                 'A', r, r, 0.0, 0.0, 0.0, cx, cy-r,
+                 'A', r, r, 0.0, 0.0, 0.0, cx-r, cy,
+                 'Z']
+            if has_stroke:
                 self._pathReader.add_path(d, node)
+            if has_fill:
+                self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def ellipse(self, node):
         # has transform and style attributes
-        if self._has_valid_stroke(node):
-            rx = node.get('rx')
-            ry = node.get('ry')
-            cx = node.get('cx') or 0.0
-            cy = node.get('cy') or 0.0
-            if rx > 0.0 and ry > 0.0:
-                d = ['M', cx-rx, cy,
-                     'A', rx, ry, 0.0, 0.0, 0.0, cx, cy+ry,
-                     'A', rx, ry, 0.0, 0.0, 0.0, cx+rx, cy,
-                     'A', rx, ry, 0.0, 0.0, 0.0, cx, cy-ry,
-                     'A', rx, ry, 0.0, 0.0, 0.0, cx-rx, cy,
-                     'Z']
+        has_stroke = self._has_valid_stroke(node)
+        has_fill = self._has_valid_fill(node)
+        if not has_stroke and not has_fill:
+            return
+        rx = node.get('rx')
+        ry = node.get('ry')
+        cx = node.get('cx') or 0.0
+        cy = node.get('cy') or 0.0
+        if rx > 0.0 and ry > 0.0:
+            d = ['M', cx-rx, cy,
+                 'A', rx, ry, 0.0, 0.0, 0.0, cx, cy+ry,
+                 'A', rx, ry, 0.0, 0.0, 0.0, cx+rx, cy,
+                 'A', rx, ry, 0.0, 0.0, 0.0, cx, cy-ry,
+                 'A', rx, ry, 0.0, 0.0, 0.0, cx-rx, cy,
+                 'Z']
+            if has_stroke:
                 self._pathReader.add_path(d, node)
+            if has_fill:
+                self._pathReader.add_path(d, node, color=node.get('fill'))
 
 
     def image(self, node):
@@ -305,4 +335,18 @@ class SVGTagReader:
                      stroke_color and stroke_color[0] == '#' and
                      stroke_opacity and stroke_opacity != 0.0 and
                      color and color[0] == '#' and
+                     opacity and opacity != 0.0 )
+
+    def _has_valid_fill(self, node):
+        # Check if node has a valid (non-transparent) fill
+        # http://www.w3.org/TR/SVG11/styling.html#SVGStylingProperties
+        display = node.get('display')
+        visibility = node.get('visibility')
+        fill_color = node.get('fill')
+        fill_opacity = node.get('fill-opacity')
+        opacity = node.get('opacity')
+        return bool( display and display != 'none' and
+                     visibility and visibility != 'hidden' and visibility != 'collapse' and
+                     fill_color and fill_color[0] == '#' and
+                     fill_opacity and fill_opacity != 0.0 and
                      opacity and opacity != 0.0 )
