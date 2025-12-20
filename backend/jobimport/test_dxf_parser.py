@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import io
 
 from .dxf_parser import DXFParser
 
@@ -8,8 +7,8 @@ tolerance = 0.08
 preColor = {}
 postColor = {}
 
-fin = open("test.dxf"); 
-dxf_string = fin.read();  
+fin = open("test.dxf") 
+dxf_string = fin.read()  
 fin.close() 
 
 dxf_string = str(dxf_string)

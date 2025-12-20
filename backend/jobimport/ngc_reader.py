@@ -2,11 +2,7 @@
 __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 
 
-import math
-import sys
 import re
-import os.path
-import io
 
 
 

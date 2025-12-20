@@ -6,7 +6,6 @@ import pstats
 import argparse
 import glob
 
-import lasersaur
 import jobimport
 
 

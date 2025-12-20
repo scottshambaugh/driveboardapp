@@ -146,8 +146,8 @@ class DXFReader:
         if thetadiff < 0 : thetadiff = thetadiff + 360
         large_arc_flag = int(thetadiff >= 180)
         sweep_flag = 1
-        theta1 = theta1deg/180.0 * math.pi;
-        theta2 = theta2deg/180.0 * math.pi;
+        theta1 = theta1deg/180.0 * math.pi
+        theta2 = theta2deg/180.0 * math.pi
         x1 = cx + r*math.cos(theta1)
         y1 = cy + r*math.sin(theta1)
         x2 = cx + r*math.cos(theta2)

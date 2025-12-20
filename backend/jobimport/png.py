@@ -2665,7 +2665,6 @@ def _main(argv):
 
     # Parse command line arguments
     from optparse import OptionParser
-    import re
     version = '%prog ' + __version__
     parser = OptionParser(version=version)
     parser.set_usage("%prog [options] [imagefile]")
@@ -2696,7 +2695,8 @@ def _main(argv):
         parser.error("more than one input file")
     outfile = sys.stdout
     if sys.platform == "win32":
-        import msvcrt, os
+        import msvcrt
+        import os
         msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
 
     if options.read_png:

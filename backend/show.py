@@ -2,13 +2,11 @@
 # -*- coding: UTF-8 -*-
 
 import os
-import json
 import glob
 import argparse
 import gtk
 import glib
 
-import lasersaur
 import jobimport
 
 

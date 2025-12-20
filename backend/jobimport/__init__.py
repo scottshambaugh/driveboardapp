@@ -49,7 +49,7 @@ def convert(job, optimize=True, tolerance=conf['tolerance'], matrix=None):
                             pathoptimizer.fill_optimize(def_['data'], tolerance)
                         elif conf['fill_mode'] == 'NearestNeighbor':
                             pathoptimizer.optimize(def_['data'], tolerance)                            
-                if not 'head' in job:
+                if 'head' not in job:
                     job['head'] = {}
                 job['head']['optimized'] = tolerance
     elif type_ == 'svg':

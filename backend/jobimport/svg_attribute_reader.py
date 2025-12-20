@@ -268,7 +268,7 @@ class SVGAttributeReader:
         elif val.startswith('hsl'):
             log.warn("hsl/hsla color spaces are not supported")
         elif val.startswith('url'):
-            log.warn("defs are not supported");
+            log.warn("defs are not supported")
         elif val in css3_names_to_hex:  # named colors
             return css3_names_to_hex[val]
         elif val in ['currentColor', 'inherit']:

@@ -1,5 +1,4 @@
 # -*- coding: UTF-8 -*-
-import os
 import io
 import sys
 import time
@@ -1177,11 +1176,11 @@ def job_laser(jobdict):
     ###########################################################################
     """
 
-    if not 'defs' in jobdict or not 'items' in jobdict:
+    if 'defs' not in jobdict or 'items' not in jobdict:
         print("ERROR: invalid job")
         return
 
-    if not 'passes' in jobdict:
+    if 'passes' not in jobdict:
         print("NOTICE: no passes defined")
         return
 
@@ -1433,13 +1432,13 @@ def job_mill(jobdict):
     ###########################################################################
     """
     # check job
-    if (not 'head' in jobdict) or \
-       (not 'kind' in jobdict['head']) or \
+    if ('head' not in jobdict) or \
+       ('kind' not in jobdict['head']) or \
        (jobdict['head']['kind'] != 'mill'):
         print("NOTICE: not a mill job")
         return
 
-    if not 'defs' in jobdict:
+    if 'defs' not in jobdict:
         print("ERROR: invalid job")
         return
     # prime job

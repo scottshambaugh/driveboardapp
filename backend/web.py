@@ -414,7 +414,7 @@ def _clear(limit=None):
         if type(limit) is int and limit <= 0:
             break
         filename = os.path.join(conf['stordir'], filename)
-        os.remove(filename);
+        os.remove(filename)
         print("file deleted: " + filename)
         if type(limit) is int:
             limit -= 1

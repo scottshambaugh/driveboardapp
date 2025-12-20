@@ -185,7 +185,6 @@ class Lasersaur(object):
             A .dba file in the same directory called <name>.conv.dba
         """
 
-        import jobimport # dependancy only when actually needed
         base, name = os.path.split(jobfile)
         name, ext = os.path.splitext(name)
         job = self.open_file(jobfile, optimize=optimize, tolerance=tolerance)
@@ -239,7 +238,6 @@ class Lasersaur(object):
             name_<numeral>.
         """
 
-        import jobimport # dependancy only when actually needed
         base, name = os.path.split(jobfile)
         name, ext = os.path.splitext(name)
         job = self.open_file(jobfile, optimize=optimize, tolerance=tolerance)

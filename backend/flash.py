@@ -4,7 +4,11 @@
 # Copyright (c) 2011 Nortd Labs
 # Open Source by the terms of the Gnu Public License (GPL3) or higher.
 
-import os, sys, time, subprocess, stat
+import os
+import sys
+import time
+import subprocess
+import stat
 from config import conf
 
 

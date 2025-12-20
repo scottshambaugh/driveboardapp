@@ -22,7 +22,7 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-from copy import copy, deepcopy
+from copy import deepcopy
 
 class Hyperrectangle:
     '''an axis aligned bounding box of arbitrary dimension'''

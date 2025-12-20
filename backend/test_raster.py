@@ -2,16 +2,12 @@
 import os
 import sys
 import time
-import random
 import unittest
-import json
-import threading
 import pprint
 from PIL import Image
 
 import web
 import lasersaur
-from config import conf
 
 
 # assertEqual(a, b)

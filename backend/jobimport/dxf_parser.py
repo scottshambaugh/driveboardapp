@@ -7,12 +7,9 @@ __author__ = 'jet <jet@allartburns.org>'
 
 from math import *
 import io
-import io
 
 import dxfgrabber
 
-import sys
-import linecache
 
 class DXFParser:
     """Parse DXF using dxfgrabber >=0.7.4 <=0.8.1
@@ -203,7 +200,7 @@ class DXFParser:
         print("Done!")
 
         if self.verbose:
-            print ("pre flipped");
+            print ("pre flipped")
             print(("x min %f" % self.x_min))
             print(("x max %f" % self.x_max))
             print(("y min %f" % self.y_min))
@@ -263,8 +260,8 @@ class DXFParser:
             thetadiff = thetadiff + 360
         large_arc_flag = int(thetadiff >= 180)
         sweep_flag = 1
-        theta1 = theta1deg/180.0 * pi;
-        theta2 = theta2deg/180.0 * pi;
+        theta1 = theta1deg/180.0 * pi
+        theta2 = theta2deg/180.0 * pi
         x1 = cx + r * cos(theta1)
         y1 = cy + r * sin(theta1)
         x2 = cx + r * cos(theta2)
@@ -451,8 +448,8 @@ class DXFParser:
         
 
     def shiftPositive(self):
-        xShift = 0;
-        yShift = 0;
+        xShift = 0
+        yShift = 0
         if self.x_min < 0:
             xShift = 0.0 - self.x_min - self.x_max
             if self.debug:

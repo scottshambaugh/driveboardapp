@@ -4,7 +4,11 @@
 # Copyright (c) 2011 Nortd Labs
 # Open Source by the terms of the Gnu Public License (GPL3) or higher.
 
-import os, sys, subprocess, shutil, glob
+import os
+import sys
+import subprocess
+import shutil
+import glob
 from config import conf
 
 # Make sure you have the Arduino IDE installed (we've tested this on 022 and newer).
@@ -106,7 +110,7 @@ def build_firmware(firmware_name="DriveboardFirmware"):
     command = '%(compile)s -o main.elf %(alldoto)s  -lm' % {'compile': COMPILE, 'alldoto':".o ".join(OBJECTS)+'.o'}
     ret += subprocess.call(command, shell=True)
 
-    command = '%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex' % {'objcopy': AVROBJCOPYAPP, 'obj':fileobj, 'product':BUILDNAME}
+    command = '%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex' % {'objcopy': AVROBJCOPYAPP, 'product':BUILDNAME}
     ret += subprocess.call(command, shell=True)
 
     # command = '%(size)s *.hex *.elf *.o' % {'size':AVRSIZEAPP}

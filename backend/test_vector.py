@@ -1,7 +1,5 @@
 # -*- coding: UTF-8 -*-
 import os
-import time
-import random
 import unittest
 
 import web

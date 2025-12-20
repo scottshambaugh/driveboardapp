@@ -1,7 +1,6 @@
 
 __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 
-import re
 import math
 import logging
 

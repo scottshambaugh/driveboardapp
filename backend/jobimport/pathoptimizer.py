@@ -14,7 +14,6 @@ It takes a list of paths and optimizes in-place.
 __author__ = 'Stefan Hechenberger <stefan@nortd.com>'
 
 
-import math
 import logging
 
 from . import kdtree

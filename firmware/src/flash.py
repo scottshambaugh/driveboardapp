@@ -3,7 +3,8 @@
 # Copyright (c) 2011 Nortd Labs
 # Open Source by the terms of the Gnu Public License (GPL3) or higher.
 
-import os, sys
+import os
+import sys
 
 
 
@@ -79,13 +80,13 @@ def build():
     COMPILE = AVRGCCAPP + " -Wall -Os -DF_CPU=" + CLOCK + " -mmcu=" + DEVICE + " -I. -ffunction-sections" + " --std=c99"
 
     for fileobj in OBJECTS:
-      os.system('%(compile)s -c %(obj)s.c -o %(obj)s.o' % {'compile': COMPILE, 'obj':fileobj});
+      os.system('%(compile)s -c %(obj)s.c -o %(obj)s.o' % {'compile': COMPILE, 'obj':fileobj})
 
-    os.system('%(compile)s -o main.elf %(alldoto)s  -lm' % {'compile': COMPILE, 'alldoto':".o ".join(OBJECTS)+'.o'});
+    os.system('%(compile)s -o main.elf %(alldoto)s  -lm' % {'compile': COMPILE, 'alldoto':".o ".join(OBJECTS)+'.o'})
 
     #os.system('rm -f %(product).hex' % {'product':BUILDNAME})
 
-    os.system('%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex' % {'objcopy': AVROBJCOPYAPP, 'obj':fileobj, 'product':BUILDNAME});
+    os.system('%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex' % {'objcopy': AVROBJCOPYAPP, 'obj':fileobj, 'product':BUILDNAME})
 
     os.system('%(size)s *.hex *.elf *.o' % {'size':AVRSIZEAPP})
 
@@ -107,7 +108,7 @@ def build():
     for fileobj in OBJECTS:
         file_abs = os.path.join(current_dir, '%(file)s.o' % {'file':fileobj})
         if os.path.isfile(file_abs):
-            os.remove(file_abs);
+            os.remove(file_abs)
     file_abs = os.path.join(current_dir, 'main.elf')
     if os.path.isfile(file_abs):
         os.remove(file_abs)

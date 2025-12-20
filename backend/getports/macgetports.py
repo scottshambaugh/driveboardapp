@@ -5,7 +5,6 @@ Do not import on other operating systems.
 Inspired by osxserialports by Pascal Oberndoerfer.
 """
 
-import sys
 import ctypes
 from ctypes.util import find_library
 
