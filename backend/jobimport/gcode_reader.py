@@ -1,5 +1,4 @@
-
-__author__ = 'Stefan Hechenberger <stefan@nortd.com>'
+__author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 
 import sys
@@ -122,7 +121,7 @@ class GcodeReader:
         self.bTool = False
 
         # modal state
-        self.G_motion = 'G0'
+        self.G_motion = "G0"
         self.X_pos = None
         self.Y_pos = None
         self.Z_pos = None
@@ -142,36 +141,35 @@ class GcodeReader:
         self.floods = False
 
         # regexes
-        self.re_parts = re.compile(r'(X|Y|Z|G|M|T|S|F)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)').findall
-        self.re_toolchange = re.compile(r'(M6)').findall
-        self.re_T = re.compile(r'(T)([0-9]+)').findall
-        self.re_toolinfo = re.compile(r'\((T[0-9]+) *(.+) *\)').findall
+        self.re_parts = re.compile(
+            r"(X|Y|Z|G|M|T|S|F)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)"
+        ).findall
+        self.re_toolchange = re.compile(r"(M6)").findall
+        self.re_T = re.compile(r"(T)([0-9]+)").findall
+        self.re_toolinfo = re.compile(r"\((T[0-9]+) *(.+) *\)").findall
 
         # output job
-        self.job = {'head':{'kind':'mill'}, 'defs':[]}
-
+        self.job = {"head": {"kind": "mill"}, "defs": []}
 
     def finalize_pass(self):
         if self.def_:
-            self.def_['rates'] = self.rates
-            self.def_['freqs'] = self.freqs
-            self.def_['mists'] = self.mists
-            self.def_['floods'] = self.floods
-
+            self.def_["rates"] = self.rates
+            self.def_["freqs"] = self.freqs
+            self.def_["mists"] = self.mists
+            self.def_["floods"] = self.floods
 
     def next_pass(self):
         self.rates = []
         self.freqs = []
         self.mists = False
         self.floods = False
-        self.job['defs'].append({'data':[], 'tool':'', 'toolinfo':''})
-        self.def_ = self.job['defs'][-1]
-        self.path = self.def_['data']
-
+        self.job["defs"].append({"data": [], "tool": "", "toolinfo": ""})
+        self.def_ = self.job["defs"][-1]
+        self.path = self.def_["data"]
 
     def on_toolchange(self, line):
         """Handle a tool change action (M6).
-           Account for T action on same line (nothing more).
+        Account for T action on same line (nothing more).
         """
         T_code = self.re_T(line)
         if len(T_code) == 1:
@@ -187,11 +185,10 @@ class GcodeReader:
             self.next_pass()
             self.bTool = True
             # add tool, toolinfo to def
-            tool = 'T'+str(self.T_num)
-            self.def_['tool'] = tool
+            tool = "T" + str(self.T_num)
+            self.def_["tool"] = tool
             if tool in self.toolinfo:
-                self.def_['toolinfo'] = self.toolinfo[tool]
-
+                self.def_["toolinfo"] = self.toolinfo[tool]
 
     def on_action(self, action):
         if not self.bTool:
@@ -199,17 +196,25 @@ class GcodeReader:
             return
         self.path.append(action)
 
-
     def parse(self, gcodestring):
         """Convert gcode to a job file."""
         for line in gcodestring.splitlines():
             # reject line condition
-            if len(line) == 0 or line[0] not in ('X', 'Y', 'Z', 'G', 'M', 'T', 'S', 'F'):
+            if len(line) == 0 or line[0] not in (
+                "X",
+                "Y",
+                "Z",
+                "G",
+                "M",
+                "T",
+                "S",
+                "F",
+            ):
                 # parse tool table
-                if line.startswith('(T'):
+                if line.startswith("(T"):
                     toolinfo = self.re_toolinfo(line)
                     if toolinfo:
-                        self.toolinfo[toolinfo[0][0]] = (toolinfo[0][1])
+                        self.toolinfo[toolinfo[0][0]] = toolinfo[0][1]
                 # reject
                 else:
                     continue
@@ -229,27 +234,28 @@ class GcodeReader:
             for code_ in self.re_parts(line):
                 # convert numeral
                 code = [code_[0], float(code_[1])]
-                if code[1].is_integer(): code[1] = int(code[1])
+                if code[1].is_integer():
+                    code[1] = int(code[1])
                 # target coordinates
-                if code[0] == 'X':
+                if code[0] == "X":
                     self.X_pos = code[1]
                     bMotion = True
-                elif code[0] == 'Y':
+                elif code[0] == "Y":
                     self.Y_pos = code[1]
                     bMotion = True
-                elif code[0] == 'Z':
+                elif code[0] == "Z":
                     self.Z_pos = code[1]
                     bMotion = True
                 # params: feedrate, freq, tool
-                elif code[0] == 'F':
+                elif code[0] == "F":
                     self.F_rate = code[1]
                     bFeed = True
-                elif code[0] == 'S':
+                elif code[0] == "S":
                     self.S_freq = code[1]
-                elif code[0] == 'T':
+                elif code[0] == "T":
                     self.T_num = code[1]
                 # spindle frequency change
-                elif code[0] == 'M' and code[1] in (3,5):
+                elif code[0] == "M" and code[1] in (3, 5):
                     if code[1] == 3:
                         self.S_on = True
                         bSpindle = True
@@ -257,7 +263,7 @@ class GcodeReader:
                         self.S_on = False
                         bSpindle = True
                 # coolant valve change
-                elif code[0] == 'M' and code[1] in (7,8,9):
+                elif code[0] == "M" and code[1] in (7, 8, 9):
                     if code[1] == 7:
                         if not self.M_mist:
                             self.M_mist = True
@@ -274,60 +280,60 @@ class GcodeReader:
                             self.M_flood = False
                             bFlood = True
                 # motion style change
-                elif code[0] == 'G' and code[1] in (0,1):
-                    self.G_motion = 'G'+str(code[1])
+                elif code[0] == "G" and code[1] in (0, 1):
+                    self.G_motion = "G" + str(code[1])
                 # handle reporting of unsupported gcode
-                elif code[0] == 'G' and code[1] in (2,3):
+                elif code[0] == "G" and code[1] in (2, 3):
                     print("ERROR: G2,G3 arc motions not supported")
-                elif code[0] == 'G' and code[1] in (4,):
+                elif code[0] == "G" and code[1] in (4,):
                     print("ERROR: G4 dwell motions not supported")
-                elif code[0] == 'G' and code[1] in (53,):
+                elif code[0] == "G" and code[1] in (53,):
                     print("ERROR: G53 machine CS motion not supported")
-                elif code[0] == 'G' and code[1] in (55,56,57,58,59):
+                elif code[0] == "G" and code[1] in (55, 56, 57, 58, 59):
                     print("ERROR: G55-G59 CS not supported")
-                elif code[0] == 'G' and code[1] in (91,):
+                elif code[0] == "G" and code[1] in (91,):
                     print("ERROR: G91 relative motion not supported")
-                elif code[0] == 'G' and code[1] in (92,):
+                elif code[0] == "G" and code[1] in (92,):
                     print("ERROR: G92 shift CS not supported")
-                elif code[0] == 'G' and code[1] in (93,95):
+                elif code[0] == "G" and code[1] in (93, 95):
                     print("ERROR: G93,G95 alternative distance modes not supported")
-                elif code[0] == 'M' and code[1] in (0,1):
+                elif code[0] == "M" and code[1] in (0, 1):
                     print("ERROR: M0,M1 pause not supported")
-                elif code[0] == 'M' and code[1] in (4,):
+                elif code[0] == "M" and code[1] in (4,):
                     print("ERROR: M4 reverse spindle not supported")
-                elif code[0] == 'M' and code[1] == (20,):
+                elif code[0] == "M" and code[1] == (20,):
                     print("ERROR: inch units not supported")
 
             ### commit actions in right order
             # commit coolant
             if bMist:
-                self.on_action(('MIST',self.M_mist))
+                self.on_action(("MIST", self.M_mist))
                 self.mists = True
             if bFlood:
-                self.on_action(('FLOOD',self.M_flood))
+                self.on_action(("FLOOD", self.M_flood))
                 self.floods = True
             # commit spindle
             if bSpindle:
                 if self.S_on:
-                    self.on_action(('S',self.S_freq))
+                    self.on_action(("S", self.S_freq))
                     self.freqs.append(self.S_freq)
                 else:
-                    self.on_action(('S',0))
+                    self.on_action(("S", 0))
             # commit feedrate
             if bFeed:
-                self.on_action(('F',self.F_rate))
+                self.on_action(("F", self.F_rate))
                 self.rates.append(self.F_rate)
             # commit motion
             if bMotion:
-                self.on_action((self.G_motion,(self.X_pos, self.Y_pos, self.Z_pos)))
+                self.on_action((self.G_motion, (self.X_pos, self.Y_pos, self.Z_pos)))
 
         self.finalize_pass()
         return self.job
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     path = sys.argv[1]
-    with open(path, 'r') as content_file:
+    with open(path, "r") as content_file:
         content = content_file.read()
         reader = GcodeReader()
         job = reader.parse(content)

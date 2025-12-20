@@ -11,18 +11,19 @@ If only looping through once, it is likely more efficient.
 
 import sys
 
-__all__ = ['portiter', 'ports']
+__all__ = ["portiter", "ports"]
 
 
 p = sys.platform
-if p == 'win32':
+if p == "win32":
     from .wingetports import portiter
-elif p == 'darwin': # mac
+elif p == "darwin":  # mac
     from .macgetports import portiter
-elif p.startswith('linux'):
+elif p.startswith("linux"):
     from .linuxgetports import portiter
 else:
-    raise OSError('Unsupported platform {}'.format(p))
+    raise OSError("Unsupported platform {}".format(p))
+
 
 def ports():
     return tuple(portiter())

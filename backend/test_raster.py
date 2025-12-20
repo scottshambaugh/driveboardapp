@@ -41,40 +41,38 @@ def setUpModule():
     time.sleep(0.5)
     lasersaur.local()
 
+
 def tearDownModule():
     web.stop()
 
 
-
 class TestOpenRaster(unittest.TestCase):
     def test_config(self):
-        img = Image.open(os.path.join(thislocation, 'testjobs', 'bat.png'))
+        img = Image.open(os.path.join(thislocation, "testjobs", "bat.png"))
         # img_g = img.convert('LA')  # to grayscale
-        img_g = img.convert('L')  # to grayscale
+        img_g = img.convert("L")  # to grayscale
         w = 80
-        h = int(img_g.size[1]*(float(w)/img_g.size[0]))
-        img_s = img_g.resize((w,h), resample=Image.BICUBIC)
+        h = int(img_g.size[1] * (float(w) / img_g.size[0]))
+        img_s = img_g.resize((w, h), resample=Image.BICUBIC)
         # img_s.show()
         data = img_s.getdata()
         for lx in range(h):
             for rx in range(w):
-                x = data[w*lx+rx]
+                x = data[w * lx + rx]
                 if x < 100:
-                    sys.stdout.write('.')
+                    sys.stdout.write(".")
                 elif x < 150:
-                    sys.stdout.write('o')
+                    sys.stdout.write("o")
                 elif x < 200:
-                    sys.stdout.write('0')
+                    sys.stdout.write("0")
                 else:
-                    sys.stdout.write('X')
-            sys.stdout.write('\n')
-
+                    sys.stdout.write("X")
+            sys.stdout.write("\n")
 
 
 class TestRaster(unittest.TestCase):
-
     def testLoad(self):
-        jobfile = os.path.join(thislocation,'testjobs','raster_bat.svg')
+        jobfile = os.path.join(thislocation, "testjobs", "raster_bat.svg")
         job = lasersaur.open_file(jobfile)
         # if 'vector' in job:
         #     job['vector']['passes'] = [{
@@ -82,21 +80,19 @@ class TestRaster(unittest.TestCase):
         #             "feedrate":4000,
         #             "intensity":53
         #         }]
-        if 'raster' in job:
-            job['raster']['passes'] = [{
-                    "images":[0],
-                    "feedrate":4000,
-                    "intensity":53
-                }]
+        if "raster" in job:
+            job["raster"]["passes"] = [
+                {"images": [0], "feedrate": 4000, "intensity": 53}
+            ]
         print(list(job.keys()))
-        pprint.pprint(job['raster']['passes'])
+        pprint.pprint(job["raster"]["passes"])
         jobname = lasersaur.load(job)
         self.assertIn(jobname, lasersaur.listing())
         lasersaur.run(jobname, progress=True)
         print("done!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
 
     # for partial test run like this:

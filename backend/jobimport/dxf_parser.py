@@ -3,7 +3,7 @@
 # and the lasersaur team.
 #
 #
-__author__ = 'jet <jet@allartburns.org>'
+__author__ = "jet <jet@allartburns.org>"
 
 from math import *
 import io
@@ -22,17 +22,17 @@ class DXFParser:
     def __init__(self, tolerance):
         self.debug = False
         self.verbose = True
-        # tolerance settings, used in tessalation, path simplification, etc         
+        # tolerance settings, used in tessalation, path simplification, etc
         self.tolerance = tolerance
         self.tolerance2 = tolerance**2
 
         self.bedwidth = [1220, 610]
 
         self.dxfgrabber_version = dxfgrabber.version
-        
+
         # parsed path data, paths by color
         # {'#ff0000': [[path0, path1, ..], [path0, ..], ..]}
-        # Each path is a list of vertices which is a list of two floats.        
+        # Each path is a list of vertices which is a list of two floats.
         # using iso pen colors from dxfwrite
         # 0 is undefined in DXF, it specifies no color, not black
         # 1 red
@@ -44,44 +44,46 @@ class DXFParser:
         # 7 black
         # TODO: support up to 255 colors
 
-        self.colorLayers = {'#FF0000':[],
-                          '#FFFF00':[],
-                          '#00FF00':[],
-                          '#00FFFF':[],
-                          '#0000FF':[],
-                          '#CC33CC':[],
-                          '#000000':[]}
+        self.colorLayers = {
+            "#FF0000": [],
+            "#FFFF00": [],
+            "#00FF00": [],
+            "#00FFFF": [],
+            "#0000FF": [],
+            "#CC33CC": [],
+            "#000000": [],
+        }
 
-        self.red_colorLayer = self.colorLayers['#FF0000']
-        self.yellow_colorLayer = self.colorLayers['#FFFF00']
-        self.green_colorLayer = self.colorLayers['#00FF00']
-        self.cyan_colorLayer = self.colorLayers['#00FFFF']
-        self.blue_colorLayer = self.colorLayers['#0000FF']
-        self.magenta_colorLayer = self.colorLayers['#CC33CC']
-        self.black_colorLayer = self.colorLayers['#000000']
-        
-        #assume we're reading metric files and that
-        #we round to four decimal places.  There is no Lasersaur
-        # that can move from [60, 20] to 
+        self.red_colorLayer = self.colorLayers["#FF0000"]
+        self.yellow_colorLayer = self.colorLayers["#FFFF00"]
+        self.green_colorLayer = self.colorLayers["#00FF00"]
+        self.cyan_colorLayer = self.colorLayers["#00FFFF"]
+        self.blue_colorLayer = self.colorLayers["#0000FF"]
+        self.magenta_colorLayer = self.colorLayers["#CC33CC"]
+        self.black_colorLayer = self.colorLayers["#000000"]
+
+        # assume we're reading metric files and that
+        # we round to four decimal places.  There is no Lasersaur
+        # that can move from [60, 20] to
         # [60.00000000000001, 20.00000000000002]
         # if we're reading other units we'll do this rounding after
-        # conversion to mm 
+        # conversion to mm
         self.round = 4
         self.linecount = 0
-        self.line = ''
-        self.dxfcode = ''
+        self.line = ""
+        self.dxfcode = ""
 
         # flip/adjust globals
         self.cos180 = round(cos(radians(180)))
         self.sin180 = round(sin(radians(180)))
         self.x_min = self.bedwidth[0]
         self.x_max = 0.0
-	#because the y bed is inverted and we are going to flip it
+        # because the y bed is inverted and we are going to flip it
         self.y_min = -self.bedwidth[1]
         self.y_max = 0.0
-        
+
     def parse(self, dxfInput, forced_unit):
-        dxfStream = io.StringIO(str(dxfInput.replace('\r\n','\n')))
+        dxfStream = io.StringIO(str(dxfInput.replace("\r\n", "\n")))
         dwg = dxfgrabber.read(dxfStream)
         if not dwg:
             raise RuntimeError("dxfgrabber.read() failed")
@@ -112,9 +114,8 @@ class DXFParser:
         # 19 light years
         # 20 parsecs
 
-        
         if forced_unit == 0 or forced_unit == None:
-            self.units = dwg.header.setdefault('$INSUNITS', 0)
+            self.units = dwg.header.setdefault("$INSUNITS", 0)
         else:
             print(("using forced_unit", forced_unit))
             self.units = forced_unit
@@ -165,12 +166,12 @@ class DXFParser:
         else:
             print(("DXF units: >%s< unsupported" % self.units))
             raise RuntimeError
-            
+
         if self.verbose:
             print(("dxfgrabber release: ", self.dxfgrabber_version))
             print(("DXF file format version: {}".format(dwg.dxfversion)))
             print(("header var count: ", len(dwg.header)))
-            print(("layer count: ", len(dwg.layers))) 
+            print(("layer count: ", len(dwg.layers)))
             print(("block def count: ", len(dwg.blocks)))
             print(("entitiy count: ", len(dwg.entities)))
             print(("units: ", self.unitsString))
@@ -192,7 +193,7 @@ class DXFParser:
                 self.addPolyLine(entity)
             elif entity.dxftype == "SPLINE":
                 print(("TODO ADD: ", entity.dxftype))
-                #self.addSpline(entity)
+                # self.addSpline(entity)
             else:
                 if self.verbose:
                     print(("unknown entity: ", entity.dxftype))
@@ -200,7 +201,7 @@ class DXFParser:
         print("Done!")
 
         if self.verbose:
-            print ("pre flipped")
+            print("pre flipped")
             print(("x min %f" % self.x_min))
             print(("x max %f" % self.x_max))
             print(("y min %f" % self.y_min))
@@ -224,24 +225,22 @@ class DXFParser:
                 self.returnColorLayers[color] = self.colorLayers[color]
 
         # format: {'#ff0000': [[[x,y], [x,y], ...], [], ..], '#0000ff':[]}
-        job = {'head':{}, 'passes':[], 'items':[], 'defs':[]}
-        #job['units'] = self.unitsString
+        job = {"head": {}, "passes": [], "items": [], "defs": []}
+        # job['units'] = self.unitsString
         for color, path in self.returnColorLayers.items():
-            job['defs'].append({"kind":"path",
-                                "data":path})
-            job['items'].append({"def":len(job['defs'])-1, "color":color})
+            job["defs"].append({"kind": "path", "data": path})
+            job["items"].append({"def": len(job["defs"]) - 1, "color": color})
         print("Done!")
         return job
-
 
     ################
     # Translate each type of entity (line, circle, arc, lwpolyline)
 
     def addLine(self, entity):
-        path = [[self.unitize(entity.start[0]),
-                 self.unitize(entity.start[1])],
-                [self.unitize(entity.end[0]),
-                 self.unitize(entity.end[1])]]
+        path = [
+            [self.unitize(entity.start[0]), self.unitize(entity.start[1])],
+            [self.unitize(entity.end[0]), self.unitize(entity.end[1])],
+        ]
         self.add_path_by_color(entity.color, path)
 
     def addArc(self, entity):
@@ -256,12 +255,12 @@ class DXFParser:
             theta1deg = entity.startangle
             theta2deg = entity.endangle
         thetadiff = theta2deg - theta1deg
-        if thetadiff < 0 :
+        if thetadiff < 0:
             thetadiff = thetadiff + 360
         large_arc_flag = int(thetadiff >= 180)
         sweep_flag = 1
-        theta1 = theta1deg/180.0 * pi
-        theta2 = theta2deg/180.0 * pi
+        theta1 = theta1deg / 180.0 * pi
+        theta2 = theta2deg / 180.0 * pi
         x1 = cx + r * cos(theta1)
         y1 = cy + r * sin(theta1)
         x2 = cx + r * cos(theta2)
@@ -276,17 +275,16 @@ class DXFParser:
         r = self.unitize(entity.radius)
         path = []
 
-        self.makeArc(path, cx-r, cy, r, r, 0, 0, 0, cx, cy+r)
-        self.makeArc(path, cx, cy+r, r, r, 0, 0, 0, cx+r, cy)
-        self.makeArc(path, cx+r, cy, r, r, 0, 0, 0, cx, cy-r)
-        self.makeArc(path, cx, cy-r, r, r, 0, 0, 0, cx-r, cy)
+        self.makeArc(path, cx - r, cy, r, r, 0, 0, 0, cx, cy + r)
+        self.makeArc(path, cx, cy + r, r, r, 0, 0, 0, cx + r, cy)
+        self.makeArc(path, cx + r, cy, r, r, 0, 0, 0, cx, cy - r)
+        self.makeArc(path, cx, cy - r, r, r, 0, 0, 0, cx - r, cy)
         self.add_path_by_color(entity.color, path)
 
     def addPolyLine(self, entity):
         path = []
         for point in entity.points:
-            path.append([self.unitize(point[0]),
-                        self.unitize(point[1])])
+            path.append([self.unitize(point[0]), self.unitize(point[1])])
         self.add_path_by_color(entity.color, path)
 
     def add_path_by_color(self, color, path):
@@ -305,39 +303,45 @@ class DXFParser:
         elif color == 5:
             self.blue_colorLayer.append(flippedPath)
         elif color == 6:
-            self.magenta_colorLayer.append(flippedPath) 
+            self.magenta_colorLayer.append(flippedPath)
         elif color == 7:
             self.black_colorLayer.append(flippedPath)
         else:
             if self.verbose:
                 print(("unrecognized color %d, setting to cyan" % color))
-            #TODO: we need a better way to handle this
-            #don't know what to do with this color, assigning to red/cut
+            # TODO: we need a better way to handle this
+            # don't know what to do with this color, assigning to red/cut
             self.cyan_colorLayer.append(flippedPath)
-            
+
     def flipPathAxis(self, path, axis):
         flippedPath = []
-        
-        xFlip = [[1, 0, 0],
-                 [0, self.cos180, -self.sin180],
-                 [0, self.sin180, self.cos180]]
-        
-        yFlip = [[self.cos180, 0, self.sin180],
-                 [0, 1, 0],
-                 [-self.sin180, 0, self.cos180]]
-        
-        zFlip = [[self.cos180, -self.sin180, 0],
-                 [self.sin180, self.cos180, 0],
-                 [0, 0, 1]]
-        
+
+        xFlip = [
+            [1, 0, 0],
+            [0, self.cos180, -self.sin180],
+            [0, self.sin180, self.cos180],
+        ]
+
+        yFlip = [
+            [self.cos180, 0, self.sin180],
+            [0, 1, 0],
+            [-self.sin180, 0, self.cos180],
+        ]
+
+        zFlip = [
+            [self.cos180, -self.sin180, 0],
+            [self.sin180, self.cos180, 0],
+            [0, 0, 1],
+        ]
+
         for x, y in path:
-            if axis == 'X':
+            if axis == "X":
                 x1 = x
                 y1 = round(self.cos180 * y, self.round)
-            elif axis == 'Y':
+            elif axis == "Y":
                 x1 = round(self.cos180 * x, self.round)
                 y1 = y
-            elif axis == 'Z':
+            elif axis == "Z":
                 x1 = round(self.cos180 * x - self.sin180 * y, self.round)
                 y1 = round(self.sin180 * x + self.cos180 * y, self.round)
             self.setMinMax(x1, y1)
@@ -345,15 +349,18 @@ class DXFParser:
 
         return flippedPath
 
-    
     def complain_spline(self):
         print("Encountered a SPLINE at line", self.linecount)
         print("This program cannot handle splines at present.")
-        print("Convert the spline to an LWPOLYLINE using Save As options in SolidWorks.")
+        print(
+            "Convert the spline to an LWPOLYLINE using Save As options in SolidWorks."
+        )
         raise RuntimeError
 
     def complain_invalid(self):
-        print("Skipping unrecognized element '" + self.line + "' on line", self.linecount)
+        print(
+            "Skipping unrecognized element '" + self.line + "' on line", self.linecount
+        )
 
     def makeArc(self, path, x1, y1, rx, ry, phi, large_arc, sweep, x2, y2):
         # Implemented based on the SVG implementation notes
@@ -366,63 +373,68 @@ class DXFParser:
         dy = 0.5 * (y1 - y2)
         x_ = cp * dx + sp * dy
         y_ = -sp * dx + cp * dy
-        r2 = ((rx*ry)**2-(rx*y_)**2-(ry*x_)**2) / ((rx*y_)**2+(ry*x_)**2)
+        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / (
+            (rx * y_) ** 2 + (ry * x_) ** 2
+        )
         if r2 < 0:
             r2 = 0
         r = sqrt(r2)
         if large_arc == sweep:
             r = -r
-        cx_ = r*rx*y_ / ry
-        cy_ = -r*ry*x_ / rx
-        cx = cp*cx_ - sp*cy_ + 0.5*(x1 + x2)
-        cy = sp*cx_ + cp*cy_ + 0.5*(y1 + y2)
-        
+        cx_ = r * rx * y_ / ry
+        cy_ = -r * ry * x_ / rx
+        cx = cp * cx_ - sp * cy_ + 0.5 * (x1 + x2)
+        cy = sp * cx_ + cp * cy_ + 0.5 * (y1 + y2)
+
         def _angle(u, v):
-            a = acos((u[0]*v[0] + u[1]*v[1]) /
-                            sqrt(((u[0])**2 + (u[1])**2) *
-                            ((v[0])**2 + (v[1])**2)))
+            a = acos(
+                (u[0] * v[0] + u[1] * v[1])
+                / sqrt(((u[0]) ** 2 + (u[1]) ** 2) * ((v[0]) ** 2 + (v[1]) ** 2))
+            )
             sgn = -1
-            if u[0]*v[1] > u[1]*v[0]:
+            if u[0] * v[1] > u[1] * v[0]:
                 sgn = 1
             return sgn * a
-    
-        psi = _angle([1,0], [(x_-cx_)/rx, (y_-cy_)/ry])
-        delta = _angle([(x_-cx_)/rx, (y_-cy_)/ry], [(-x_-cx_)/rx, (-y_-cy_)/ry])
+
+        psi = _angle([1, 0], [(x_ - cx_) / rx, (y_ - cy_) / ry])
+        delta = _angle(
+            [(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry]
+        )
         if sweep and delta < 0:
             delta += pi * 2
         if not sweep and delta > 0:
             delta -= pi * 2
-        
+
         def _getVertex(pct):
             theta = psi + delta * pct
             ct = cos(theta)
             st = sin(theta)
-            return [cp*rx*ct-sp*ry*st+cx, sp*rx*ct+cp*ry*st+cy]        
-        
+            return [cp * rx * ct - sp * ry * st + cx, sp * rx * ct + cp * ry * st + cy]
+
         # let the recursive fun begin
         def _recursiveArc(t1, t2, c1, c5, level, tolerance2):
             def _vertexDistanceSquared(v1, v2):
-                return (v2[0]-v1[0])**2 + (v2[1]-v1[1])**2
-            
+                return (v2[0] - v1[0]) ** 2 + (v2[1] - v1[1]) ** 2
+
             def _vertexMiddle(v1, v2):
-                return [ (v2[0]+v1[0])/2.0, (v2[1]+v1[1])/2.0 ]
+                return [(v2[0] + v1[0]) / 2.0, (v2[1] + v1[1]) / 2.0]
 
             if level > 18:
                 # protect from deep recursion cases
                 # max 2**18 = 262144 segments
                 return
 
-            tRange = t2-t1
-            tHalf = t1 + 0.5*tRange
-            c2 = _getVertex(t1 + 0.25*tRange)
+            tRange = t2 - t1
+            tHalf = t1 + 0.5 * tRange
+            c2 = _getVertex(t1 + 0.25 * tRange)
             c3 = _getVertex(tHalf)
-            c4 = _getVertex(t1 + 0.75*tRange)
-            if _vertexDistanceSquared(c2, _vertexMiddle(c1,c3)) > tolerance2:
-                _recursiveArc(t1, tHalf, c1, c3, level+1, tolerance2)
+            c4 = _getVertex(t1 + 0.75 * tRange)
+            if _vertexDistanceSquared(c2, _vertexMiddle(c1, c3)) > tolerance2:
+                _recursiveArc(t1, tHalf, c1, c3, level + 1, tolerance2)
             path.append(c3)
-            if _vertexDistanceSquared(c4, _vertexMiddle(c3,c5)) > tolerance2:
-                _recursiveArc(tHalf, t2, c3, c5, level+1, tolerance2)
-                
+            if _vertexDistanceSquared(c4, _vertexMiddle(c3, c5)) > tolerance2:
+                _recursiveArc(tHalf, t2, c3, c5, level + 1, tolerance2)
+
         t1Init = 0.0
         t2Init = 1.0
         c1Init = _getVertex(t1Init)
@@ -437,15 +449,27 @@ class DXFParser:
                 thisColor = self.colorLayers[color]
                 for i in range(0, len(thisColor)):
                     if thisColor[i][0][0] < 0 or thisColor[i][0][0] > self.bedwidth[0]:
-                        
-                        raise RuntimeError("point outside of bounds x0 ",  thisColor[i][0][0])
-                    elif thisColor[i][0][1] < 0 or thisColor[i][0][1] > self.bedwidth[1]:
-                        raise RuntimeError("point outside of bounds y0 ",  thisColor[i][0][1])
-                    elif thisColor[i][1][0] < 0 or thisColor[i][1][0] > self.bedwidth[0]:
-                        raise RuntimeError("point outside of bounds x1 ",  thisColor[i][1][0])
-                    elif thisColor[i][1][1] < 0 or thisColor[i][1][1] > self.bedwidth[1]:
-                        raise RuntimeError("point outside of bounds y1 ",  thisColor[i][1][1])
-        
+                        raise RuntimeError(
+                            "point outside of bounds x0 ", thisColor[i][0][0]
+                        )
+                    elif (
+                        thisColor[i][0][1] < 0 or thisColor[i][0][1] > self.bedwidth[1]
+                    ):
+                        raise RuntimeError(
+                            "point outside of bounds y0 ", thisColor[i][0][1]
+                        )
+                    elif (
+                        thisColor[i][1][0] < 0 or thisColor[i][1][0] > self.bedwidth[0]
+                    ):
+                        raise RuntimeError(
+                            "point outside of bounds x1 ", thisColor[i][1][0]
+                        )
+                    elif (
+                        thisColor[i][1][1] < 0 or thisColor[i][1][1] > self.bedwidth[1]
+                    ):
+                        raise RuntimeError(
+                            "point outside of bounds y1 ", thisColor[i][1][1]
+                        )
 
     def shiftPositive(self):
         xShift = 0
@@ -484,13 +508,12 @@ class DXFParser:
                         thisColor[line][i][1] = y + yShift
                         i += 1
 
-
     def setMinMax(self, x, y):
         if x < self.x_min:
             self.x_min = x
         elif x > self.x_max:
             self.x_max = x
-            
+
         if y > self.y_min:
             self.y_min = y
         elif y < self.y_max:
@@ -498,32 +521,34 @@ class DXFParser:
 
     # convert value to mm
     def unitize(self, value):
-        #inches
+        # inches
         if self.units == 0 or self.units == 1:
             return round(value * 25.4, self.round)
-        #feet
-        elif self.units == 2:  
+        # feet
+        elif self.units == 2:
             return round(value * 304.8, self.round)
-        #mm
+        # mm
         elif self.units == 4:
             return round(value, self.round)
-        #cm
+        # cm
         elif self.units == 5:
             return round(value * 10, self.round)
-        #m
+        # m
         elif self.units == 6:
             return round(value * 1000, self.round)
-        #micro inches, or millionth of an inch
+        # micro inches, or millionth of an inch
         # 10E6 ui / 25.4mm  = 39370.07874015748031
         elif self.units == 8:
             return round(value / 39370.0787, self.round)
-        #mils, thousandth of an inch
+        # mils, thousandth of an inch
         # 1000 mil / 25.4mm = 39.37007874015748
         elif self.units == 9:
             return round(value / 39.3700, self.round)
-        #yards
+        # yards
         elif self.units == 10:
             return round(value * 914.4, self.round)
         else:
-            raise RuntimeError("don't know how to convert INSUNIT value %d, %s " % (self.units, self.unitsString))
-
+            raise RuntimeError(
+                "don't know how to convert INSUNIT value %d, %s "
+                % (self.units, self.unitsString)
+            )

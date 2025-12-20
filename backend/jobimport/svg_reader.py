@@ -1,5 +1,4 @@
-
-__author__ = 'Stefan Hechenberger <stefan@nortd.com>'
+__author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 import logging
 import base64
@@ -85,7 +84,7 @@ class SVGReader:
         # tolerance settings, used in tessalation, path simplification, etc
         self.tolerance = tolerance
         self.tolerance2 = tolerance**2
-        self.tolerance2_half = (0.5*tolerance)**2
+        self.tolerance2_half = (0.5 * tolerance) ** 2
         self.tolerance2_px = None
 
         # init helper object for tag reading
@@ -103,49 +102,47 @@ class SVGReader:
 
         self.rasters = []
 
-
     def _flip_image_data(self, data_uri, flip_h, flip_v):
         """Flip image data horizontally and/or vertically.
-        
+
         Args:
             data_uri: Base64 data URI string (e.g., 'data:image/png;base64,...')
             flip_h: Flip horizontally if True
             flip_v: Flip vertically if True
-            
+
         Returns:
             Modified data URI with flipped image, or original if processing fails
         """
         try:
             # Parse the data URI
-            if ',' not in data_uri:
+            if "," not in data_uri:
                 return data_uri
-            header, b64data = data_uri.split(',', 1)
-            
+            header, b64data = data_uri.split(",", 1)
+
             # Decode base64 to image
             img_bytes = base64.b64decode(b64data)
             img = Image.open(io.BytesIO(img_bytes))
-            
+
             # Apply flips
             if flip_h:
                 img = img.transpose(Image.FLIP_LEFT_RIGHT)
             if flip_v:
                 img = img.transpose(Image.FLIP_TOP_BOTTOM)
-            
+
             # Re-encode to base64
             buffer = io.BytesIO()
-            img_format = 'PNG' if 'png' in header.lower() else 'JPEG'
+            img_format = "PNG" if "png" in header.lower() else "JPEG"
             img.save(buffer, format=img_format)
-            new_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            
-            return header + ',' + new_b64
-            
+            new_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+            return header + "," + new_b64
+
         except Exception as e:
             log.warning(f"Failed to flip image: {e}")
             return data_uri
 
-
     def parse(self, svgstring, force_dpi=None, require_unit=False):
-        """ Parse a SVG document.
+        """Parse a SVG document.
 
         This traverses through the document tree and collects all path
         data and converts it to polylines of the requested tolerance.
@@ -193,13 +190,13 @@ class SVGReader:
         svgRootElement = ET.fromstring(svgstring)
         tagName = self._tagReader._get_tag(svgRootElement)
 
-        if tagName != 'svg':
+        if tagName != "svg":
             log.error("Invalid file, no 'svg' tag found.")
             return self.boundarys
 
         # 1. Get px2mm from argument
         if force_dpi is not None:
-            self.px2mm = 25.4/force_dpi
+            self.px2mm = 25.4 / force_dpi
             log.info("SVG import forced to %s dpi." % (force_dpi))
 
         # Get width, height, viewBox for further processing
@@ -210,11 +207,11 @@ class SVGReader:
             vb_y = None
             vb_w = None
             vb_h = None
-            unit = ''
+            unit = ""
 
             # get width, height, unit
-            width_str = svgRootElement.attrib.get('width')
-            height_str = svgRootElement.attrib.get('height')
+            width_str = svgRootElement.attrib.get("width")
+            height_str = svgRootElement.attrib.get("height")
             if width_str and height_str:
                 width, width_unit = parseScalar(width_str)
                 height, height_unit = parseScalar(height_str)
@@ -225,7 +222,7 @@ class SVGReader:
 
             # get viewBox
             # http://www.w3.org/TR/SVG11/coords.html#ViewBoxAttribute
-            vb = svgRootElement.attrib.get('viewBox')
+            vb = svgRootElement.attrib.get("viewBox")
             if vb:
                 vb_x, vb_y, vb_w, vb_h = parseFloats(vb)
                 log.info("SVG viewBox (%s,%s,%s,%s)." % (vb_x, vb_y, vb_w, vb_h))
@@ -244,41 +241,43 @@ class SVGReader:
                     vb_w = width
                     vb_h = height
 
-                self.px2mm = width/vb_w
+                self.px2mm = width / vb_w
 
-                if unit == 'mm':
+                if unit == "mm":
                     # great, the svg file already uses mm
                     pass
                     log.info("px2mm by svg mm unit")
-                elif unit == 'in':
+                elif unit == "in":
                     # prime for inch to mm conversion
                     self.px2mm *= 25.4
                     log.info("px2mm by svg inch unit")
-                elif unit == 'cm':
+                elif unit == "cm":
                     # prime for cm to mm conversion
                     self.px2mm *= 10.0
                     log.info("px2mm by svg cm unit")
                 elif require_unit:
-                    raise ValueError("Invalid or no unit in SVG data, must be 'mm', 'cm' or 'in'.")
-                elif unit == 'px' or unit == '':
+                    raise ValueError(
+                        "Invalid or no unit in SVG data, must be 'mm', 'cm' or 'in'."
+                    )
+                elif unit == "px" or unit == "":
                     # no physical units in file
                     # we have to interpret user (px) units
                     # 3. For some apps we can make a good guess.
                     svghead = svgstring[0:400]
-                    if 'Inkscape' in svghead.decode('utf-8'):
-                        self.px2mm *= 25.4/90.0
+                    if "Inkscape" in svghead.decode("utf-8"):
+                        self.px2mm *= 25.4 / 90.0
                         log.info("SVG exported with Inkscape -> 90dpi.")
-                    elif 'Illustrator' in svghead.decode('utf-8'):
-                        self.px2mm *= 25.4/72.0
+                    elif "Illustrator" in svghead.decode("utf-8"):
+                        self.px2mm *= 25.4 / 72.0
                         log.info("SVG exported with Illustrator -> 72dpi.")
-                    elif 'Intaglio' in svghead.decode('utf-8'):
-                        self.px2mm *= 25.4/72.0
+                    elif "Intaglio" in svghead.decode("utf-8"):
+                        self.px2mm *= 25.4 / 72.0
                         log.info("SVG exported with Intaglio -> 72dpi.")
-                    elif 'CorelDraw' in svghead.decode('utf-8'):
-                        self.px2mm *= 25.4/96.0
+                    elif "CorelDraw" in svghead.decode("utf-8"):
+                        self.px2mm *= 25.4 / 96.0
                         log.info("SVG exported with CorelDraw -> 96dpi.")
-                    elif 'Qt' in svghead.decode('utf-8'):
-                        self.px2mm *= 25.4/90.0
+                    elif "Qt" in svghead.decode("utf-8"):
+                        self.px2mm *= 25.4 / 90.0
                         log.info("SVG exported with Qt lib -> 90dpi.")
                     else:
                         # give up in this step
@@ -286,20 +285,21 @@ class SVGReader:
                 else:
                     log.error("SVG with unsupported unit.")
                     self.px2mm = None
-                    
+
         # 4. Get px2mm by the ratio of svg size to target size
         if not self.px2mm and (width and height):
-            self.px2mm = self._target_size[0]/width
+            self.px2mm = self._target_size[0] / width
             log.info("px2mm by target_size/page_size ratio")
-
 
         # 5. Fall back on px unit DPIs default value
         if not self.px2mm:
             log.warn("Failed to determin physical dimensions -> defaulting to 90dpi.")
-            self.px2mm = 25.4/90.0
+            self.px2mm = 25.4 / 90.0
 
         # adjust tolerances to px units
-        self.tolerance2_px = (self.tolerance/self.px2mm)*(self.tolerance/self.px2mm)
+        self.tolerance2_px = (self.tolerance / self.px2mm) * (
+            self.tolerance / self.px2mm
+        )
 
         # translation from viewbox
         if vb_x:
@@ -315,33 +315,31 @@ class SVGReader:
         # recursively parse children
         # output will be in self.boundarys
         node = {
-            'xformToWorld': [1,0,0,1,tx,ty],
-            'display': 'visible',
-            'visibility': 'visible',
-            'fill': '#000000',
-            'stroke': '#000000',
-            'color': '#000000',
-            'fill-opacity': 1.0,
-            'stroke-opacity': 1.0,
-            'opacity': 1.0
+            "xformToWorld": [1, 0, 0, 1, tx, ty],
+            "display": "visible",
+            "visibility": "visible",
+            "fill": "#000000",
+            "stroke": "#000000",
+            "color": "#000000",
+            "fill-opacity": 1.0,
+            "stroke-opacity": 1.0,
+            "opacity": 1.0,
         }
         self.parse_children(svgRootElement, node)
 
         # build result dictionary
-        parse_results = {'dpi':round(25.4/self.px2mm)}
+        parse_results = {"dpi": round(25.4 / self.px2mm)}
 
         if self.boundarys:
-            parse_results['boundarys'] = self.boundarys
+            parse_results["boundarys"] = self.boundarys
 
         if self.lasertags:
-            parse_results['lasertags'] = self.lasertags
+            parse_results["lasertags"] = self.lasertags
 
         if self.rasters:
-            parse_results['rasters'] = self.rasters
+            parse_results["rasters"] = self.rasters
 
         return parse_results
-
-
 
     def parse_children(self, domNode, parentNode):
         for child in domNode:
@@ -350,18 +348,18 @@ class SVGReader:
                 # 1. setup a new node
                 # and inherit from parent
                 node = {
-                    'paths': [],
-                    'rasters': [],
-                    'xform': [1,0,0,1,0,0],
-                    'xformToWorld': parentNode['xformToWorld'],
-                    'display': parentNode.get('display'),
-                    'visibility': parentNode.get('visibility'),
-                    'fill': parentNode.get('fill'),
-                    'stroke': parentNode.get('stroke'),
-                    'color': parentNode.get('color'),
-                    'fill-opacity': parentNode.get('fill-opacity'),
-                    'stroke-opacity': parentNode.get('stroke-opacity'),
-                    'opacity': parentNode.get('opacity')
+                    "paths": [],
+                    "rasters": [],
+                    "xform": [1, 0, 0, 1, 0, 0],
+                    "xformToWorld": parentNode["xformToWorld"],
+                    "display": parentNode.get("display"),
+                    "visibility": parentNode.get("visibility"),
+                    "fill": parentNode.get("fill"),
+                    "stroke": parentNode.get("stroke"),
+                    "color": parentNode.get("color"),
+                    "fill-opacity": parentNode.get("fill-opacity"),
+                    "stroke-opacity": parentNode.get("stroke-opacity"),
+                    "opacity": parentNode.get("opacity"),
                 }
 
                 # 2. parse child
@@ -369,15 +367,15 @@ class SVGReader:
                 self._tagReader.read_tag(child, node)
 
                 # 3. compile boundarys + conversions
-                for path_entry in node['paths']:
+                for path_entry in node["paths"]:
                     # path_entry is {'data': [...], 'color': '#...'}
-                    path = path_entry['data']
-                    hexcolor = path_entry['color']
+                    path = path_entry["data"]
+                    hexcolor = path_entry["color"]
                     if path:  # skip if empty subpath
                         # 3a.) convert to world coordinates and then to mm units
                         for vert in path:
                             # print isinstance(vert[0],float) and isinstance(vert[1],float)
-                            matrixApply(node['xformToWorld'], vert)
+                            matrixApply(node["xformToWorld"], vert)
                             vertexScale(vert, self.px2mm)
                         # 3b.) sort output by color
                         if hexcolor in self.boundarys:
@@ -386,46 +384,45 @@ class SVGReader:
                             self.boundarys[hexcolor] = [path]
 
                 # 4. any lasertags (cut settings)?
-                if 'lasertags' in node:
-                    self.lasertags.extend(node['lasertags'])
+                if "lasertags" in node:
+                    self.lasertags.extend(node["lasertags"])
 
                 # 5. Raster Data [(x, y, size, data)]
-                for raster in node['rasters']:
+                for raster in node["rasters"]:
                     # pos to world coordinates and then to mm units
-                    matrixApply(node['xformToWorld'], raster['pos'])
-                    vertexScale(raster['pos'], self.px2mm)
+                    matrixApply(node["xformToWorld"], raster["pos"])
+                    vertexScale(raster["pos"], self.px2mm)
 
                     # size to world scale and then to mm units
-                    matrixApplyScale(node['xformToWorld'], raster['size'])
-                    vertexScale(raster['size'], self.px2mm)
-                    
+                    matrixApplyScale(node["xformToWorld"], raster["size"])
+                    vertexScale(raster["size"], self.px2mm)
+
                     # Check for flips (negative scale in transform)
                     # If size becomes negative, we need to flip the image data
-                    flip_h = raster['size'][0] < 0
-                    flip_v = raster['size'][1] < 0
-                    
+                    flip_h = raster["size"][0] < 0
+                    flip_v = raster["size"][1] < 0
+
                     # Ensure size is always positive
-                    raster['size'][0] = abs(raster['size'][0])
-                    raster['size'][1] = abs(raster['size'][1])
-                    
+                    raster["size"][0] = abs(raster["size"][0])
+                    raster["size"][1] = abs(raster["size"][1])
+
                     # Adjust position to compensate for flip
                     # When flipping, the anchor point shifts by the size
                     if flip_h:
-                        raster['pos'][0] -= raster['size'][0]
+                        raster["pos"][0] -= raster["size"][0]
                     if flip_v:
-                        raster['pos'][1] -= raster['size'][1]
-                    
+                        raster["pos"][1] -= raster["size"][1]
+
                     # Apply flip to image data if needed
-                    if (flip_h or flip_v) and Image is not None and raster['data']:
-                        raster['data'] = self._flip_image_data(raster['data'], flip_h, flip_v)
+                    if (flip_h or flip_v) and Image is not None and raster["data"]:
+                        raster["data"] = self._flip_image_data(
+                            raster["data"], flip_h, flip_v
+                        )
 
                     self.rasters.append(raster)
 
                 # recursive call
                 self.parse_children(child, node)
-
-
-
 
 
 # if __name__ == "__main__":

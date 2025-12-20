@@ -1,10 +1,7 @@
-
-__author__ = 'Stefan Hechenberger <stefan@nortd.com>'
+__author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 
 import re
-
-
 
 
 class NGCReader:
@@ -20,41 +17,41 @@ class NGCReader:
         # parsed path data, paths by color
         # {'#ff0000': [[path0, path1, ..], [path0, ..], ..]}
         # Each path is a list of vertices which is a list of two floats.
-        self.boundarys = {'#000000':[]}
-        self.black_boundarys = self.boundarys['#000000']
-
+        self.boundarys = {"#000000": []}
+        self.black_boundarys = self.boundarys["#000000"]
 
     def parse(self, ngcstring):
         """This is a total super quick HACK!!!!
-            Pretty much only parses the old example files.
+        Pretty much only parses the old example files.
         """
 
         paths = []
         current_path = []
-        re_findall_attribs = re.compile('(S|F|X|Y|Z)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)').findall
+        re_findall_attribs = re.compile(
+            "(S|F|X|Y|Z)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)"
+        ).findall
 
         intensity = 0.0
         feedrate = 1000.0
         target = [0.0, 0.0, 0.0]
         prev_motion_was_seek = True
 
-
-        lines = ngcstring.split('\n')
+        lines = ngcstring.split("\n")
         for line in lines:
-            line = line.replace(' ', '')
-            if line.startswith('G0'):
+            line = line.replace(" ", "")
+            if line.startswith("G0"):
                 attribs = re_findall_attribs(line[2:])
                 for attr in attribs:
-                    if attr[0] == 'X':
+                    if attr[0] == "X":
                         target[0] = float(attr[1])
                         prev_motion_was_seek = True
-                    elif attr[0] == 'Y':
+                    elif attr[0] == "Y":
                         target[1] = float(attr[1])
                         prev_motion_was_seek = True
-                    elif attr[0] == 'Z':
+                    elif attr[0] == "Z":
                         target[2] = float(attr[1])
                         prev_motion_was_seek = True
-            elif line.startswith('G1'):
+            elif line.startswith("G1"):
                 if prev_motion_was_seek:
                     # new path
                     paths.append([[target[0], target[1], target[2]]])
@@ -63,26 +60,26 @@ class NGCReader:
                 # new target
                 attribs = re_findall_attribs(line[2:])
                 for attr in attribs:
-                    if attr[0] == 'X':
+                    if attr[0] == "X":
                         target[0] = float(attr[1])
-                    elif attr[0] == 'Y':
+                    elif attr[0] == "Y":
                         target[1] = float(attr[1])
-                    elif attr[0] == 'Z':
+                    elif attr[0] == "Z":
                         target[2] = float(attr[1])
-                    elif attr[0] == 'S':
+                    elif attr[0] == "S":
                         intensity = float(attr[1])
-                    elif attr[0] == 'F':
+                    elif attr[0] == "F":
                         feedrate = float(attr[1])
                 current_path.append([target[0], target[1], target[2]])
-            elif line.startswith('S'):
+            elif line.startswith("S"):
                 attribs = re_findall_attribs(line)
                 for attr in attribs:
-                    if attr[0] == 'S':
+                    if attr[0] == "S":
                         intensity = float(attr[1])
             else:
                 print("Warning: Unsupported Gcode")
 
         print("Done!")
-        self.boundarys = {'#000000':paths}
-        pass_ = ['1', feedrate, '', intensity, '', '#000000']
-        return {'boundarys':self.boundarys}
+        self.boundarys = {"#000000": paths}
+        pass_ = ["1", feedrate, "", intensity, "", "#000000"]
+        return {"boundarys": self.boundarys}
