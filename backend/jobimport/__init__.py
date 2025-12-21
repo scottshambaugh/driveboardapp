@@ -150,6 +150,11 @@ def read_svg(svg_string, tolerance, forced_dpi=None, optimize=True):
                 if "passes" not in job:
                     job["passes"] = []
                 job["passes"].append({"items": idxs, "feedrate": tag[1], "intensity": tag[3]})
+
+    # Include any warnings from conversion
+    if "warnings" in res:
+        job["head"]["warnings"] = res["warnings"]
+
     return job
 
 

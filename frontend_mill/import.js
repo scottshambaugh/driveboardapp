@@ -83,6 +83,14 @@ function import_open(jobname, from_library) {
     success: function (job) {
       // alert(JSON.stringify(data))
       // $().uxmessage('notice', data)
+
+      // Show any warnings from import (e.g., font fallbacks)
+      if (job.head && job.head.warnings) {
+        for (var i = 0; i < job.head.warnings.length; i++) {
+          $().uxmessage("warning", job.head.warnings[i]);
+        }
+      }
+
       jobhandler.set(job, jobname, true);
       jobhandler.add_to_scene();
       jobview_render();

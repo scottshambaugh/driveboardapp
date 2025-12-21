@@ -5,6 +5,7 @@ import io
 import logging
 
 from .svg_tag_reader import SVGTagReader
+from .svg_text_converter import convert_text_to_paths, get_conversion_warnings
 from .utilities import matrixApply, matrixApplyScale, parseFloats, parseScalar, vertexScale
 
 try:
@@ -47,12 +48,12 @@ except ImportError:
 #   * 'style' attribute and presentation attributes
 #   * curves, arcs, cirles, ellipses tesellated according to tolerance
 #   * raster images
+#   * text (automatically converted to paths using system fonts)
 #
-# Intentinally not Supported:
+# Intentionally not Supported:
 #   * markers
 #   * masking
 #   * em, ex, % units
-#   * text (needs to be converted to paths)
 #   * style sheets
 #
 # ToDo:
@@ -193,6 +194,9 @@ class SVGReader:
         self.boundarys = {}
         self.lasertags = []
         self.rasters = []
+
+        # Convert text elements to paths before parsing
+        svgstring = convert_text_to_paths(svgstring)
 
         # parse xml
         svgRootElement = ET.fromstring(svgstring)
@@ -342,6 +346,11 @@ class SVGReader:
 
         if self.rasters:
             parse_results["rasters"] = self.rasters
+
+        # Collect any warnings from text conversion
+        warnings = get_conversion_warnings()
+        if warnings:
+            parse_results["warnings"] = warnings
 
         return parse_results
 
