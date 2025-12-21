@@ -39,6 +39,22 @@ python backend/app.py
 
 If necessary, create a [configuration](configure.md) file for the app.
 
+Development Setup
+-----------------
+
+To set up pre-commit hooks for linting and formatting:
+
+```bash
+uv tool install pre-commit
+pre-commit install
+```
+
+This will run [Ruff](https://docs.astral.sh/ruff/) (Python linting/formatting) and [Prettier](https://prettier.io/) (JavaScript formatting) automatically on each commit.
+
+To run the hooks manually on all files:
+```bash
+pre-commit run --all-files
+```
 
 ### Troubleshooting
 If any issues occur it helps to install the [Arduino IDE installation](https://www.arduino.cc/en/Guide/HomePage) and get the blink LED example to run. This makes sure the basics work. For example on Linux the Arduino IDE will ask you to give access permission to the serial port.
