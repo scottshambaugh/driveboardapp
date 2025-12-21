@@ -48,10 +48,7 @@ For help, type ``import png; help(png)`` in your python interpreter.
 A good place to start is the :class:`Reader` and :class:`Writer`
 classes.
 
-Requires Python 2.3.  Limited support is available for Python 2.2, but
-not everything works.  Best with Python 2.4 and higher.  Installation is
-trivial, but see the ``README.txt`` file (with the source distribution)
-for details.
+Requires Python 3.6 or higher.
 
 This file can also be used as a command-line utility to convert
 `Netpbm <http://netpbm.sourceforge.net/>`_ PNM files to PNG, and the
@@ -142,27 +139,17 @@ And now, my famous members
 --------------------------
 """
 
-# http://www.python.org/doc/2.2.3/whatsnew/node5.html
-
 __version__ = "0.0.17"
 
-from array import array
-from functools import reduce
-
-try:  # See :pyver:old
-    import itertools
-except ImportError:
-    pass
+import itertools
 import math
-
-# http://www.python.org/doc/2.4.4/lib/module-operator.html
 import operator
 import struct
 import sys
-
-# http://www.python.org/doc/2.4.4/lib/module-warnings.html
 import warnings
 import zlib
+from array import array
+from functools import reduce
 
 try:
     # `cpngfilters` is a Cython module: it must be compiled by
@@ -194,62 +181,25 @@ _adam7 = (
 
 
 def group(s, n):
-    # See http://www.python.org/doc/2.6/library/functions.html#zip
     return list(zip(*[iter(s)] * n))
 
 
 def isarray(x):
-    """Same as ``isinstance(x, array)`` except on Python 2.2, where it
-    always returns ``False``.  This helps PyPNG work on Python 2.2.
-    """
-
-    try:
-        return isinstance(x, array)
-    except TypeError:
-        # Because on Python 2.2 array.array is not a type.
-        return False
+    """Check if x is an array."""
+    return isinstance(x, array)
 
 
-try:
-    array.tobytes
-except AttributeError:
-    try:  # see :pyver:old
-        array.tostring
-    except AttributeError:
-
-        def tostring(row):
-            l = len(row)
-            return struct.pack("%dB" % l, *row)
-    else:
-
-        def tostring(row):
-            """Convert row of bytes to string.  Expects `row` to be an
-            ``array``.
-            """
-            return row.tostring()
-else:
-
-    def tostring(row):
-        """Python3 definition, array.tostring() is deprecated in Python3"""
-        return row.tobytes()
+def tostring(row):
+    """Convert row of bytes to bytes object. Expects `row` to be an ``array``."""
+    return row.tobytes()
 
 
-# Conditionally convert to bytes.  Works on Python 2 and Python 3.
-try:
-    bytes("", "ascii")
+def strtobytes(x):
+    return bytes(x, "iso8859-1")
 
-    def strtobytes(x):
-        return bytes(x, "iso8859-1")
 
-    def bytestostr(x):
-        return str(x, "iso8859-1")
-except (NameError, TypeError):
-    # We get NameError when bytes() does not exist (most Python
-    # 2.x versions), and TypeError when bytes() exists but is on
-    # Python 2.x (when it is an alias for str() and takes at most
-    # one argument).
-    strtobytes = str
-    bytestostr = str
+def bytestostr(x):
+    return str(x, "iso8859-1")
 
 
 def interleave_planes(ipixels, apixels, ipsize, apsize):
@@ -270,7 +220,6 @@ def interleave_planes(ipixels, apixels, ipsize, apsize):
     newtotal = itotal + atotal
     newpsize = ipsize + apsize
     # Set up the output buffer
-    # See http://www.python.org/doc/2.4.4/lib/module-array.html#l2h-1356
     out = array(ipixels.typecode)
     # It's annoying that there is no cheap way to set the array size :-(
     out.extend(ipixels)
@@ -790,7 +739,7 @@ class Writer:
         try:
             # If this fails...
             extend(row)
-        except:
+        except Exception:
             # ... try a version that converts the values to int first.
             # Not only does this work for the (slightly broken) NumPy
             # types, there are probably lots of other, unknown, "nearly"
@@ -1450,11 +1399,7 @@ class Reader:
                 continue
             verify = zlib.crc32(strtobytes(type))
             verify = zlib.crc32(data, verify)
-            # Whether the output from zlib.crc32 is signed or not varies
-            # according to hideous implementation details, see
-            # http://bugs.python.org/issue1202 .
-            # We coerce it to be positive here (in a way which works on
-            # Python 2.3 and older).
+            # Ensure verify is a 32-bit unsigned value
             verify &= 2**32 - 1
             verify = struct.pack("!I", verify)
             if checksum != verify:
@@ -2304,113 +2249,6 @@ def isinteger(x):
         return int(x) == x
     except (TypeError, ValueError):
         return False
-
-
-# === Legacy Version Support ===
-
-# :pyver:old:  PyPNG works on Python versions 2.3 and 2.2, but not
-# without some awkward problems.  Really PyPNG works on Python 2.4 (and
-# above); it works on Pythons 2.3 and 2.2 by virtue of fixing up
-# problems here.  It's a bit ugly (which is why it's hidden down here).
-#
-# Generally the strategy is one of pretending that we're running on
-# Python 2.4 (or above), and patching up the library support on earlier
-# versions so that it looks enough like Python 2.4.  When it comes to
-# Python 2.2 there is one thing we cannot patch: extended slices
-# http://www.python.org/doc/2.3/whatsnew/section-slices.html.
-# Instead we simply declare that features that are implemented using
-# extended slices will not work on Python 2.2.
-#
-# In order to work on Python 2.3 we fix up a recurring annoyance involving
-# the array type.  In Python 2.3 an array cannot be initialised with an
-# array, and it cannot be extended with a list (or other sequence).
-# Both of those are repeated issues in the code.  Whilst I would not
-# normally tolerate this sort of behaviour, here we "shim" a replacement
-# for array into place (and hope no-one notices).  You never read this.
-#
-# In an amusing case of warty hacks on top of warty hacks... the array
-# shimming we try and do only works on Python 2.3 and above (you can't
-# subclass array.array in Python 2.2).  So to get it working on Python
-# 2.2 we go for something much simpler and (probably) way slower.
-try:
-    array("B").extend([])
-    array("B", array("B"))
-# :todo:(drj) Check that TypeError is correct for Python 2.3
-except TypeError:
-    # Expect to get here on Python 2.3
-    try:
-
-        class _array_shim(array):
-            true_array = array
-
-            def __new__(cls, typecode, init=None):
-                super_new = super().__new__
-                it = super_new(cls, typecode)
-                if init is None:
-                    return it
-                it.extend(init)
-                return it
-
-            def extend(self, extension):
-                super_extend = super().extend
-                if isinstance(extension, self.true_array):
-                    return super_extend(extension)
-                if not isinstance(extension, (list, str)):
-                    # Convert to list.  Allows iterators to work.
-                    extension = list(extension)
-                return super_extend(self.true_array(self.typecode, extension))
-
-        array = _array_shim
-    except TypeError:
-        # Expect to get here on Python 2.2
-        def array(typecode, init=()):
-            if type(init) == str:
-                return list(map(ord, init))
-            return list(init)
-
-
-# Further hacks to get it limping along on Python 2.2
-try:
-    enumerate
-except NameError:
-
-    def enumerate(seq):
-        i = 0
-        for x in seq:
-            yield i, x
-            i += 1
-
-
-try:
-    reversed
-except NameError:
-
-    def reversed(l):
-        l = list(l)
-        l.reverse()
-        yield from l
-
-
-try:
-    itertools
-except NameError:
-
-    class _dummy_itertools:
-        pass
-
-    itertools = _dummy_itertools()
-
-    def _itertools_imap(f, seq):
-        for x in seq:
-            yield f(x)
-
-    itertools.imap = _itertools_imap
-
-    def _itertools_chain(*iterables):
-        for it in iterables:
-            yield from it
-
-    itertools.chain = _itertools_chain
 
 
 # === Support for users without Cython ===
