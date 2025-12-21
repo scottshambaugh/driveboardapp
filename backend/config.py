@@ -41,7 +41,6 @@ conf = {
     "seekrate": 6000,
     "feedrate": 2000,
     "intensity": 0,
-    "kerf": 0.3,
     "pxsize": 0.2,  # size (mm) of beam for rastering
     "pulse_intensity": 10,
     "pulse_duration": 0.1,
@@ -68,35 +67,32 @@ conf = {
 }
 conf_defaults = copy.deepcopy(conf)
 
+# Settings editable via config file only (require restart):
+# - network_host, network_port: Server connection settings
+# - serial_port, firmware: Hardware connection settings
+# - mill_mode: Changes frontend, requires restart
+# - users: Security-sensitive, excluded from API
+
 userconfigurable = {
-    "network_host": "IP (NIC) to run server on. Leave '' for all.",
-    "network_port": "Port to run server on.",
-    "serial_port": "Serial port for Driveboard hardware.",
-    "firmware": "Default firmware. Use designator matching the * in config.*.h",
     "workspace": "[x,y,z] dimensions of machine's work area in mm.",
     "grid_mm": "Visual grid of UI in mm.",
     "seekrate": "Default seek rate in mm/min.",
     "feedrate": "Default feed rate in mm/min.",
     "intensity": "Default intensity setting 0-100.",
-    "kerf": "Typical kerf of a cut.",
-    "pxsize": "Default kerf setting for rastering and filling.",
+    "pxsize": "Default pixel size in mm for rastering and filling.",
     "pulse_intensity": "Default pulse intensity setting 0-100.",
     "pulse_duration": "Default pulse duration in seconds.",
     "max_jobs_in_list": "Jobs to keep in the history list.",
     "print_serial_data": "Print all raw serial communications to the debug window.",
-    "raster_invert": "If true, laser will set black pixels to 0%% intensity and white pixels to 100%% intensity.",
+    "raster_invert": r"If true, laser will set black pixels to 0% intensity and white pixels to 100% intensity.",
     "raster_levels": "Number of raster dithering levels, from 2 for complete on/off dithering, to 128 for a smooth image",
     "raster_mode": "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'.",
     "raster_leadin": "Leadin for raster fills in mm. Note: rastering may fail if this is 0",
     "fill_mode": "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'.",
     "fill_leadin": "Leadin for vector fills in mm.",
-    "users": "List of user cendentials for UI access.",
     "enable_gzip": "Enable gzip compression in job uploads.",
     "home_on_startup": "Automatically perform a homing cycle when the machine first connects.",
-    "mill_mode": "Activate CNC mill mode.",
     "mill_max_rpm": "Maximum spindle RPM.",
-    "alignment_host": "IP or hostname of alignment server.",
-    "alignment_port": "Port of alignment server.",
     "require_unit": "Whether a physical unit (cm, mm, in) should be required to load SVG files.",
 }
 

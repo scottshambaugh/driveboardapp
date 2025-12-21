@@ -6,6 +6,7 @@ The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboa
 * Bidirectional and nearest neighbor pathing algorithms for fill and rastering speedups
 * Added a 'pulse' functionality for the laser (all safety interlocks still work)
 * You can save material preset laser settings through the UI and easily load them back up
+* The configuration is editable through the UI
 * The debug terminal can now be resized, scroll, and will not auto-jump back down when scrolling around
 * Option to print out human-readable versions of the tx/rx serial commands
 * Option for the head to auto-home when the interface is first started
@@ -13,6 +14,7 @@ The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboa
 * Your current X-Y coordinates are shown on screen
 * “Set Offset” now sets the offset to the current head position
 * The head position is now set in relative dx, dy coordinates
+* Fills of the same color are now nested to create holes in fill areas
 * Many small bugfixes
 * Tested on Windows and Linux
 
