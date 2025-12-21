@@ -2,9 +2,8 @@
 import os
 import unittest
 
-import web
 import lasersaur
-
+import web
 
 thislocation = os.path.dirname(os.path.realpath(__file__))
 
@@ -25,9 +24,7 @@ class TestJobs(unittest.TestCase):
         jobfile = os.path.join(thislocation, "testjobs", "k4.dba")
         job = lasersaur.open_file(jobfile)
         if "vector" in job:
-            job["vector"]["passes"] = [
-                {"paths": [0], "feedrate": 7000, "intensity": 53}
-            ]
+            job["vector"]["passes"] = [{"paths": [0], "feedrate": 7000, "intensity": 53}]
         jobname = lasersaur.load(job)
         self.assertIn(jobname, lasersaur.listing())
         lasersaur.run(jobname, progress=True)

@@ -1,12 +1,11 @@
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
-import re
 import logging
-
-from .utilities import matrixMult
+import re
 
 from .svg_attribute_reader import SVGAttributeReader
 from .svg_path_reader import SVGPathReader
+from .utilities import matrixMult
 
 # from PIL import Image
 
@@ -38,9 +37,7 @@ class SVGTagReader:
         self.re_findall_lasertags = re.compile(
             r"=pass([0-9]+):([0-9]*)(mm/min)?:([0-9]*)(%)?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?="
         ).findall
-        self.re_match_imagemime = re.compile(
-            "data:image/(png);base64,", re.IGNORECASE
-        ).match
+        self.re_match_imagemime = re.compile("data:image/(png);base64,", re.IGNORECASE).match
 
     def read_tag(self, tag, node):
         """Read a tag.

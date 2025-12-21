@@ -6,8 +6,8 @@
 __author__ = "David S. Touretzky, Stefan Hechenberger <stefan@nortd.com>"
 
 
-import math
 import io
+import math
 
 
 class DXFReader:
@@ -174,9 +174,7 @@ class DXFReader:
     def complain_spline(self):
         print("Encountered a SPLINE at line", self.linecount)
         print("This program cannot handle splines at present.")
-        print(
-            "Convert the spline to an LWPOLYLINE using Save As options in SolidWorks."
-        )
+        print("Convert the spline to an LWPOLYLINE using Save As options in SolidWorks.")
         raise ValueError
 
     def complain_invalid(self):
@@ -195,9 +193,7 @@ class DXFReader:
         dy = 0.5 * (y1 - y2)
         x_ = cp * dx + sp * dy
         y_ = -sp * dx + cp * dy
-        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / (
-            (rx * y_) ** 2 + (ry * x_) ** 2
-        )
+        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / ((rx * y_) ** 2 + (ry * x_) ** 2)
         if r2 < 0:
             r2 = 0
         r = math.sqrt(r2)
@@ -219,9 +215,7 @@ class DXFReader:
             return sgn * a
 
         psi = _angle([1, 0], [(x_ - cx_) / rx, (y_ - cy_) / ry])
-        delta = _angle(
-            [(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry]
-        )
+        delta = _angle([(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry])
         if sweep and delta < 0:
             delta += math.pi * 2
         if not sweep and delta > 0:

@@ -25,14 +25,14 @@
 # print "job done"
 #
 
+import base64
+import json
+import logging
 import os
 import sys
 import time
-import json
-import base64
-import requests
-import logging
 
+import requests
 
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
@@ -43,7 +43,7 @@ logging.basicConfig()
 logging.getLogger().setLevel(logging.ERROR)
 
 
-class Lasersaur(object):
+class Lasersaur:
     def __init__(self, host="lasersaur.local", port=80, user="laser", pass_="laser"):
         """Create a Lasersaur client object."""
         self.host = host
@@ -67,10 +67,7 @@ class Lasersaur(object):
 
         if not r.ok:
             if r.status_code == 400:
-                print(
-                    "WEB ERROR: "
-                    + r.text[r.text.find("<pre>") + 5 : r.text.find("</pre>")]
-                )
+                print("WEB ERROR: " + r.text[r.text.find("<pre>") + 5 : r.text.find("</pre>")])
             r.raise_for_status()
 
         if ret:
@@ -350,20 +347,14 @@ class Lasersaur(object):
         base, name = os.path.split(jobfile)
         name, ext = os.path.splitext(name)
         job = lasersaur.open_file(jobfile, optimize=True)
-        if (
-            "vector" in job
-            and "paths" in job["vector"]
-            and type(job["vector"]["paths"]) is list
-        ):
+        if "vector" in job and "paths" in job["vector"] and type(job["vector"]["paths"]) is list:
             if "passes" not in job["vector"] or feedrate is not None:
                 # file has no pass info | feedrate is specified
                 if feedrate is None:
                     feedrate = 4000
                 job["vector"]["passes"] = [
                     {
-                        "paths": list(
-                            range(len(job["vector"]["paths"]))
-                        ),  # apply to all path
+                        "paths": list(range(len(job["vector"]["paths"]))),  # apply to all path
                         "feedrate": feedrate,
                         "intensity": intensity,
                     }

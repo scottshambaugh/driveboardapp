@@ -6,7 +6,6 @@
 import os
 import sys
 
-
 # How to use this file
 # =====================
 
@@ -16,22 +15,12 @@ import sys
 # Please verify the following locations are correct for you platform:
 
 if sys.platform == "darwin":  # OSX
-    AVRDUDEAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avrdude"
-    )
+    AVRDUDEAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avrdude"
     AVRGCCAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-gcc"
-    AVROBJCOPYAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objcopy"
-    )
-    AVRSIZEAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-size"
-    )
-    AVROBJDUMPAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objdump"
-    )
-    AVRDUDECONFIG = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/etc/avrdude.conf"
-    )
+    AVROBJCOPYAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objcopy"
+    AVRSIZEAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-size"
+    AVROBJDUMPAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objdump"
+    AVRDUDECONFIG = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/etc/avrdude.conf"
 
 elif sys.platform == "win32":  # Windows
     AVRDUDEAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin'
@@ -95,10 +84,7 @@ def build():
     )
 
     for fileobj in OBJECTS:
-        os.system(
-            "%(compile)s -c %(obj)s.c -o %(obj)s.o"
-            % {"compile": COMPILE, "obj": fileobj}
-        )
+        os.system("%(compile)s -c %(obj)s.c -o %(obj)s.o" % {"compile": COMPILE, "obj": fileobj})
 
     os.system(
         "%(compile)s -o main.elf %(alldoto)s  -lm"
@@ -109,7 +95,7 @@ def build():
 
     os.system(
         "%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex"
-        % {"objcopy": AVROBJCOPYAPP, "obj": fileobj, "product": BUILDNAME}
+        % {"objcopy": AVROBJCOPYAPP, "product": BUILDNAME}
     )
 
     os.system("%(size)s *.hex *.elf *.o" % {"size": AVRSIZEAPP})
@@ -164,9 +150,7 @@ else:
         line = fp.readline().strip()
         if len(line) > 3:
             SERIAL_PORT = line
-            print(
-                "Using serial device '" + SERIAL_PORT + "' from '" + CONFIG_FILE + "'."
-            )
+            print("Using serial device '" + SERIAL_PORT + "' from '" + CONFIG_FILE + "'.")
 
 
 if not SERIAL_PORT:
@@ -183,22 +167,14 @@ if not SERIAL_PORT:
 if SERIAL_PORT:
     build()
 else:
-    print(
-        "-----------------------------------------------------------------------------"
-    )
+    print("-----------------------------------------------------------------------------")
     print("ERROR: flash.py doesn't know what serial device to connect to!")
     print("On Linux or OSX this is something like '/dev/tty.usbmodemfd121' and on")
     print("Windows this is something like 'COM1', 'COM2', 'COM3', ...")
     print("The serial port can be supplied in one of the following ways:")
     print("(1) First argument on the  command line.")
-    print(
-        "(2) In a config file named '" + CONFIG_FILE + "' (located in same directory)"
-    )
+    print("(2) In a config file named '" + CONFIG_FILE + "' (located in same directory)")
     print("    with the serial port string on the first line.")
     print("(3) Best guess. On Linux and OSX the app can guess the serial name by")
-    print(
-        "    choosing the first device it finds starting with '" + GUESS_PPREFIX + "'."
-    )
-    print(
-        "-----------------------------------------------------------------------------"
-    )
+    print("    choosing the first device it finds starting with '" + GUESS_PPREFIX + "'.")
+    print("-----------------------------------------------------------------------------")

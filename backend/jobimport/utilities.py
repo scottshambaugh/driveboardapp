@@ -1,6 +1,5 @@
 import re
 
-
 re_findall_floats = re.compile(r"(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)").findall
 re_scalar_unit = re.compile(r"(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)([a-z]*)").findall
 

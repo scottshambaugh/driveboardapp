@@ -1,23 +1,20 @@
-# -*- coding: utf-8 -*-
-
-import sys
-import os
-import time
-import glob
-import json
 import copy
+import glob
+import gzip
+import json
+import os
+import sys
 import tempfile
 import threading
+import time
+import traceback
 import webbrowser
 import wsgiref.simple_server
-import bottle
-import traceback
-import gzip
-from config import conf, userconfigurable, write_config_fields, conf_defaults
 
+import bottle
 import driveboard
 import jobimport
-
+from config import conf, conf_defaults, userconfigurable, write_config_fields
 
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
@@ -54,9 +51,7 @@ def checkserial(func):
 
 @bottle.route("/")
 def default_handler():
-    return bottle.static_file(
-        "app.html", root=os.path.join(conf["rootdir"], frontend_path)
-    )
+    return bottle.static_file("app.html", root=os.path.join(conf["rootdir"], frontend_path))
 
 
 @bottle.route("/<file>")
@@ -66,30 +61,22 @@ def static_bin_handler(file):
 
 @bottle.route("/css/<path:path>")
 def static_css_handler(path):
-    return bottle.static_file(
-        path, root=os.path.join(conf["rootdir"], frontend_path, "css")
-    )
+    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "css"))
 
 
 @bottle.route("/fonts/<path:path>")
 def static_font_handler(path):
-    return bottle.static_file(
-        path, root=os.path.join(conf["rootdir"], frontend_path, "fonts")
-    )
+    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "fonts"))
 
 
 @bottle.route("/js/<path:path>")
 def static_js_handler(path):
-    return bottle.static_file(
-        path, root=os.path.join(conf["rootdir"], frontend_path, "js")
-    )
+    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "js"))
 
 
 @bottle.route("/img/<path:path>")
 def static_img_handler(path):
-    return bottle.static_file(
-        path, root=os.path.join(conf["rootdir"], frontend_path, "img")
-    )
+    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "img"))
 
 
 @bottle.route("/favicon.ico")
@@ -673,9 +660,7 @@ def save_preset(name, feedrate, intensity, pxsize):
     """Save a preset setting to presets.json. Delete if feedrate==0 && intensity==0"""
     presets = _read_presets()
     try:
-        presets_dict = {
-            one_preset["name"].lower(): one_preset for one_preset in presets
-        }
+        presets_dict = {one_preset["name"].lower(): one_preset for one_preset in presets}
         if name.lower() in presets_dict and int(feedrate) == 0 and int(intensity) == 0:
             del presets_dict[name.lower()]
         elif int(feedrate) != 0 or int(intensity) != 0:
@@ -806,7 +791,7 @@ def reset():
     """Reset MCU"""
     try:
         driveboard.reset()
-    except IOError:
+    except OSError:
         raise bottle.HTTPResponse("Reset failed.", 400)
     return "{}"
 
@@ -878,13 +863,9 @@ def start(browser=False, debug=False):
     print("Library Directory: " + conf["rootdir"])
     print("Config Directory: " + conf["confdir"])
     print("Queue Directory: " + conf["stordir"])
-    print(
-        "-----------------------------------------------------------------------------"
-    )
+    print("-----------------------------------------------------------------------------")
     print("Starting server at http://%s:%d/" % ("127.0.0.1", conf["network_port"]))
-    print(
-        "-----------------------------------------------------------------------------"
-    )
+    print("-----------------------------------------------------------------------------")
     driveboard.connect_withfind()
     # open web-browser
     if browser:

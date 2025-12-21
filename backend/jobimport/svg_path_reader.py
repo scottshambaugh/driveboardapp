@@ -1,7 +1,7 @@
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
-import math
 import logging
+import math
 
 log = logging.getLogger("svg_reader")
 
@@ -24,9 +24,7 @@ class SVGPathReader:
 
     def _append_subpath(self, subpath):
         """Helper to append a subpath with its color to the node's paths list."""
-        self._current_node["paths"].append(
-            {"data": subpath, "color": self._current_color}
-        )
+        self._current_node["paths"].append({"data": subpath, "color": self._current_color})
 
     def add_path(self, d, node, color=None):
         """Convert svg path data to normalized polylines.
@@ -340,8 +338,8 @@ class SVGPathReader:
         dx = x4 - x1
         dy = y4 - y1
 
-        d2 = abs(((x2 - x4) * dy - (y2 - y4) * dx))
-        d3 = abs(((x3 - x4) * dy - (y3 - y4) * dx))
+        d2 = abs((x2 - x4) * dy - (y2 - y4) * dx)
+        d3 = abs((x3 - x4) * dy - (y3 - y4) * dx)
 
         if (d2 + d3) ** 2 < 5.0 * self._tolerance2 * (dx * dx + dy * dy):
             # added factor of 5.0 to match circle resolution
@@ -349,12 +347,8 @@ class SVGPathReader:
             return
 
         # Continue subdivision
-        self.addCubicBezier(
-            subpath, x1, y1, x12, y12, x123, y123, x1234, y1234, level + 1
-        )
-        self.addCubicBezier(
-            subpath, x1234, y1234, x234, y234, x34, y34, x4, y4, level + 1
-        )
+        self.addCubicBezier(subpath, x1, y1, x12, y12, x123, y123, x1234, y1234, level + 1)
+        self.addCubicBezier(subpath, x1234, y1234, x234, y234, x34, y34, x4, y4, level + 1)
 
     def addQuadraticBezier(self, subpath, x1, y1, x2, y2, x3, y3, level):
         if level > 18:
@@ -372,7 +366,7 @@ class SVGPathReader:
 
         dx = x3 - x1
         dy = y3 - y1
-        d = abs(((x2 - x3) * dy - (y2 - y3) * dx))
+        d = abs((x2 - x3) * dy - (y2 - y3) * dx)
 
         if d * d <= 5.0 * self._tolerance2 * (dx * dx + dy * dy):
             # added factor of 5.0 to match circle resolution
@@ -395,9 +389,7 @@ class SVGPathReader:
         dy = 0.5 * (y1 - y2)
         x_ = cp * dx + sp * dy
         y_ = -sp * dx + cp * dy
-        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / (
-            (rx * y_) ** 2 + (ry * x_) ** 2
-        )
+        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / ((rx * y_) ** 2 + (ry * x_) ** 2)
         if r2 < 0:
             r2 = 0
         r = math.sqrt(r2)
@@ -419,9 +411,7 @@ class SVGPathReader:
             return sgn * a
 
         psi = _angle([1, 0], [(x_ - cx_) / rx, (y_ - cy_) / ry])
-        delta = _angle(
-            [(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry]
-        )
+        delta = _angle([(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry])
         if sweep and delta < 0:
             delta += math.pi * 2
         if not sweep and delta > 0:

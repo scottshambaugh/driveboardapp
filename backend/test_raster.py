@@ -1,14 +1,13 @@
 # -*- coding: UTF-8 -*-
 import os
+import pprint
 import sys
 import time
 import unittest
-import pprint
-from PIL import Image
 
-import web
 import lasersaur
-
+import web
+from PIL import Image
 
 # assertEqual(a, b)
 # assertNotEqual(a, b)
@@ -81,9 +80,7 @@ class TestRaster(unittest.TestCase):
         #             "intensity":53
         #         }]
         if "raster" in job:
-            job["raster"]["passes"] = [
-                {"images": [0], "feedrate": 4000, "intensity": 53}
-            ]
+            job["raster"]["passes"] = [{"images": [0], "feedrate": 4000, "intensity": 53}]
         print(list(job.keys()))
         pprint.pprint(job["raster"]["passes"])
         jobname = lasersaur.load(job)

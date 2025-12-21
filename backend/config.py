@@ -14,13 +14,12 @@
 # }
 #
 
-import os
-import sys
+import copy
 import glob
 import json
-import copy
+import os
+import sys
 import tempfile
-
 
 conf = {
     "appname": "driveboardapp",
@@ -138,9 +137,7 @@ if sys.platform == "darwin":
         conf["appname"],
     )
 elif sys.platform == "win32":
-    directory = os.path.join(
-        os.path.expandvars("%APPDATA%"), conf["company_name"], conf["appname"]
-    )
+    directory = os.path.join(os.path.expandvars("%APPDATA%"), conf["company_name"], conf["appname"])
 else:
     directory = os.path.join(os.path.expanduser("~"), "." + conf["appname"])
 if not os.path.exists(directory):
@@ -211,7 +208,7 @@ elif conf["hardware"] == "beaglebone":
     try:
         with open("/sys/class/gpio/export", "w") as fw:
             fw.write("%d" % (71))
-    except IOError:
+    except OSError:
         # probably already exported
         pass
     # set the gpio pin to output
@@ -237,7 +234,7 @@ elif conf["hardware"] == "beaglebone":
     try:
         with open("/sys/class/gpio/export", "w") as fw:
             fw.write("%d" % (73))
-    except IOError:
+    except OSError:
         # probably already exported
         pass
     # set the gpio pin to output
@@ -261,14 +258,14 @@ elif conf["hardware"] == "beaglebone":
     try:
         with open("/sys/class/gpio/export", "w") as fw:
             fw.write("%d" % (76))
-    except IOError:
+    except OSError:
         # probably already exported
         pass
     # set the gpio pin to input
     with open("/sys/class/gpio/gpio76/direction", "w") as fw:
         fw.write("in")
     # set the gpio pin high
-    with open("/sys/class/gpio/gpio76/value", "r") as fw:
+    with open("/sys/class/gpio/gpio76/value") as fw:
         ret = fw.read()
         # print "Stepper driver configure pin is: " + str(ret)
 

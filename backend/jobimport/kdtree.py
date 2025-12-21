@@ -92,15 +92,7 @@ class Node:
         return d2
 
     def _str(self, level):
-        s = (
-            "  " * level
-            + str(self.dir)
-            + " "
-            + str(self.pos)
-            + " "
-            + str(self.rect)
-            + "\n"
-        )
+        s = "  " * level + str(self.dir) + " " + str(self.pos) + " " + str(self.rect) + "\n"
         return (
             s
             + ("" if self.left is None else "L:" + self.left._str(level + 1))
@@ -220,9 +212,9 @@ if __name__ == "__main__":
         def dot(self, other):
             return sum(self[k] * other[k] for k in (0, 1, 2))
 
+    import unittest
     from random import random, seed, shuffle
     from time import time
-    import unittest
 
     class TestVector(unittest.TestCase):
         def test_ops(self):
@@ -289,9 +281,7 @@ if __name__ == "__main__":
             r = (-1, 0, 1)
             self.points = [vector(k, l, m) for k in r for l in r for m in r]
             d = (-0.1, 0, 0.1)
-            self.d = [
-                vector(k, l, m) for k in d for l in d for m in d if (k * l * m) != 0
-            ]
+            self.d = [vector(k, l, m) for k in d for l in d for m in d if (k * l * m) != 0]
             self.repeats = 4
 
         def test_simple(self):
@@ -461,11 +451,7 @@ if __name__ == "__main__":
             e = time() - s
             print("queries|tree size|tree height|empties|query load|query time")
             print(
-                (
-                    "{0:7d}|{2:9d}|{1.level:11d}|      0|{3:10.2f}|{4:10.1f}".format(
-                        qsize, tree, tsize, float(tree.count) / qsize, e
-                    )
-                )
+                f"{qsize:7d}|{tsize:9d}|{tree.level:11d}|      0|{float(tree.count) / qsize:10.2f}|{e:10.1f}"
             )
 
             tree.resetcounters()
@@ -480,11 +466,7 @@ if __name__ == "__main__":
                 node, distsq = tree.nearest(p)
             e2 = time() - s
             print(
-                (
-                    "{0:7d}|{2:9d}|{1.level:11d}|      0|{3:10.2f}|{4:10.1f}".format(
-                        qsize, tree, tsize * 10, float(tree.count) / qsize, e2
-                    )
-                )
+                f"{qsize:7d}|{tsize * 10:9d}|{tree.level:11d}|      0|{float(tree.count) / qsize:10.2f}|{e2:10.1f}"
             )
 
             self.assertLess(
@@ -502,16 +484,7 @@ if __name__ == "__main__":
                 node, distsq = tree.nearest(p, checkempty=True)
             e3 = time() - s
             print(
-                (
-                    "{0:7d}|{2:9d}|{1.level:11d}|{5:7d}|{3:10.2f}|{4:10.1f}".format(
-                        qsize,
-                        tree,
-                        tsize * 10,
-                        float(tree.count) / qsize,
-                        e3,
-                        tsize * 10 // emptyq,
-                    )
-                )
+                f"{qsize:7d}|{tsize * 10:9d}|{tree.level:11d}|{tsize * 10 // emptyq:7d}|{float(tree.count) / qsize:10.2f}|{e3:10.1f}"
             )
 
     unittest.main()

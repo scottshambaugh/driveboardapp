@@ -1,165 +1,172 @@
-
-var import_name = ""
-
+var import_name = "";
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-
-$(document).ready(function(){
+$(document).ready(function () {
   // file upload form
-  $('#open_file_fld').change(function(e){
-    e.preventDefault()
-    $('#open_btn').button('loading')
-    var input = $('#open_file_fld').get(0)
+  $("#open_file_fld").change(function (e) {
+    e.preventDefault();
+    $("#open_btn").button("loading");
+    var input = $("#open_file_fld").get(0);
 
     // file API check
-    var browser_supports_file_api = true
-    if (typeof window.FileReader !== 'function') {
-      browser_supports_file_api = false
+    var browser_supports_file_api = true;
+    if (typeof window.FileReader !== "function") {
+      browser_supports_file_api = false;
     } else if (!input.files) {
-      browser_supports_file_api = false
+      browser_supports_file_api = false;
     }
 
     // setup onload handler
     if (browser_supports_file_api) {
       if (input.files[0]) {
-        var fr = new FileReader()
-        fr.onload = sendToBackend
-        fr.readAsText(input.files[0])
+        var fr = new FileReader();
+        fr.onload = sendToBackend;
+        fr.readAsText(input.files[0]);
       } else {
-        $().uxmessage('error', "No file was selected.")
+        $().uxmessage("error", "No file was selected.");
       }
-    } else {  // fallback
-      $().uxmessage('error', "Requires browser with File API support.")
+    } else {
+      // fallback
+      $().uxmessage("error", "Requires browser with File API support.");
     }
 
     // reset file input form field so change event also triggers again
-    var file_fld = $('#open_file_fld').val()
-    file_fld = file_fld.slice(file_fld.lastIndexOf('\\')+1) || file_fld  // drop unix path
-    file_fld = file_fld.slice(file_fld.lastIndexOf('/')+1) || file_fld   // drop windows path
-    import_name = file_fld.slice(0, file_fld.lastIndexOf('.')) || file_fld  // drop extension
-    $('#open_file_fld').val('')
-  })
+    var file_fld = $("#open_file_fld").val();
+    file_fld = file_fld.slice(file_fld.lastIndexOf("\\") + 1) || file_fld; // drop unix path
+    file_fld = file_fld.slice(file_fld.lastIndexOf("/") + 1) || file_fld; // drop windows path
+    import_name = file_fld.slice(0, file_fld.lastIndexOf(".")) || file_fld; // drop extension
+    $("#open_file_fld").val("");
+  });
 
   // file upload form with alignment
   // TODO: The normal and with-alignment variants can probably be refactored
   //       since they have lots of similar logic.
-  $('#open_align_file_fld').change(function(e){
-    e.preventDefault()
-    $('#open_align_btn').button('loading')
-    var input = $('#open_align_file_fld').get(0)
+  $("#open_align_file_fld").change(function (e) {
+    e.preventDefault();
+    $("#open_align_btn").button("loading");
+    var input = $("#open_align_file_fld").get(0);
 
     // file API check
-    var browser_supports_file_api = true
-    if (typeof window.FileReader !== 'function') {
-      browser_supports_file_api = false
+    var browser_supports_file_api = true;
+    if (typeof window.FileReader !== "function") {
+      browser_supports_file_api = false;
     } else if (!input.files) {
-      browser_supports_file_api = false
+      browser_supports_file_api = false;
     }
 
     // setup onload handler
     if (browser_supports_file_api) {
       if (input.files[0]) {
-        var fr = new FileReader()
-        fr.onload = sendToBackendWithAlignment
-        fr.readAsText(input.files[0])
+        var fr = new FileReader();
+        fr.onload = sendToBackendWithAlignment;
+        fr.readAsText(input.files[0]);
       } else {
-        $().uxmessage('error', "No file was selected.")
+        $().uxmessage("error", "No file was selected.");
       }
-    } else {  // fallback
-      $().uxmessage('error', "Requires browser with File API support.")
+    } else {
+      // fallback
+      $().uxmessage("error", "Requires browser with File API support.");
     }
 
     // reset file input form field so change event also triggers again
-    var file_fld = $('#open_align_file_fld').val()
-    file_fld = file_fld.slice(file_fld.lastIndexOf('\\')+1) || file_fld  // drop unix path
-    file_fld = file_fld.slice(file_fld.lastIndexOf('/')+1) || file_fld   // drop windows path
-    import_name = file_fld.slice(0, file_fld.lastIndexOf('.')) || file_fld  // drop extension
-    $('#open_align_file_fld').val('')
-  })
-
+    var file_fld = $("#open_align_file_fld").val();
+    file_fld = file_fld.slice(file_fld.lastIndexOf("\\") + 1) || file_fld; // drop unix path
+    file_fld = file_fld.slice(file_fld.lastIndexOf("/") + 1) || file_fld; // drop windows path
+    import_name = file_fld.slice(0, file_fld.lastIndexOf(".")) || file_fld; // drop extension
+    $("#open_align_file_fld").val("");
+  });
 
   function sendToBackend(e) {
-    var job = e.target.result
+    var job = e.target.result;
 
     // notify parsing started
-    $().uxmessage('notice', "parsing "+import_name+" ...")
+    $().uxmessage("notice", "parsing " + import_name + " ...");
     // large file note
     if (job.length > 102400) {
-      $().uxmessage('notice', "Big file! May take a few minutes.")
+      $().uxmessage("notice", "Big file! May take a few minutes.");
     }
 
     // send to backend
-    var load_request = {'job':job, 'name':import_name, 'optimize':true}
+    var load_request = { job: job, name: import_name, optimize: true };
     request_post({
-      url:'/load',
+      url: "/load",
       data: load_request,
       success: function (jobname) {
-        $().uxmessage('notice', "Parsed "+jobname+".")
-        queue_update()
-        import_open(jobname)
+        $().uxmessage("notice", "Parsed " + jobname + ".");
+        queue_update();
+        import_open(jobname);
       },
       error: function (data) {
-        $().uxmessage('error', "/load error.")
-        $().uxmessage('error', data.responseText, false)
+        $().uxmessage("error", "/load error.");
+        $().uxmessage("error", data.responseText, false);
       },
       complete: function (data) {
-        $('#open_btn').button('reset')
-      }
-    })
-
+        $("#open_btn").button("reset");
+      },
+    });
   }
 
   function sendToBackendWithAlignment(e) {
-    var job = e.target.result
+    var job = e.target.result;
 
     // notify parsing started
-    $().uxmessage('notice', "parsing "+import_name+" ...")
+    $().uxmessage("notice", "parsing " + import_name + " ...");
     // large file note
     if (job.length > 102400) {
-      $().uxmessage('notice', "Big file! May take a few minutes.")
+      $().uxmessage("notice", "Big file! May take a few minutes.");
     }
 
     request_get({
-      url:'http://' + app_config_main.alignment_host + ':' + app_config_main.alignment_port + '/align/' + encodeURI(window.location.hostname) + '/' + window.location.port,
+      url:
+        "http://" +
+        app_config_main.alignment_host +
+        ":" +
+        app_config_main.alignment_port +
+        "/align/" +
+        encodeURI(window.location.hostname) +
+        "/" +
+        window.location.port,
       error: function (data) {
-        $().uxmessage('error', "/align error.")
-        $().uxmessage('error', data.responseText, false)
+        $().uxmessage("error", "/align error.");
+        $().uxmessage("error", data.responseText, false);
       },
       complete: function (data) {
-        $('#open_align_btn').button('reset')
+        $("#open_align_btn").button("reset");
       },
-      success: function(matrix) {
+      success: function (matrix) {
         // send to backend
-        var load_request = {'job':job, 'name':import_name, 'optimize':true, 'matrix':matrix}
+        var load_request = {
+          job: job,
+          name: import_name,
+          optimize: true,
+          matrix: matrix,
+        };
         request_post({
-          url:'/load',
+          url: "/load",
           data: load_request,
           success: function (jobname) {
-            $().uxmessage('notice', "Parsed "+jobname+".")
-            queue_update()
-            import_open(jobname)
+            $().uxmessage("notice", "Parsed " + jobname + ".");
+            queue_update();
+            import_open(jobname);
           },
           error: function (data) {
-            $().uxmessage('error', "/load error.")
-            $().uxmessage('error', data.responseText, false)
-          }
-        })
-      }
-    })
+            $().uxmessage("error", "/load error.");
+            $().uxmessage("error", data.responseText, false);
+          },
+        });
+      },
+    });
   }
-
-})  // ready
-
-
+}); // ready
 
 function import_open(jobname, from_library) {
-  from_library = typeof from_library !== 'undefined' ? from_library : false  // default to false
+  from_library = typeof from_library !== "undefined" ? from_library : false; // default to false
   // get job in dba format
-  var url = '/get/'+jobname
+  var url = "/get/" + jobname;
   if (from_library === true) {
-    url = '/get_library/'+jobname
+    url = "/get_library/" + jobname;
   }
   request_get({
     url: url,
@@ -168,12 +175,12 @@ function import_open(jobname, from_library) {
       // $().uxmessage('notice', data)
 
       function jobhandler_done() {
-        tools_addfill_init()
-        jobhandler.render()
-        jobhandler.draw()
+        tools_addfill_init();
+        jobhandler.render();
+        jobhandler.draw();
       }
 
-      jobhandler.set(job, jobname, true, jobhandler_done)
+      jobhandler.set(job, jobname, true, jobhandler_done);
 
       // debug, show image, stats
       // if ('defs' in job) {
@@ -191,8 +198,8 @@ function import_open(jobname, from_library) {
       // }
     },
     error: function (data) {
-      $().uxmessage('error', "/get error.")
-      $().uxmessage('error', data.responseText, false)
-    }
-  })
+      $().uxmessage("error", "/get error.");
+      $().uxmessage("error", data.responseText, false);
+    },
+  });
 }

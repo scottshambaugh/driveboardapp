@@ -27,9 +27,7 @@ class NGCReader:
 
         paths = []
         current_path = []
-        re_findall_attribs = re.compile(
-            "(S|F|X|Y|Z)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)"
-        ).findall
+        re_findall_attribs = re.compile(r"(S|F|X|Y|Z)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)").findall
 
         intensity = 0.0
         feedrate = 1000.0

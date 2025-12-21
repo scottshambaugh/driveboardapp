@@ -1,13 +1,12 @@
 # -*- coding: UTF-8 -*-
-import os
-import cProfile as profile
-import timeit
-import pstats
 import argparse
+import cProfile as profile
 import glob
+import os
+import pstats
+import timeit
 
 import jobimport
-
 
 ### Setup Argument Parser
 argparser = argparse.ArgumentParser(
@@ -39,9 +38,7 @@ argparser.add_argument(
     default=False,
     help="do not optimize geometry",
 )
-argparser.add_argument(
-    "--tolerance", dest="tolerance", default=0.08, help="tolerance in mm"
-)
+argparser.add_argument("--tolerance", dest="tolerance", default=0.08, help="tolerance in mm")
 argparser.add_argument(
     "-p",
     "--profile",

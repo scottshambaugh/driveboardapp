@@ -5,8 +5,8 @@
 #
 __author__ = "jet <jet@allartburns.org>"
 
-from math import *
 import io
+from math import *
 
 import dxfgrabber
 
@@ -120,7 +120,7 @@ class DXFParser:
             print(("using forced_unit", forced_unit))
             self.units = forced_unit
         if self.verbose:
-            print(("dxf units read %s, default 0 " % self.units))
+            print("dxf units read %s, default 0 " % self.units)
         if self.units == 0:
             self.unitsString = "unitless"
         elif self.units == 1:
@@ -164,12 +164,12 @@ class DXFParser:
         elif self.units == 20:
             self.unitsString = "parsecs"
         else:
-            print(("DXF units: >%s< unsupported" % self.units))
+            print("DXF units: >%s< unsupported" % self.units)
             raise RuntimeError
 
         if self.verbose:
             print(("dxfgrabber release: ", self.dxfgrabber_version))
-            print(("DXF file format version: {}".format(dwg.dxfversion)))
+            print(f"DXF file format version: {dwg.dxfversion}")
             print(("header var count: ", len(dwg.header)))
             print(("layer count: ", len(dwg.layers)))
             print(("block def count: ", len(dwg.blocks)))
@@ -181,7 +181,7 @@ class DXFParser:
                 layer = dwg.layers[entity.layer]
                 entity.color = layer.color
                 if self.debug:
-                    print(("set entity color to layer color %d" % layer.color))
+                    print("set entity color to layer color %d" % layer.color)
 
             if entity.dxftype == "LINE":
                 self.addLine(entity)
@@ -202,10 +202,10 @@ class DXFParser:
 
         if self.verbose:
             print("pre flipped")
-            print(("x min %f" % self.x_min))
-            print(("x max %f" % self.x_max))
-            print(("y min %f" % self.y_min))
-            print(("y max %f" % self.y_max))
+            print("x min %f" % self.x_min)
+            print("x max %f" % self.x_max)
+            print("y min %f" % self.y_min)
+            print("y max %f" % self.y_max)
 
         # remember that Y is in negative space relative to our bed,
         # CAD software has 0,0 and bottom left, lasersaur has
@@ -291,7 +291,7 @@ class DXFParser:
         flippedPath = self.flipPathAxis(path, "X")
         if self.debug:
             if flippedPath == path:
-                print(("caution: flippedPath %s == path %s" % (flippedPath, path)))
+                print("caution: flippedPath %s == path %s" % (flippedPath, path))
         if color == 1:
             self.red_colorLayer.append(flippedPath)
         elif color == 2:
@@ -308,7 +308,7 @@ class DXFParser:
             self.black_colorLayer.append(flippedPath)
         else:
             if self.verbose:
-                print(("unrecognized color %d, setting to cyan" % color))
+                print("unrecognized color %d, setting to cyan" % color)
             # TODO: we need a better way to handle this
             # don't know what to do with this color, assigning to red/cut
             self.cyan_colorLayer.append(flippedPath)
@@ -352,15 +352,11 @@ class DXFParser:
     def complain_spline(self):
         print("Encountered a SPLINE at line", self.linecount)
         print("This program cannot handle splines at present.")
-        print(
-            "Convert the spline to an LWPOLYLINE using Save As options in SolidWorks."
-        )
+        print("Convert the spline to an LWPOLYLINE using Save As options in SolidWorks.")
         raise RuntimeError
 
     def complain_invalid(self):
-        print(
-            "Skipping unrecognized element '" + self.line + "' on line", self.linecount
-        )
+        print("Skipping unrecognized element '" + self.line + "' on line", self.linecount)
 
     def makeArc(self, path, x1, y1, rx, ry, phi, large_arc, sweep, x2, y2):
         # Implemented based on the SVG implementation notes
@@ -373,9 +369,7 @@ class DXFParser:
         dy = 0.5 * (y1 - y2)
         x_ = cp * dx + sp * dy
         y_ = -sp * dx + cp * dy
-        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / (
-            (rx * y_) ** 2 + (ry * x_) ** 2
-        )
+        r2 = ((rx * ry) ** 2 - (rx * y_) ** 2 - (ry * x_) ** 2) / ((rx * y_) ** 2 + (ry * x_) ** 2)
         if r2 < 0:
             r2 = 0
         r = sqrt(r2)
@@ -397,9 +391,7 @@ class DXFParser:
             return sgn * a
 
         psi = _angle([1, 0], [(x_ - cx_) / rx, (y_ - cy_) / ry])
-        delta = _angle(
-            [(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry]
-        )
+        delta = _angle([(x_ - cx_) / rx, (y_ - cy_) / ry], [(-x_ - cx_) / rx, (-y_ - cy_) / ry])
         if sweep and delta < 0:
             delta += pi * 2
         if not sweep and delta > 0:
@@ -449,27 +441,13 @@ class DXFParser:
                 thisColor = self.colorLayers[color]
                 for i in range(0, len(thisColor)):
                     if thisColor[i][0][0] < 0 or thisColor[i][0][0] > self.bedwidth[0]:
-                        raise RuntimeError(
-                            "point outside of bounds x0 ", thisColor[i][0][0]
-                        )
-                    elif (
-                        thisColor[i][0][1] < 0 or thisColor[i][0][1] > self.bedwidth[1]
-                    ):
-                        raise RuntimeError(
-                            "point outside of bounds y0 ", thisColor[i][0][1]
-                        )
-                    elif (
-                        thisColor[i][1][0] < 0 or thisColor[i][1][0] > self.bedwidth[0]
-                    ):
-                        raise RuntimeError(
-                            "point outside of bounds x1 ", thisColor[i][1][0]
-                        )
-                    elif (
-                        thisColor[i][1][1] < 0 or thisColor[i][1][1] > self.bedwidth[1]
-                    ):
-                        raise RuntimeError(
-                            "point outside of bounds y1 ", thisColor[i][1][1]
-                        )
+                        raise RuntimeError("point outside of bounds x0 ", thisColor[i][0][0])
+                    elif thisColor[i][0][1] < 0 or thisColor[i][0][1] > self.bedwidth[1]:
+                        raise RuntimeError("point outside of bounds y0 ", thisColor[i][0][1])
+                    elif thisColor[i][1][0] < 0 or thisColor[i][1][0] > self.bedwidth[0]:
+                        raise RuntimeError("point outside of bounds x1 ", thisColor[i][1][0])
+                    elif thisColor[i][1][1] < 0 or thisColor[i][1][1] > self.bedwidth[1]:
+                        raise RuntimeError("point outside of bounds y1 ", thisColor[i][1][1])
 
     def shiftPositive(self):
         xShift = 0
@@ -477,9 +455,9 @@ class DXFParser:
         if self.x_min < 0:
             xShift = 0.0 - self.x_min - self.x_max
             if self.debug:
-                print(("x_min %f" % self.x_min))
-                print(("x_max %f" % self.x_max))
-                print(("xShift %f" % xShift))
+                print("x_min %f" % self.x_min)
+                print("x_max %f" % self.x_max)
+                print("xShift %f" % xShift)
 
         if self.y_min < self.bedwidth[1]:
             self.y_min += 0
@@ -493,10 +471,10 @@ class DXFParser:
             else:
                 yShift = self.bedwidth[1]
             if self.debug:
-                print(("y bedwidth %f" % self.bedwidth[1]))
-                print(("y_min %f" % self.y_min))
-                print(("y_max %f" % self.y_max))
-                print(("yShift %f" % yShift))
+                print("y bedwidth %f" % self.bedwidth[1])
+                print("y_min %f" % self.y_min)
+                print("y_max %f" % self.y_max)
+                print("yShift %f" % yShift)
 
         for color in self.colorLayers:
             if len(self.colorLayers[color]) > 0:
@@ -549,6 +527,5 @@ class DXFParser:
             return round(value * 914.4, self.round)
         else:
             raise RuntimeError(
-                "don't know how to convert INSUNIT value %d, %s "
-                % (self.units, self.unitsString)
+                "don't know how to convert INSUNIT value %d, %s " % (self.units, self.unitsString)
             )

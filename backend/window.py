@@ -1,11 +1,10 @@
 # -*- coding: UTF-8 -*-
-import os
-import sys
 import itertools
-import webbrowser
-
+import os
 import queue
+import sys
 import tkinter as tk
+import webbrowser
 
 from config import conf
 
@@ -45,18 +44,14 @@ def init():
         try:
             webbrowser.open_new_tab("http://127.0.0.1:4444")
         except webbrowser.Error:
-            print(
-                "Cannot open Webbrowser, please do so manually. Address: http://127.0.0.1:4444"
-            )
+            print("Cannot open Webbrowser, please do so manually. Address: http://127.0.0.1:4444")
 
-    tk.Button(text, text="Open Browser Interface", command=open_browser).pack(
-        side=tk.BOTTOM
-    )
+    tk.Button(text, text="Open Browser Interface", command=open_browser).pack(side=tk.BOTTOM)
 
     # output queue, required because of tkinter thread issues
     q = queue.Queue()
 
-    class OutputHandler(object):
+    class OutputHandler:
         def write(self, msg):
             q.put(msg)
 

@@ -22,7 +22,7 @@ elif p == "darwin":  # mac
 elif p.startswith("linux"):
     from .linuxgetports import portiter
 else:
-    raise OSError("Unsupported platform {}".format(p))
+    raise OSError(f"Unsupported platform {p}")
 
 
 def ports():

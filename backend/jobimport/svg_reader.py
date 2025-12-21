@@ -1,12 +1,11 @@
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
-import logging
 import base64
 import io
+import logging
 
-from .utilities import matrixApply, matrixApplyScale
-from .utilities import vertexScale, parseFloats, parseScalar
 from .svg_tag_reader import SVGTagReader
+from .utilities import matrixApply, matrixApplyScale, parseFloats, parseScalar, vertexScale
 
 try:
     from PIL import Image
@@ -21,7 +20,7 @@ log.setLevel(logging.INFO)
 
 
 try:
-    import xml.etree.cElementTree as ET
+    import xml.etree.ElementTree as ET
 except ImportError:
     print(log.warn("Using non-C (slow) XML parser."))
     import xml.etree.ElementTree as ET
@@ -265,9 +264,7 @@ class SVGReader:
                     self.px2mm *= 10.0
                     log.info("px2mm by svg cm unit")
                 elif require_unit:
-                    raise ValueError(
-                        "Invalid or no unit in SVG data, must be 'mm', 'cm' or 'in'."
-                    )
+                    raise ValueError("Invalid or no unit in SVG data, must be 'mm', 'cm' or 'in'.")
                 elif unit == "px" or unit == "":
                     # no physical units in file
                     # we have to interpret user (px) units
@@ -306,9 +303,7 @@ class SVGReader:
             self.px2mm = 25.4 / 90.0
 
         # adjust tolerances to px units
-        self.tolerance2_px = (self.tolerance / self.px2mm) * (
-            self.tolerance / self.px2mm
-        )
+        self.tolerance2_px = (self.tolerance / self.px2mm) * (self.tolerance / self.px2mm)
 
         # translation from viewbox
         if vb_x:
@@ -425,9 +420,7 @@ class SVGReader:
 
                     # Apply flip to image data if needed
                     if (flip_h or flip_v) and Image is not None and raster["data"]:
-                        raster["data"] = self._flip_image_data(
-                            raster["data"], flip_h, flip_v
-                        )
+                        raster["data"] = self._flip_image_data(raster["data"], flip_h, flip_v)
 
                     self.rasters.append(raster)
 

@@ -1,8 +1,8 @@
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 
-import sys
 import re
+import sys
 
 debug = True
 
@@ -141,9 +141,7 @@ class GcodeReader:
         self.floods = False
 
         # regexes
-        self.re_parts = re.compile(
-            r"(X|Y|Z|G|M|T|S|F)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)"
-        ).findall
+        self.re_parts = re.compile(r"(X|Y|Z|G|M|T|S|F)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)").findall
         self.re_toolchange = re.compile(r"(M6)").findall
         self.re_T = re.compile(r"(T)([0-9]+)").findall
         self.re_toolinfo = re.compile(r"\((T[0-9]+) *(.+) *\)").findall
@@ -192,7 +190,7 @@ class GcodeReader:
 
     def on_action(self, action):
         if not self.bTool:
-            print(("ERROR: no tool defined at: %s:%s" % action))
+            print("ERROR: no tool defined at: %s:%s" % action)
             return
         self.path.append(action)
 
@@ -333,7 +331,7 @@ class GcodeReader:
 
 if __name__ == "__main__":
     path = sys.argv[1]
-    with open(path, "r") as content_file:
+    with open(path) as content_file:
         content = content_file.read()
         reader = GcodeReader()
         job = reader.parse(content)

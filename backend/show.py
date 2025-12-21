@@ -1,14 +1,13 @@
 #!/usr/bin/python
 # -*- coding: UTF-8 -*-
 
-import os
-import glob
 import argparse
-import gtk
+import glob
+import os
+
 import glib
-
+import gtk
 import jobimport
-
 
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
@@ -26,9 +25,7 @@ class PyApp(gtk.Window):
         self.connect("destroy", gtk.main_quit)
         # exit with ctr-q
         accel_group = gtk.AccelGroup()
-        accel_group.connect_group(
-            ord("q"), gtk.gdk.CONTROL_MASK, gtk.ACCEL_LOCKED, gtk.main_quit
-        )
+        accel_group.connect_group(ord("q"), gtk.gdk.CONTROL_MASK, gtk.ACCEL_LOCKED, gtk.main_quit)
         self.add_accel_group(accel_group)
 
         self.darea = gtk.DrawingArea()

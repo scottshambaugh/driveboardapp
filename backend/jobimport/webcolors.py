@@ -642,9 +642,7 @@ def hex_to_rgb(hex_value):
 
     """
     hex_digits = normalize_hex(hex_value)
-    return tuple(
-        [int(s, 16) for s in (hex_digits[1:3], hex_digits[3:5], hex_digits[5:7])]
-    )
+    return tuple([int(s, 16) for s in (hex_digits[1:3], hex_digits[3:5], hex_digits[5:7])])
 
 
 def hex_to_rgb_percent(hex_value):
@@ -747,9 +745,7 @@ def rgb_to_rgb_percent(rgb_triplet):
     # 256 / 2**n is special-cased for values of n
     # from 0 through 4, as well as 0 itself.
     specials = {255: "100%", 128: "50%", 64: "25%", 32: "12.5%", 16: "6.25%", 0: "0%"}
-    return tuple(
-        [specials.get(d, "%.02f%%" % ((d / 255.0) * 100)) for d in rgb_triplet]
-    )
+    return tuple([specials.get(d, "%.02f%%" % ((d / 255.0) * 100)) for d in rgb_triplet])
 
 
 ######################################################################

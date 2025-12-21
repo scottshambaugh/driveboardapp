@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
+import argparse
 import sys
 import time
-import argparse
 
 import config
 
@@ -10,9 +10,7 @@ __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 def main():
     ### Setup Argument Parser
-    argparser = argparse.ArgumentParser(
-        description="Run DriveboardApp.", prog="driveboardapp"
-    )
+    argparser = argparse.ArgumentParser(description="Run DriveboardApp.", prog="driveboardapp")
     argparser.add_argument(
         "-v",
         "--version",
@@ -53,9 +51,7 @@ def main():
         default=False,
         help="use usb reset hack (advanced)",
     )
-    argparser.add_argument(
-        "--config", dest="config", help="specify alternative configuration"
-    )
+    argparser.add_argument("--config", dest="config", help="specify alternative configuration")
     argparser.add_argument(
         "--list-configs",
         dest="list_configs",

@@ -1,13 +1,12 @@
 import json
 
 from config import conf
-from .svg_reader import SVGReader
+
+from . import pathoptimizer
 from .dxf_parser import DXFParser
 from .gcode_reader import GcodeReader
-from . import pathoptimizer
-
+from .svg_reader import SVGReader
 from .utilities import matrixApply
-
 
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
@@ -43,9 +42,7 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
                             "NearestNeighbor",
                         ]:
                             fill_mode = "Bidirectional"
-                            print(
-                                "WARN: fill_mode not recognized. Please check your config file."
-                            )
+                            print("WARN: fill_mode not recognized. Please check your config file.")
                         if conf["fill_mode"] == "Forward":
                             pass
                         elif conf["fill_mode"] == "Reverse":
@@ -152,9 +149,7 @@ def read_svg(svg_string, tolerance, forced_dpi=None, optimize=True):
                         i += 1
                 if "passes" not in job:
                     job["passes"] = []
-                job["passes"].append(
-                    {"items": idxs, "feedrate": tag[1], "intensity": tag[3]}
-                )
+                job["passes"].append({"items": idxs, "feedrate": tag[1], "intensity": tag[3]})
     return job
 
 

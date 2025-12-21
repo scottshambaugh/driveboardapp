@@ -1,420 +1,466 @@
-
-var tools_tselect = undefined
-var tools_toffset = undefined
-var tools_tmove = undefined
-var tools_tjog = undefined
-var tools_tpos = undefined
-var posText = undefined
-
+var tools_tselect = undefined;
+var tools_toffset = undefined;
+var tools_tmove = undefined;
+var tools_tjog = undefined;
+var tools_tpos = undefined;
+var posText = undefined;
 
 function tools_tselect_init() {
-  tools_tselect = new paper.Tool()
-  tools_tselect.onMouseDown = function(event) {
+  tools_tselect = new paper.Tool();
+  tools_tselect.onMouseDown = function (event) {
     var hitOptions = {
       // class: paper.Group,
       segments: true,
       stroke: true,
       fill: true,
-      tolerance: 10
-    }
-    var hitResult = jobview_feedLayer.hitTest(event.point, hitOptions)
+      tolerance: 10,
+    };
+    var hitResult = jobview_feedLayer.hitTest(event.point, hitOptions);
     if (hitResult) {
-      jobview_deselect_all()
-      path = hitResult.item
-      path.parent.selected = !path.parent.selected
-      jobview_item_selected = path.parent.itemidx
+      jobview_deselect_all();
+      path = hitResult.item;
+      path.parent.selected = !path.parent.selected;
+      jobview_item_selected = path.parent.itemidx;
     } else {
-      jobview_deselect_all()
-      jobview_item_selected = undefined
+      jobview_deselect_all();
+      jobview_item_selected = undefined;
     }
-  }
+  };
 }
 
 function tools_addfill_init() {
   // add color choices to addfill_btn
-  var select_html = ''
+  var select_html = "";
   // params
-  select_html += '<li>'+
-      '<form class="form-inline">'+
-        '<div class="form-group">'+
-          '<div class="input-group" style="margin:10px">'+
-            '<div class="input-group-addon" style="width:10px">pxsize [mm]</div>'+
-            '<input id="fillpxsize" type="text" class="form-control input-sm" style="width:40px;"'+
-              'value="'+app_config_main.pxsize+'" title="match this to laser focus size">'+
-          '</div>'+
-        '</div>'+
-      '</form>'+
-    '</li>'
+  select_html +=
+    "<li>" +
+    '<form class="form-inline">' +
+    '<div class="form-group">' +
+    '<div class="input-group" style="margin:10px">' +
+    '<div class="input-group-addon" style="width:10px">pxsize [mm]</div>' +
+    '<input id="fillpxsize" type="text" class="form-control input-sm" style="width:40px;"' +
+    'value="' +
+    app_config_main.pxsize +
+    '" title="match this to laser focus size">' +
+    "</div>" +
+    "</div>" +
+    "</form>" +
+    "</li>";
   // colors
-  jobhandler.loopItems(function(path, idx){
-    select_html += '<li id="addfill_'+idx+'" style="background-color:'+path.color+';"">'+
-    '<a href="#" class="addfill_color" style="color:'+path.color+'">'+
-    '<span class="label label-default kindmem">path</span>'+
-    '<span style="display:none" class="idxmem">'+idx+'</span></a></li>'
-  }, "path")
-  $('#addfill_colors').html(select_html)
+  jobhandler.loopItems(function (path, idx) {
+    select_html +=
+      '<li id="addfill_' +
+      idx +
+      '" style="background-color:' +
+      path.color +
+      ';"">' +
+      '<a href="#" class="addfill_color" style="color:' +
+      path.color +
+      '">' +
+      '<span class="label label-default kindmem">path</span>' +
+      '<span style="display:none" class="idxmem">' +
+      idx +
+      "</span></a></li>";
+  }, "path");
+  $("#addfill_colors").html(select_html);
 
   // bind all color add buttons within dropdown
-  $('.addfill_color').click(function(e) {
-    var idx = parseFloat($(this).children('span.idxmem').text())
-    $('#addfill_colors').dropdown("toggle")
-    app_fill_btn.start()
-    fills_add_by_item(idx, function() {
-      app_fill_btn.stop()
-    })
-    return false
-  })
+  $(".addfill_color").click(function (e) {
+    var idx = parseFloat($(this).children("span.idxmem").text());
+    $("#addfill_colors").dropdown("toggle");
+    app_fill_btn.start();
+    fills_add_by_item(idx, function () {
+      app_fill_btn.stop();
+    });
+    return false;
+  });
 }
-
 
 function tools_toffset_init() {
   // create layer
-  jobview_offsetLayer = new paper.Layer()
-  jobview_offsetLayer.transformContent = false
-  jobview_offsetLayer.pivot = new paper.Point(0,0)
-  jobview_offsetLayer.visible = false
-  jobview_offsetLayer.activate()
+  jobview_offsetLayer = new paper.Layer();
+  jobview_offsetLayer.transformContent = false;
+  jobview_offsetLayer.pivot = new paper.Point(0, 0);
+  jobview_offsetLayer.visible = false;
+  jobview_offsetLayer.activate();
   // greate group
-  var group = new paper.Group()
-  var rec1 = new paper.Path.Rectangle(new paper.Point(-9999,-9999), new paper.Point(9999,0))
-  group.addChild(rec1)
-  var rec2 = new paper.Path.Rectangle(new paper.Point(-9999,0), new paper.Point(0,9999))
-  group.addChild(rec2)
-  group.fillColor = '#000000'
-  rec1.opacity = 0.5
-  rec2.opacity = 0.5
+  var group = new paper.Group();
+  var rec1 = new paper.Path.Rectangle(
+    new paper.Point(-9999, -9999),
+    new paper.Point(9999, 0),
+  );
+  group.addChild(rec1);
+  var rec2 = new paper.Path.Rectangle(
+    new paper.Point(-9999, 0),
+    new paper.Point(0, 9999),
+  );
+  group.addChild(rec2);
+  group.fillColor = "#000000";
+  rec1.opacity = 0.5;
+  rec2.opacity = 0.5;
   // create tool
-  tools_toffset = new paper.Tool()
-  tools_toffset.onMouseDown = function(event) {
-    var x = Math.ceil(event.point.x/jobview_mm2px)
-    var y = Math.ceil(event.point.y/jobview_mm2px)
+  tools_toffset = new paper.Tool();
+  tools_toffset.onMouseDown = function (event) {
+    var x = Math.ceil(event.point.x / jobview_mm2px);
+    var y = Math.ceil(event.point.y / jobview_mm2px);
     request_get({
-      url:'/absoffset/'+x+'/'+y+'/0',
+      url: "/absoffset/" + x + "/" + y + "/0",
       success: function (data) {
-        $().uxmessage('notice', "Offset set to: "+x+","+y)
+        $().uxmessage("notice", "Offset set to: " + x + "," + y);
       },
       error: function (data) {
-        jobview_offsetLayer.position = new paper.Point(status_cache.offset[0],status_cache.offset[1])
-      }
-    })
-    $('#select_btn').trigger('click')
-  }
-  tools_toffset.onMouseMove = function(event) {
+        jobview_offsetLayer.position = new paper.Point(
+          status_cache.offset[0],
+          status_cache.offset[1],
+        );
+      },
+    });
+    $("#select_btn").trigger("click");
+  };
+  tools_toffset.onMouseMove = function (event) {
     if (event.point.x <= jobview_width && event.point.y <= jobview_height) {
-      jobview_offsetLayer.visible = true
-      jobview_offsetLayer.position = event.point
+      jobview_offsetLayer.visible = true;
+      jobview_offsetLayer.position = event.point;
     }
-  }
-  tools_toffset.offset_set = function(e) {
+  };
+  tools_toffset.offset_set = function (e) {
     // offset_set is called when the user presses the offset_set_btn. Sets the
     // current position of the head as the new offset.
-    var x = status_cache.pos[0] + status_cache.offset[0]
-    var y = status_cache.pos[1] + status_cache.offset[1]
+    var x = status_cache.pos[0] + status_cache.offset[0];
+    var y = status_cache.pos[1] + status_cache.offset[1];
     request_get({
-      url:'/absoffset/'+x+'/'+y+'/0',
+      url: "/absoffset/" + x + "/" + y + "/0",
       success: function (data) {
-		$('#select_btn').trigger('click')
-		x_print = Math.round(x*10)/10;
-		y_print = Math.round(y*10)/10;
-        $().uxmessage('notice', "Offset set to current position: "+x_print+","+y_print)
+        $("#select_btn").trigger("click");
+        x_print = Math.round(x * 10) / 10;
+        y_print = Math.round(y * 10) / 10;
+        $().uxmessage(
+          "notice",
+          "Offset set to current position: " + x_print + "," + y_print,
+        );
       },
       error: function (data) {
-        $().uxmessage('error', "Setting current position as offset not possible!")
-      }
-    })
-  }
+        $().uxmessage(
+          "error",
+          "Setting current position as offset not possible!",
+        );
+      },
+    });
+  };
 }
-
 
 function tools_tmove_init() {
   // create layer
-  jobview_moveLayer = new paper.Layer()
-  jobview_moveLayer.transformContent = false
-  jobview_moveLayer.pivot = new paper.Point(0,0)
-  jobview_moveLayer.visible = false
-  jobview_moveLayer.activate()
+  jobview_moveLayer = new paper.Layer();
+  jobview_moveLayer.transformContent = false;
+  jobview_moveLayer.pivot = new paper.Point(0, 0);
+  jobview_moveLayer.visible = false;
+  jobview_moveLayer.activate();
   // greate group
-  var group = new paper.Group()
-  var line1 = new paper.Path()
-  line1.add([-9999,0],[9999,0])
-  group.addChild(line1)
-  var line2 = new paper.Path()
-  line2.add([0,-9999],[0,9999])
-  group.addChild(line2)
-  var circ1 = new paper.Path.Circle([0,0],10)
-  group.addChild(circ1)
-  group.strokeColor = '#ff0000'
+  var group = new paper.Group();
+  var line1 = new paper.Path();
+  line1.add([-9999, 0], [9999, 0]);
+  group.addChild(line1);
+  var line2 = new paper.Path();
+  line2.add([0, -9999], [0, 9999]);
+  group.addChild(line2);
+  var circ1 = new paper.Path.Circle([0, 0], 10);
+  group.addChild(circ1);
+  group.strokeColor = "#ff0000";
   // create tool
-  tools_tmove = new paper.Tool()
-  tools_tmove.onMouseDown = function(event) {
+  tools_tmove = new paper.Tool();
+  tools_tmove.onMouseDown = function (event) {
     // check for machine
     if (!status_cache.serial) {
-      $().uxmessage('error', "No machine.")
-      return
+      $().uxmessage("error", "No machine.");
+      return;
     }
-	// round to 100um increments
-    var x_mm = Math.round((event.point.x/jobview_mm2px-status_cache.offset[0])*10)/10
-    var y_mm = Math.round((event.point.y/jobview_mm2px-status_cache.offset[1])*10)/10
-    request_absolute_move(x_mm, y_mm, 0, app_config_main.seekrate, "Moving to "+x_mm+","+y_mm)
-    status_cache.ready = undefined  // force status update
+    // round to 100um increments
+    var x_mm =
+      Math.round(
+        (event.point.x / jobview_mm2px - status_cache.offset[0]) * 10,
+      ) / 10;
+    var y_mm =
+      Math.round(
+        (event.point.y / jobview_mm2px - status_cache.offset[1]) * 10,
+      ) / 10;
+    request_absolute_move(
+      x_mm,
+      y_mm,
+      0,
+      app_config_main.seekrate,
+      "Moving to " + x_mm + "," + y_mm,
+    );
+    status_cache.ready = undefined; // force status update
     // setTimeout(function(){
     //   jobview_moveLayer.visible = false
     // },1000)
-  }
-  tools_tmove.onMouseMove = function(event) {
+  };
+  tools_tmove.onMouseMove = function (event) {
     if (event.point.x <= jobview_width && event.point.y <= jobview_height) {
-      jobview_moveLayer.visible = true
-      jobview_moveLayer.position = event.point
+      jobview_moveLayer.visible = true;
+      jobview_moveLayer.position = event.point;
     }
-  }
+  };
 }
-
 
 function tools_tjog_init() {
   // create layer
-  jobview_jogLayer = new paper.Layer()
-  jobview_jogLayer.transformContent = false
-  jobview_jogLayer.pivot = new paper.Point(0,0)
-  jobview_jogLayer.visible = false
-  jobview_jogLayer.activate()
+  jobview_jogLayer = new paper.Layer();
+  jobview_jogLayer.transformContent = false;
+  jobview_jogLayer.pivot = new paper.Point(0, 0);
+  jobview_jogLayer.visible = false;
+  jobview_jogLayer.activate();
   // greate group
-  var group = new paper.Group()
-  var ref = undefined
+  var group = new paper.Group();
+  var ref = undefined;
   // up widget
   // var rec_up = new paper.Path.Rectangle(
   //   new paper.Point(jobview_width*0.3,0),
   //   new paper.Point(jobview_width*0.7,jobview_height*0.3))
   // group.addChild(rec_up)
-  var arrow_up_sm = new paper.Path()
-  ref = [0.5*jobview_width,jobview_height*0.1-30]
+  var arrow_up_sm = new paper.Path();
+  ref = [0.5 * jobview_width, jobview_height * 0.1 - 30];
   arrow_up_sm.add(
     ref,
-    [ref[0]-15,ref[1]+15],
-    [ref[0]-7.5,ref[1]+15],
-    [ref[0]-7.5,ref[1]+20],
-    [ref[0]+7.5,ref[1]+20],
-    [ref[0]+7.5,ref[1]+15],
-    [ref[0]+15,ref[1]+15],
-    ref)
-  group.addChild(arrow_up_sm)
-  var arrow_up = new paper.Path()
-  ref = [0.5*jobview_width,jobview_height*0.1]
+    [ref[0] - 15, ref[1] + 15],
+    [ref[0] - 7.5, ref[1] + 15],
+    [ref[0] - 7.5, ref[1] + 20],
+    [ref[0] + 7.5, ref[1] + 20],
+    [ref[0] + 7.5, ref[1] + 15],
+    [ref[0] + 15, ref[1] + 15],
+    ref,
+  );
+  group.addChild(arrow_up_sm);
+  var arrow_up = new paper.Path();
+  ref = [0.5 * jobview_width, jobview_height * 0.1];
   arrow_up.add(
     ref,
-    [ref[0]-30,ref[1]+30],
-    [ref[0]-15,ref[1]+30],
-    [ref[0]-15,ref[1]+40],
-    [ref[0]+15,ref[1]+40],
-    [ref[0]+15,ref[1]+30],
-    [ref[0]+30,ref[1]+30],
-    ref)
-  group.addChild(arrow_up)
-  var arrow_up_lg = new paper.Path()
-  ref = [0.5*jobview_width,jobview_height*0.1+50]
+    [ref[0] - 30, ref[1] + 30],
+    [ref[0] - 15, ref[1] + 30],
+    [ref[0] - 15, ref[1] + 40],
+    [ref[0] + 15, ref[1] + 40],
+    [ref[0] + 15, ref[1] + 30],
+    [ref[0] + 30, ref[1] + 30],
+    ref,
+  );
+  group.addChild(arrow_up);
+  var arrow_up_lg = new paper.Path();
+  ref = [0.5 * jobview_width, jobview_height * 0.1 + 50];
   arrow_up_lg.add(
     ref,
-    [ref[0]-60,ref[1]+60],
-    [ref[0]-30,ref[1]+60],
-    [ref[0]-30,ref[1]+80],
-    [ref[0]+30,ref[1]+80],
-    [ref[0]+30,ref[1]+60],
-    [ref[0]+60,ref[1]+60],
-    ref)
-  group.addChild(arrow_up_lg)
+    [ref[0] - 60, ref[1] + 60],
+    [ref[0] - 30, ref[1] + 60],
+    [ref[0] - 30, ref[1] + 80],
+    [ref[0] + 30, ref[1] + 80],
+    [ref[0] + 30, ref[1] + 60],
+    [ref[0] + 60, ref[1] + 60],
+    ref,
+  );
+  group.addChild(arrow_up_lg);
   // down widget
   // var rec_down = new paper.Path.Rectangle(
   //   new paper.Point(jobview_width*0.3,jobview_height*0.7),
   //   new paper.Point(jobview_width*0.7,jobview_height))
   // group.addChild(rec_down)
-  var arrow_down_sm = new paper.Path()
-  ref = [0.5*jobview_width,jobview_height*0.9+30]
+  var arrow_down_sm = new paper.Path();
+  ref = [0.5 * jobview_width, jobview_height * 0.9 + 30];
   arrow_down_sm.add(
     ref,
-    [ref[0]-15,ref[1]-15],
-    [ref[0]-7.5,ref[1]-15],
-    [ref[0]-7.5,ref[1]-20],
-    [ref[0]+7.5,ref[1]-20],
-    [ref[0]+7.5,ref[1]-15],
-    [ref[0]+15,ref[1]-15],
-    ref)
-  group.addChild(arrow_down_sm)
-  var arrow_down = new paper.Path()
-  ref = [0.5*jobview_width,jobview_height*0.9]
+    [ref[0] - 15, ref[1] - 15],
+    [ref[0] - 7.5, ref[1] - 15],
+    [ref[0] - 7.5, ref[1] - 20],
+    [ref[0] + 7.5, ref[1] - 20],
+    [ref[0] + 7.5, ref[1] - 15],
+    [ref[0] + 15, ref[1] - 15],
+    ref,
+  );
+  group.addChild(arrow_down_sm);
+  var arrow_down = new paper.Path();
+  ref = [0.5 * jobview_width, jobview_height * 0.9];
   arrow_down.add(
     ref,
-    [ref[0]-30,ref[1]-30],
-    [ref[0]-15,ref[1]-30],
-    [ref[0]-15,ref[1]-40],
-    [ref[0]+15,ref[1]-40],
-    [ref[0]+15,ref[1]-30],
-    [ref[0]+30,ref[1]-30],
-    ref)
-  group.addChild(arrow_down)
-  var arrow_down_lg = new paper.Path()
-  ref = [0.5*jobview_width,jobview_height*0.9-50]
+    [ref[0] - 30, ref[1] - 30],
+    [ref[0] - 15, ref[1] - 30],
+    [ref[0] - 15, ref[1] - 40],
+    [ref[0] + 15, ref[1] - 40],
+    [ref[0] + 15, ref[1] - 30],
+    [ref[0] + 30, ref[1] - 30],
+    ref,
+  );
+  group.addChild(arrow_down);
+  var arrow_down_lg = new paper.Path();
+  ref = [0.5 * jobview_width, jobview_height * 0.9 - 50];
   arrow_down_lg.add(
     ref,
-    [ref[0]-60,ref[1]-60],
-    [ref[0]-30,ref[1]-60],
-    [ref[0]-30,ref[1]-80],
-    [ref[0]+30,ref[1]-80],
-    [ref[0]+30,ref[1]-60],
-    [ref[0]+60,ref[1]-60],
-    ref)
-  group.addChild(arrow_down_lg)
+    [ref[0] - 60, ref[1] - 60],
+    [ref[0] - 30, ref[1] - 60],
+    [ref[0] - 30, ref[1] - 80],
+    [ref[0] + 30, ref[1] - 80],
+    [ref[0] + 30, ref[1] - 60],
+    [ref[0] + 60, ref[1] - 60],
+    ref,
+  );
+  group.addChild(arrow_down_lg);
   // left widget
   // var rec_left = new paper.Path.Rectangle(
   //   new paper.Point(0,jobview_height*0.3),
   //   new paper.Point(jobview_width*0.3,jobview_height*0.7))
   // group.addChild(rec_left)
-  var arrow_left_sm = new paper.Path()
-  ref = [0.1*jobview_width-30,0.5*jobview_height]
+  var arrow_left_sm = new paper.Path();
+  ref = [0.1 * jobview_width - 30, 0.5 * jobview_height];
   arrow_left_sm.add(
     ref,
-    [ref[0]+15,ref[1]-15],
-    [ref[0]+15,ref[1]-7.5],
-    [ref[0]+20,ref[1]-7.5],
-    [ref[0]+20,ref[1]+7.5],
-    [ref[0]+15,ref[1]+7.5],
-    [ref[0]+15,ref[1]+15],
-    ref)
-  group.addChild(arrow_left_sm)
-  var arrow_left = new paper.Path()
-  ref = [0.1*jobview_width,0.5*jobview_height]
+    [ref[0] + 15, ref[1] - 15],
+    [ref[0] + 15, ref[1] - 7.5],
+    [ref[0] + 20, ref[1] - 7.5],
+    [ref[0] + 20, ref[1] + 7.5],
+    [ref[0] + 15, ref[1] + 7.5],
+    [ref[0] + 15, ref[1] + 15],
+    ref,
+  );
+  group.addChild(arrow_left_sm);
+  var arrow_left = new paper.Path();
+  ref = [0.1 * jobview_width, 0.5 * jobview_height];
   arrow_left.add(
     ref,
-    [ref[0]+30,ref[1]-30],
-    [ref[0]+30,ref[1]-15],
-    [ref[0]+40,ref[1]-15],
-    [ref[0]+40,ref[1]+15],
-    [ref[0]+30,ref[1]+15],
-    [ref[0]+30,ref[1]+30],
-    ref)
-  group.addChild(arrow_left)
-  var arrow_left_lg = new paper.Path()
-  ref = [0.1*jobview_width+50,0.5*jobview_height]
+    [ref[0] + 30, ref[1] - 30],
+    [ref[0] + 30, ref[1] - 15],
+    [ref[0] + 40, ref[1] - 15],
+    [ref[0] + 40, ref[1] + 15],
+    [ref[0] + 30, ref[1] + 15],
+    [ref[0] + 30, ref[1] + 30],
+    ref,
+  );
+  group.addChild(arrow_left);
+  var arrow_left_lg = new paper.Path();
+  ref = [0.1 * jobview_width + 50, 0.5 * jobview_height];
   arrow_left_lg.add(
     ref,
-    [ref[0]+60,ref[1]-60],
-    [ref[0]+60,ref[1]-30],
-    [ref[0]+80,ref[1]-30],
-    [ref[0]+80,ref[1]+30],
-    [ref[0]+60,ref[1]+30],
-    [ref[0]+60,ref[1]+60],
-    ref)
-  group.addChild(arrow_left_lg)
+    [ref[0] + 60, ref[1] - 60],
+    [ref[0] + 60, ref[1] - 30],
+    [ref[0] + 80, ref[1] - 30],
+    [ref[0] + 80, ref[1] + 30],
+    [ref[0] + 60, ref[1] + 30],
+    [ref[0] + 60, ref[1] + 60],
+    ref,
+  );
+  group.addChild(arrow_left_lg);
   // right widget
   // var rec_right = new paper.Path.Rectangle(
   //   new paper.Point(jobview_width*0.7,jobview_height*0.3),
   //   new paper.Point(jobview_width,jobview_height*0.7))
   // group.addChild(rec_right)
-  var arrow_right_sm = new paper.Path()
-  ref = [0.9*jobview_width+30,0.5*jobview_height]
+  var arrow_right_sm = new paper.Path();
+  ref = [0.9 * jobview_width + 30, 0.5 * jobview_height];
   arrow_right_sm.add(
     ref,
-    [ref[0]-15,ref[1]-15],
-    [ref[0]-15,ref[1]-7.5],
-    [ref[0]-20,ref[1]-7.5],
-    [ref[0]-20,ref[1]+7.5],
-    [ref[0]-15,ref[1]+7.5],
-    [ref[0]-15,ref[1]+15],
-    ref)
-  group.addChild(arrow_right_sm)
-  var arrow_right = new paper.Path()
-  ref = [0.9*jobview_width,0.5*jobview_height]
+    [ref[0] - 15, ref[1] - 15],
+    [ref[0] - 15, ref[1] - 7.5],
+    [ref[0] - 20, ref[1] - 7.5],
+    [ref[0] - 20, ref[1] + 7.5],
+    [ref[0] - 15, ref[1] + 7.5],
+    [ref[0] - 15, ref[1] + 15],
+    ref,
+  );
+  group.addChild(arrow_right_sm);
+  var arrow_right = new paper.Path();
+  ref = [0.9 * jobview_width, 0.5 * jobview_height];
   arrow_right.add(
     ref,
-    [ref[0]-30,ref[1]-30],
-    [ref[0]-30,ref[1]-15],
-    [ref[0]-40,ref[1]-15],
-    [ref[0]-40,ref[1]+15],
-    [ref[0]-30,ref[1]+15],
-    [ref[0]-30,ref[1]+30],
-    ref)
-  group.addChild(arrow_right)
-  var arrow_right_lg = new paper.Path()
-  ref = [0.9*jobview_width-50,0.5*jobview_height]
+    [ref[0] - 30, ref[1] - 30],
+    [ref[0] - 30, ref[1] - 15],
+    [ref[0] - 40, ref[1] - 15],
+    [ref[0] - 40, ref[1] + 15],
+    [ref[0] - 30, ref[1] + 15],
+    [ref[0] - 30, ref[1] + 30],
+    ref,
+  );
+  group.addChild(arrow_right);
+  var arrow_right_lg = new paper.Path();
+  ref = [0.9 * jobview_width - 50, 0.5 * jobview_height];
   arrow_right_lg.add(
     ref,
-    [ref[0]-60,ref[1]-60],
-    [ref[0]-60,ref[1]-30],
-    [ref[0]-80,ref[1]-30],
-    [ref[0]-80,ref[1]+30],
-    [ref[0]-60,ref[1]+30],
-    [ref[0]-60,ref[1]+60],
-    ref)
-  group.addChild(arrow_right_lg)
+    [ref[0] - 60, ref[1] - 60],
+    [ref[0] - 60, ref[1] - 30],
+    [ref[0] - 80, ref[1] - 30],
+    [ref[0] - 80, ref[1] + 30],
+    [ref[0] - 60, ref[1] + 30],
+    [ref[0] - 60, ref[1] + 60],
+    ref,
+  );
+  group.addChild(arrow_right_lg);
   // properties
-  group.fillColor = '#000000'
-  arrow_up_sm.opacity = 0.7
-  arrow_up.opacity = 0.7
-  arrow_up_lg.opacity = 0.7
-  arrow_down_sm.opacity = 0.7
-  arrow_down.opacity = 0.7
-  arrow_down_lg.opacity = 0.7
-  arrow_left_sm.opacity = 0.7
-  arrow_left.opacity = 0.7
-  arrow_left_lg.opacity = 0.7
-  arrow_right_sm.opacity = 0.7
-  arrow_right.opacity = 0.7
-  arrow_right_lg.opacity = 0.7
+  group.fillColor = "#000000";
+  arrow_up_sm.opacity = 0.7;
+  arrow_up.opacity = 0.7;
+  arrow_up_lg.opacity = 0.7;
+  arrow_down_sm.opacity = 0.7;
+  arrow_down.opacity = 0.7;
+  arrow_down_lg.opacity = 0.7;
+  arrow_left_sm.opacity = 0.7;
+  arrow_left.opacity = 0.7;
+  arrow_left_lg.opacity = 0.7;
+  arrow_right_sm.opacity = 0.7;
+  arrow_right.opacity = 0.7;
+  arrow_right_lg.opacity = 0.7;
   // create tool
-  tools_tjog = new paper.Tool()
-  tools_tjog.onMouseDown = function(event) {
-    var hit = jobview_jogLayer.hitTest(event.point)
+  tools_tjog = new paper.Tool();
+  tools_tjog.onMouseDown = function (event) {
+    var hit = jobview_jogLayer.hitTest(event.point);
     if (hit) {
       if (hit.item === arrow_up) {
-        request_jog(0, -10, 0, "jogging up 10mm")
+        request_jog(0, -10, 0, "jogging up 10mm");
       } else if (hit.item === arrow_up_lg) {
-        request_jog(0, -50, 0, "jogging up 50mm")
+        request_jog(0, -50, 0, "jogging up 50mm");
       } else if (hit.item === arrow_up_sm) {
-        request_jog(0, -1, 0, "jogging up 1mm")
+        request_jog(0, -1, 0, "jogging up 1mm");
       } else if (hit.item === arrow_down) {
-        request_jog(0, 10, 0, "jogging down 10mm")
+        request_jog(0, 10, 0, "jogging down 10mm");
       } else if (hit.item === arrow_down_lg) {
-        request_jog(0, 50, 0, "jogging down 50mm")
+        request_jog(0, 50, 0, "jogging down 50mm");
       } else if (hit.item === arrow_down_sm) {
-        request_jog(0, 1, 0, "jogging down 1mm")
+        request_jog(0, 1, 0, "jogging down 1mm");
       } else if (hit.item === arrow_left) {
-        request_jog(-10, 0, 0, "jogging left 10mm")
+        request_jog(-10, 0, 0, "jogging left 10mm");
       } else if (hit.item === arrow_left_lg) {
-        request_jog(-50, 0, 0, "jogging left 50mm")
+        request_jog(-50, 0, 0, "jogging left 50mm");
       } else if (hit.item === arrow_left_sm) {
-        request_jog(-1, 0, 0, "jogging left 1mm")
+        request_jog(-1, 0, 0, "jogging left 1mm");
       } else if (hit.item === arrow_right) {
-        request_jog(10, 0, 0, "jogging right 10mm")
+        request_jog(10, 0, 0, "jogging right 10mm");
       } else if (hit.item === arrow_right_lg) {
-        request_jog(50, 0, 0, "jogging right 50mm")
+        request_jog(50, 0, 0, "jogging right 50mm");
       } else if (hit.item === arrow_right_sm) {
-        request_jog(1, 0, 0, "jogging right 1mm")
+        request_jog(1, 0, 0, "jogging right 1mm");
       }
     }
-  }
-  tools_tjog.onMouseMove = function(event) {
+  };
+  tools_tjog.onMouseMove = function (event) {
     // if (event.point.x <= jobview_width && event.point.y <= jobview_height) {
     //   jobview_jogLayer.visible = true
     //   jobview_jogLayer.position = event.point
     // }
-  }
+  };
 }
 
 function tools_tpos_init() {
   // create layer
-  jobview_posLayer = new paper.Layer()
-  jobview_posLayer.transformContent = false
-  jobview_posLayer.pivot = new paper.Point(0,0)
-  jobview_posLayer.visible = false
-  jobview_posLayer.activate()
+  jobview_posLayer = new paper.Layer();
+  jobview_posLayer.transformContent = false;
+  jobview_posLayer.pivot = new paper.Point(0, 0);
+  jobview_posLayer.visible = false;
+  jobview_posLayer.activate();
   // create group
-  var group = new paper.Group()
-  var xPoint = jobview_width-5;
-  var yPoint = jobview_height*0.025;
+  var group = new paper.Group();
+  var xPoint = jobview_width - 5;
+  var yPoint = jobview_height * 0.025;
   posText = new paper.PointText(new paper.Point(xPoint, yPoint));
-  posText.justification = 'right';
-  posText.fillColor = 'black';
-  posText.opacity = 0.5
-  posText.fontSize = jobview_height*0.025;
-  posText.content = '(X: XXX,x; Y: YYY,y)';
-  group.addChild(posText)
-  jobview_posLayer.visible = true
+  posText.justification = "right";
+  posText.fillColor = "black";
+  posText.opacity = 0.5;
+  posText.fontSize = jobview_height * 0.025;
+  posText.content = "(X: XXX,x; Y: YYY,y)";
+  group.addChild(posText);
+  jobview_posLayer.visible = true;
 }

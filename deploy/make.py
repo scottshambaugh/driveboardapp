@@ -1,6 +1,5 @@
 import os
 import sys
-import PyInstaller
 
 if not sys.platform == "darwin":  # Linux Windows
     cmd = "pyinstaller --onefile --windowed --clean --noconfirm app.spec"

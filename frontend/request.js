@@ -1,6 +1,3 @@
-
-
-
 function request_get(args) {
   // args items: url, success, error, complete
   $.ajax({
@@ -10,52 +7,50 @@ function request_get(args) {
     username: "laser",
     password: "laser",
     headers: {
-      "Authorization": "Basic " + btoa("laser:laser")
+      Authorization: "Basic " + btoa("laser:laser"),
     },
     statusCode: {
-      400: function(s) {
+      400: function (s) {
         // alert(JSON.stringify(s))
-        if ('responseText' in s) {
-          $().uxmessage('error', s.responseText)
+        if ("responseText" in s) {
+          $().uxmessage("error", s.responseText);
         }
       },
-      401: function() {
-        $().uxmessage('error', "Wrong password/username.")
-      }
+      401: function () {
+        $().uxmessage("error", "Wrong password/username.");
+      },
     },
     success: function (data) {
-      if ('success' in args) {
-        args.success(data)
+      if ("success" in args) {
+        args.success(data);
       }
     },
     error: function (data) {
-      if ('error' in args) {
-        args.error(data)
+      if ("error" in args) {
+        args.error(data);
       } else {
-        $().uxmessage('error', data.responseText, false)
+        $().uxmessage("error", data.responseText, false);
       }
     },
     complete: function (data) {
-      if ('complete' in args) {
-        args.complete(data)
+      if ("complete" in args) {
+        args.complete(data);
       }
-    }
-  })
+    },
+  });
 }
-
-
 
 function request_post(args) {
   // args items: url, data, success, error, complete
 
   // special case load job, use file upload with compression
   var formData = new FormData();
-  if(args.url == '/load' && app_config_main.enable_gzip) {
-    job = new File([pako.gzip(args.data.job)], 'upload.gz');
-    formData.append('job', job);
-    args.data.job = 'upload'
+  if (args.url == "/load" && app_config_main.enable_gzip) {
+    job = new File([pako.gzip(args.data.job)], "upload.gz");
+    formData.append("job", job);
+    args.data.job = "upload";
   }
-  formData.append('load_request', JSON.stringify(args.data))
+  formData.append("load_request", JSON.stringify(args.data));
 
   $.ajax({
     type: "POST",
@@ -69,126 +64,128 @@ function request_post(args) {
     username: "laser",
     password: "laser",
     headers: {
-      "Authorization": "Basic " + btoa("laser:laser")
+      Authorization: "Basic " + btoa("laser:laser"),
     },
     statusCode: {
-      400: function(s) {
+      400: function (s) {
         // alert(JSON.stringify(s))
-        if ('responseText' in s) {
-          $().uxmessage('error', s.responseText)
+        if ("responseText" in s) {
+          $().uxmessage("error", s.responseText);
         }
       },
-      401: function() {
-        $().uxmessage('error', "Wrong password/username.")
-      }
+      401: function () {
+        $().uxmessage("error", "Wrong password/username.");
+      },
     },
     success: function (data) {
-      if ('success' in args) {
-        args.success(data)
+      if ("success" in args) {
+        args.success(data);
       }
     },
     error: function (data) {
       // $().uxmessage('error', args.url)
-      if ('error' in args) {
-        args.error(data)
+      if ("error" in args) {
+        args.error(data);
       }
     },
     complete: function (data) {
-      if ('complete' in args) {
-        args.complete(data)
+      if ("complete" in args) {
+        args.complete(data);
       }
-    }
-  })
+    },
+  });
 }
-
 
 function request_boundary(bounds, seekrate) {
   var job = {
-    "head":{},
-    "passes":[
+    head: {},
+    passes: [
       {
-        "items":[0],
-        "seekrate":seekrate,
-        "feedrate":seekrate,
-        "air_assist":"off"
-      }
+        items: [0],
+        seekrate: seekrate,
+        feedrate: seekrate,
+        air_assist: "off",
+      },
     ],
-    "items":[{"def":0}],
-    "defs":[
-        {"kind":"path", "data":[[
-        [bounds[0],bounds[1],0],
-        [bounds[2],bounds[1],0],
-        [bounds[2],bounds[3],0],
-        [bounds[0],bounds[3],0],
-        [bounds[0],bounds[1],0] ]]}
-      ],
-  }
+    items: [{ def: 0 }],
+    defs: [
+      {
+        kind: "path",
+        data: [
+          [
+            [bounds[0], bounds[1], 0],
+            [bounds[2], bounds[1], 0],
+            [bounds[2], bounds[3], 0],
+            [bounds[0], bounds[3], 0],
+            [bounds[0], bounds[1], 0],
+          ],
+        ],
+      },
+    ],
+  };
   request_post({
-    url:'/run',
-    data: {'job':request_stringify(job)},
+    url: "/run",
+    data: { job: request_stringify(job) },
     success: function (data) {
-      $().uxmessage('notice', "Running boundary.")
-    }
-  })
+      $().uxmessage("notice", "Running boundary.");
+    },
+  });
 }
-
 
 function request_jog(x, y, z, success_msg) {
   request_get({
-    url:'/jog/'+x+'/'+y+'/'+z,
+    url: "/jog/" + x + "/" + y + "/" + z,
     success: function (data) {
-      $().uxmessage('notice', success_msg)
-    }
-  })
+      $().uxmessage("notice", success_msg);
+    },
+  });
 }
 
-function request_relative_move(x, y, z, seekrate, success_msg) {  // DEPRECATED
+function request_relative_move(x, y, z, seekrate, success_msg) {
+  // DEPRECATED
   var job = {
-    "head":{"noreturn":true},
-    "passes":[
+    head: { noreturn: true },
+    passes: [
       {
-        "items":[0],
-        "relative":true,
-        "seekrate":seekrate,
-        "air_assist":"off"
-      }
+        items: [0],
+        relative: true,
+        seekrate: seekrate,
+        air_assist: "off",
+      },
     ],
-    "items":[{"def":0}],
-    "defs":[{"kind":"path", "data":[[[x,y,z]]] }],
-  }
+    items: [{ def: 0 }],
+    defs: [{ kind: "path", data: [[[x, y, z]]] }],
+  };
   request_post({
-    url:'/run',
-    data: {'job':request_stringify(job)},
+    url: "/run",
+    data: { job: request_stringify(job) },
     success: function (data) {
-      $().uxmessage('notice', success_msg)
-    }
-  })
+      $().uxmessage("notice", success_msg);
+    },
+  });
 }
-
 
 function request_absolute_move(x, y, z, seekrate, success_msg) {
   var job = {
-    "head":{"noreturn":true},
-    "passes":[
+    head: { noreturn: true },
+    passes: [
       {
-        "items":[0],
-        "seekrate":seekrate,
-        "air_assist":"off"
-      }
+        items: [0],
+        seekrate: seekrate,
+        air_assist: "off",
+      },
     ],
-    "items":[{"def":0}],
-    "defs":[{"kind":"path", "data":[[[x,y,z]]] }]
-  }
+    items: [{ def: 0 }],
+    defs: [{ kind: "path", data: [[[x, y, z]]] }],
+  };
   request_post({
-    url:'/run',
-    data: {'job':request_stringify(job)},
+    url: "/run",
+    data: { job: request_stringify(job) },
     success: function (data) {
-      $().uxmessage('notice', success_msg)
-    }
-  })
+      $().uxmessage("notice", success_msg);
+    },
+  });
 }
-
-
 
 function request_path_job(path, seekrate, feedrate, air_assist, success_msg) {
   // Args:
@@ -198,35 +195,33 @@ function request_path_job(path, seekrate, feedrate, air_assist, success_msg) {
   //     feedrate:
   //     air_assist: one of "feed", "pass", "off"
   var job = {
-    "passes":[
+    passes: [
       {
-        "items":[0],
-        "seekrate":seekrate,
-        "feedrate":feedrate,
-        "air_assist":air_assist
-      }
+        items: [0],
+        seekrate: seekrate,
+        feedrate: feedrate,
+        air_assist: air_assist,
+      },
     ],
-    "items":[{"def":0}],
-    "defs":[{"kind":"path", "data":path}]
-  }
+    items: [{ def: 0 }],
+    defs: [{ kind: "path", data: path }],
+  };
   // json stringify while limiting numbers to 3 decimals
-  var json_job = JSON.stringify(job,
-    function(key, val) {
-      return val.toFixed ? Number(val.toFixed(3)) : val
-    })
+  var json_job = JSON.stringify(job, function (key, val) {
+    return val.toFixed ? Number(val.toFixed(3)) : val;
+  });
   request_post({
-    url:'/run',
-    data: {'job':json_job},
+    url: "/run",
+    data: { job: json_job },
     success: function (data) {
-      $().uxmessage('notice', success_msg)
-    }
-  })
+      $().uxmessage("notice", success_msg);
+    },
+  });
 }
-
 
 function request_stringify(data) {
   // json stringify while limiting numbers to 3 decimals
-  return JSON.stringify(data ,function(key, val) {
-      return val.toFixed ? Number(val.toFixed(3)) : val
-    })
+  return JSON.stringify(data, function (key, val) {
+    return val.toFixed ? Number(val.toFixed(3)) : val;
+  });
 }

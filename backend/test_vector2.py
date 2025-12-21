@@ -3,7 +3,6 @@ import os
 
 import lasersaur
 
-
 thislocation = os.path.dirname(os.path.realpath(__file__))
 
 # web.start()

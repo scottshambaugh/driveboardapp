@@ -4,11 +4,12 @@
 # Copyright (c) 2011 Nortd Labs
 # Open Source by the terms of the Gnu Public License (GPL3) or higher.
 
-import os
-import sys
-import subprocess
-import shutil
 import glob
+import os
+import shutil
+import subprocess
+import sys
+
 from config import conf
 
 # Make sure you have the Arduino IDE installed (we've tested this on 022 and newer).
@@ -17,40 +18,20 @@ from config import conf
 # Please verify the following locations are correct for you platform:
 
 if sys.platform == "darwin":  # OSX
-    AVRDUDEAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avrdude"
-    )
+    AVRDUDEAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avrdude"
     AVRGCCAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-gcc"
-    AVROBJCOPYAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objcopy"
-    )
-    AVRSIZEAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-size"
-    )
-    AVROBJDUMPAPP = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objdump"
-    )
-    AVRDUDECONFIG = (
-        "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/etc/avrdude.conf"
-    )
+    AVROBJCOPYAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objcopy"
+    AVRSIZEAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-size"
+    AVROBJDUMPAPP = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/bin/avr-objdump"
+    AVRDUDECONFIG = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/etc/avrdude.conf"
 
 elif sys.platform == "win32":  # Windows
-    AVRDUDEAPP = (
-        'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avrdude'
-    )
+    AVRDUDEAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avrdude'
     AVRGCCAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-gcc'
-    AVROBJCOPYAPP = (
-        'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-objcopy'
-    )
-    AVRSIZEAPP = (
-        'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-size'
-    )
-    AVROBJDUMPAPP = (
-        'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-objdump'
-    )
-    AVRDUDECONFIG = (
-        'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\etc\\avrdude.conf'
-    )
+    AVROBJCOPYAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-objcopy'
+    AVRSIZEAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-size'
+    AVROBJDUMPAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-objdump'
+    AVRDUDECONFIG = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\etc\\avrdude.conf'
 
 elif sys.platform == "linux" or sys.platform == "linux2":  # Linux
     AVRDUDEAPP = "avrdude"

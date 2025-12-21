@@ -1,16 +1,17 @@
 # -*- coding: UTF-8 -*-
-import io
-import sys
-import time
-import json
-import copy
 import base64
-import threading
+import copy
+import datetime
+import io
 import itertools
+import json
+import platform
+import sys
+import threading
+import time
+
 import serial
 import serial.tools.list_ports
-import datetime
-import platform
 from config import conf, write_config_fields
 
 if not conf["mill_mode"]:
@@ -277,7 +278,7 @@ class SerialLoopClass(threading.Thread):
     def send_param(self, param, val):
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
         # three decimals are retained
-        num = int(round(((val + 134217.728) * 1000)))
+        num = int(round((val + 134217.728) * 1000))
         char0 = (num & 127) + 128
         char1 = ((num & (127 << 7)) >> 7) + 128
         char2 = ((num & (127 << 14)) >> 14) + 128
@@ -352,9 +353,7 @@ class SerialLoopClass(threading.Thread):
         chunk = self.device.read(self.RX_CHUNK_SIZE)
         if conf["print_serial_data"] and chunk != b"":
             timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-4]
-            print(
-                timestamp + " Receiving: " + prettify_serial(chunk, markers=markers_rx)
-            )
+            print(timestamp + " Receiving: " + prettify_serial(chunk, markers=markers_rx))
         for data_num in chunk:
             data_char = chr(data_num)
             if data_num < 32:  ### flow
@@ -370,9 +369,7 @@ class SerialLoopClass(threading.Thread):
                     if self.job_size == 0:
                         self._status["progress"] = 1.0
                     else:
-                        self._status["progress"] = round(
-                            self.tx_pos / float(self.job_size), 3
-                        )
+                        self._status["progress"] = round(self.tx_pos / float(self.job_size), 3)
                     self._s["stops"].clear()
                     self._s["info"].clear()
                     self._s["ready"] = False
@@ -425,9 +422,7 @@ class SerialLoopClass(threading.Thread):
                     and data_char != ERROR_LIMIT_HIT_Z1
                     and data_char != ERROR_LIMIT_HIT_Z2
                 ):
-                    recent_data = self.tx_buffer[
-                        max(0, self.tx_pos - 128) : self.tx_pos
-                    ]
+                    recent_data = self.tx_buffer[max(0, self.tx_pos - 128) : self.tx_pos]
                     print("RECENT TX BUFFER:")
                     for data_num in recent_data:
                         data_char = chr(data_num)
@@ -543,14 +538,10 @@ class SerialLoopClass(threading.Thread):
                 if (self.FIRMBUF_SIZE - self.firmbuf_used) > self.TX_CHUNK_SIZE:
                     try:
                         # to_send = ''.join(islice(self.tx_buffer, 0, self.TX_CHUNK_SIZE))
-                        to_send = self.tx_buffer[
-                            self.tx_pos : self.tx_pos + self.TX_CHUNK_SIZE
-                        ]
+                        to_send = self.tx_buffer[self.tx_pos : self.tx_pos + self.TX_CHUNK_SIZE]
                         expectedSent = len(to_send)
                         if conf["print_serial_data"]:
-                            timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[
-                                :-4
-                            ]
+                            timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-4]
                             print(
                                 timestamp
                                 + " Sending: "
@@ -595,11 +586,7 @@ class SerialLoopClass(threading.Thread):
             t_prewrite = time.time()
             if conf["print_serial_data"]:
                 timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-4]
-                print(
-                    timestamp
-                    + " Sending: "
-                    + prettify_serial(ord(char), markers=markers_tx)
-                )
+                print(timestamp + " Sending: " + prettify_serial(ord(char), markers=markers_tx))
             self.device.write([ord(char), ord(char)])  # by protocol send twice
             if time.time() - t_prewrite > 0.1:
                 pass
@@ -801,15 +788,11 @@ def connect_withfind(port=conf["serial_port"], baudrate=conf["baudrate"], verbos
                 print("INFO: Hardware found at %s." % serialfindresult)
             connect(port=serialfindresult, baudrate=baudrate, verbose=verbose)
             if not connected():  # special case arduino found, but no firmware
-                yesno = input(
-                    "Firmware appears to be missing. Want to flash-upload it (Y/N)? "
-                )
+                yesno = input("Firmware appears to be missing. Want to flash-upload it (Y/N)? ")
                 if yesno in ("Y", "y"):
                     ret = flash(serial_port=serialfindresult)
                     if ret == 0:
-                        connect(
-                            port=serialfindresult, baudrate=baudrate, verbose=verbose
-                        )
+                        connect(port=serialfindresult, baudrate=baudrate, verbose=verbose)
         if connected():
             if verbose:
                 print("INFO: Connected at %s." % serialfindresult)
@@ -821,9 +804,7 @@ def connect_withfind(port=conf["serial_port"], baudrate=conf["baudrate"], verbos
                     "-----------------------------------------------------------------------------"
                 )
                 print("How to configure:")
-                print(
-                    "https://github.com/nortd/driveboardapp/blob/master/docs/configure.md"
-                )
+                print("https://github.com/nortd/driveboardapp/blob/master/docs/configure.md")
                 print(
                     "-----------------------------------------------------------------------------"
                 )
@@ -1151,9 +1132,7 @@ def job_laser_validate(jobdict):
         if err_str != "":
             err_str = err_str.strip()
             # the frontend displays the first pass as "pass 1" so use passidx+1
-            raise ValueError(
-                f"pass {passidx + 1}: point in {kind} beyond {err_str} of work area"
-            )
+            raise ValueError(f"pass {passidx + 1}: point in {kind} beyond {err_str} of work area")
 
     # loop passes
     for passidx, pass_ in enumerate(jobdict["passes"]):
@@ -1251,9 +1230,7 @@ def job_laser(jobdict):
     for pass_ in jobdict["passes"]:
         pxsize_y = float(pass_.setdefault("pxsize", conf["pxsize"]))
         if pxsize_y < 0.01:
-            print(
-                f"WARN: pxsize of {pxsize_y} mm/px is too small. Setting to 0.01 mm/px"
-            )
+            print(f"WARN: pxsize of {pxsize_y} mm/px is too small. Setting to 0.01 mm/px")
             pxsize_y = 0.01  # prevent div by 0
         intensity(0.0)
         pxsize_x = pxsize_y / 2.0  # use 2x horiz resolution
@@ -1291,9 +1268,7 @@ def job_laser(jobdict):
                 raster_mode = conf["raster_mode"]
                 if raster_mode not in ["Forward", "Reverse", "Bidirectional"]:
                     raster_mode = "Bidirectional"
-                    print(
-                        "WARN: raster_mode not recognized. Please check your config file."
-                    )
+                    print("WARN: raster_mode not recognized. Please check your config file.")
 
                 # create image obj, convert to grayscale, scale, loop through lines
                 imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
@@ -1351,22 +1326,16 @@ def job_laser(jobdict):
                 for i in range(line_count):
                     line_end += px_w
                     line = pxarray[line_start:line_end]
-                    if not all(
-                        px == 255 for px in line
-                    ):  # skip completely white raster lines
+                    if not all(px == 255 for px in line):  # skip completely white raster lines
                         whitespace_counter = 0
                         on_starting_edge = True
                         if direction == 1:  # fwd
                             segment_start = line_start
-                            segment_end = (
-                                segment_start - 1
-                            )  # will immediately increment
+                            segment_end = segment_start - 1  # will immediately increment
                         elif direction == -1:  # rev
                             line = line[::-1]
                             segment_start = line_end
-                            segment_end = (
-                                segment_start + 1
-                            )  # will immediately decrement
+                            segment_end = segment_start + 1  # will immediately decrement
 
                         for j in range(len(line)):
                             segment_end += 1 * direction
@@ -1377,10 +1346,7 @@ def job_laser(jobdict):
                                 segment_start = segment_end
                                 on_starting_edge = False
                                 whitespace_counter = 0
-                            elif (
-                                whitespace_counter * pxsize_x
-                                <= 2 * conf["raster_leadin"]
-                            ):
+                            elif whitespace_counter * pxsize_x <= 2 * conf["raster_leadin"]:
                                 # if the interior whitespace is too small, ignore it and travel at normal speeds
                                 whitespace_counter = 0
 
@@ -1388,10 +1354,7 @@ def job_laser(jobdict):
                             if j == (len(line) - 1):
                                 segment_ended = True
                             elif (
-                                (
-                                    whitespace_counter * pxsize_x
-                                    > 2 * conf["raster_leadin"]
-                                )
+                                (whitespace_counter * pxsize_x > 2 * conf["raster_leadin"])
                                 and (line[j + 1] != 255)
                                 and not (on_starting_edge)
                             ):
@@ -1404,14 +1367,8 @@ def job_laser(jobdict):
                                     segment_end = (
                                         segment_end - whitespace_counter + 1
                                     )  # cut off the ending whitespace
-                                    pos_start = (
-                                        posx
-                                        + (segment_start - line_start + 0.5) * pxsize_x
-                                    )
-                                    pos_end = (
-                                        posx
-                                        + (segment_end - line_start - 0.5) * pxsize_x
-                                    )
+                                    pos_start = posx + (segment_start - line_start + 0.5) * pxsize_x
+                                    pos_end = posx + (segment_end - line_start - 0.5) * pxsize_x
                                     pos_leadin = max(
                                         posx
                                         + (segment_start - line_start) * pxsize_x
@@ -1428,14 +1385,8 @@ def job_laser(jobdict):
                                     segment_end = (
                                         segment_end + whitespace_counter - 1
                                     )  # cut off the ending whitespace
-                                    pos_start = (
-                                        posx
-                                        + (segment_start - line_start - 0.5) * pxsize_x
-                                    )
-                                    pos_end = (
-                                        posx
-                                        + (segment_end - line_start + 0.5) * pxsize_x
-                                    )
+                                    pos_start = posx + (segment_start - line_start - 0.5) * pxsize_x
+                                    pos_end = posx + (segment_end - line_start + 0.5) * pxsize_x
                                     pos_leadin = min(
                                         posx
                                         + (segment_start - line_start) * pxsize_x
@@ -1453,9 +1404,7 @@ def job_laser(jobdict):
                                 intensity(0.0)  # intensity for seek and lead-in
                                 feedrate(seekrate)  # feedrate for seek
                                 move(pos_leadin, line_y)  # seek to lead-in start
-                                feedrate(
-                                    feedrate_
-                                )  # feedrate for lead-in, raster, and lead-out
+                                feedrate(feedrate_)  # feedrate for lead-in, raster, and lead-out
                                 move(pos_start, line_y)  # lead-in
                                 intensity(intensity_)  # intensity for raster move
                                 rastermove(pos_end, line_y)  # raster move
@@ -1473,9 +1422,7 @@ def job_laser(jobdict):
                                 move(pos_leadout, line_y)  # lead-out
 
                                 # prime for next segment
-                                segment_start = (
-                                    segment_end + whitespace_counter * direction
-                                )
+                                segment_start = segment_end + whitespace_counter * direction
                                 segment_end = segment_start - 1 * direction
                                 segment_ended = False
                                 whitespace_counter = 0
@@ -1535,11 +1482,7 @@ def job_laser(jobdict):
     # return to origin
     feedrate(conf["seekrate"])
     intensity(0.0)
-    if (
-        "head" in jobdict
-        and "noreturn" in jobdict["head"]
-        and jobdict["head"]["noreturn"]
-    ):
+    if "head" in jobdict and "noreturn" in jobdict["head"] and jobdict["head"]["noreturn"]:
         pass
     else:
         move(0, 0, 0)

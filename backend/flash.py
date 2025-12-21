@@ -5,10 +5,11 @@
 # Open Source by the terms of the Gnu Public License (GPL3) or higher.
 
 import os
+import stat
+import subprocess
 import sys
 import time
-import subprocess
-import stat
+
 from config import conf
 
 
@@ -17,9 +18,7 @@ def flash_upload(
     resources_dir=conf["rootdir"],
     firmware=conf["firmware"],
 ):
-    firmware = firmware.replace("/", "").replace(
-        "\\", ""
-    )  # make sure no evil injection
+    firmware = firmware.replace("/", "").replace("\\", "")  # make sure no evil injection
     FIRMWARE = os.path.join(resources_dir, "firmware", "firmware.%s.hex" % (firmware))
 
     if not os.path.exists(FIRMWARE):
@@ -35,29 +34,21 @@ def flash_upload(
 
         if sys.platform == "darwin":  # OSX
             AVRDUDEAPP = os.path.join(resources_dir, "firmware/tools_osx/avrdude")
-            AVRDUDECONFIG = os.path.join(
-                resources_dir, "firmware/tools_osx/avrdude.conf"
-            )
+            AVRDUDECONFIG = os.path.join(resources_dir, "firmware/tools_osx/avrdude.conf")
             # chmod +x
             st = os.stat(AVRDUDEAPP)
             os.chmod(AVRDUDEAPP, st.st_mode | stat.S_IEXEC)
 
         elif sys.platform == "win32":  # Windows
             AVRDUDEAPP = os.path.join(resources_dir, "firmware", "tools_win", "avrdude")
-            AVRDUDECONFIG = os.path.join(
-                resources_dir, "firmware", "tools_win", "avrdude.conf"
-            )
+            AVRDUDECONFIG = os.path.join(resources_dir, "firmware", "tools_win", "avrdude.conf")
 
         elif sys.platform == "linux" or sys.platform == "linux2":  # Linux
             # AVRDUDEAPP    = os.path.join(resources_dir, "/usr/bin/avrdude")
             # AVRDUDECONFIG = os.path.join(resources_dir, "/etc/avrdude.conf")
             # AVRDUDEAPP    = os.path.join(resources_dir, 'firmware', "tools_linux", "avrdude64")
-            AVRDUDEAPP = os.path.join(
-                resources_dir, "firmware", "tools_linux", "avrdude"
-            )
-            AVRDUDECONFIG = os.path.join(
-                resources_dir, "firmware", "tools_linux", "avrdude.conf"
-            )
+            AVRDUDEAPP = os.path.join(resources_dir, "firmware", "tools_linux", "avrdude")
+            AVRDUDECONFIG = os.path.join(resources_dir, "firmware", "tools_linux", "avrdude.conf")
             # chmod +x
             # st = os.stat(AVRDUDEAPP)
             # os.chmod(AVRDUDEAPP, st.st_mode | stat.S_IEXEC)
@@ -128,7 +119,7 @@ def flash_upload(
                     fw.write("%d" % (71))
                 with open("/sys/class/gpio/export", "w") as fwb:
                     fwb.write("%d" % (73))
-            except IOError:
+            except OSError:
                 # probably already exported
                 pass
             # set the gpio pin to output
@@ -157,6 +148,7 @@ def flash_upload(
         elif conf["hardware"] == "raspberrypi":
             print("Flashing from Raspberry Pi ...")
             import _thread
+
             import RPi.GPIO as GPIO
 
             def trigger_reset():
@@ -189,7 +181,7 @@ def reset_atmega():
                 fw.write("%d" % (71))
             with open("/sys/class/gpio/export", "w") as fwb:
                 fwb.write("%d" % (73))
-        except IOError:
+        except OSError:
             pass
 
         with open("/sys/class/gpio/gpio71/direction", "w") as fw:
@@ -222,7 +214,7 @@ def reset_atmega():
         GPIO.output(pinReset, GPIO.HIGH)
     else:
         print("ERROR: forced reset only possible on beaglebone and raspberrypi")
-        raise IOError
+        raise OSError
 
 
 def usb_reset_hack():

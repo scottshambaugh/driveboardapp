@@ -1,11 +1,11 @@
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
-import re
-import math
 import logging
+import math
+import re
 
-from .webcolors import rgb_to_hex, normalize_hex, css3_names_to_hex
 from .utilities import matrixMult, parseFloats
+from .webcolors import css3_names_to_hex, normalize_hex, rgb_to_hex
 
 log = logging.getLogger("svg_reader")
 
@@ -47,9 +47,7 @@ class SVGAttributeReader:
             "href": self.stringAttrib,
         }
 
-        self.re_findall_transforms = re.compile(
-            r"(([a-z]+)\s*\(([^)]*)\))", re.IGNORECASE
-        ).findall
+        self.re_findall_transforms = re.compile(r"(([a-z]+)\s*\(([^)]*)\))", re.IGNORECASE).findall
         self.re_findall_pathelems = re.compile(
             r"([A-Za-z]|-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)"
         ).findall
@@ -238,9 +236,7 @@ class SVGAttributeReader:
                 elif unit == "in":
                     num *= self.svgreader.dpi
                 elif unit == "%" or unit == "em" or unit == "ex":
-                    log.error(
-                        "%, em, ex dimension units not supported, use px or mm instead"
-                    )
+                    log.error("%, em, ex dimension units not supported, use px or mm instead")
 
                 return num
             log.error("invalid dimension")

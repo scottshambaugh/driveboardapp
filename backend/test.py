@@ -3,10 +3,9 @@ import os
 import time
 import unittest
 
-import web
 import lasersaur
+import web
 from config import conf
-
 
 # assertEqual(a, b)
 # assertNotEqual(a, b)
@@ -238,9 +237,7 @@ class TestJobs(unittest.TestCase):
         jobfile = os.path.join(thislocation, "testjobs", "full-bed.svg")
         job = lasersaur.open_file(jobfile)
         if "vector" in job:
-            job["vector"]["passes"] = [
-                {"paths": [0], "feedrate": 4000, "intensity": 53}
-            ]
+            job["vector"]["passes"] = [{"paths": [0], "feedrate": 4000, "intensity": 53}]
         jobname = lasersaur.load(job)
         self.assertIn(jobname, lasersaur.listing())
         lasersaur.run(jobname, progress=True)
