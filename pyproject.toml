@@ -7,7 +7,7 @@ name = "driveboardapp"
 version = "20.12"
 description = "Control software for Driveboard-based CNC machines like Lasersaur"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 dependencies = [
     "bottle>=0.12.16",
     "pillow>=6.2.1",
@@ -23,7 +23,30 @@ raspberrypi = ["RPi.GPIO>=0.7.0"]
 [dependency-groups]
 dev = [
     "pyinstaller>=3.5",
+    "pre-commit>=4.0.0",
+    "ruff>=0.8.0",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]

@@ -1,0 +1,6 @@
+# Vendor/library files
+frontend/js/
+frontend_mill/js/
+
+# Minified files
+*.min.js
