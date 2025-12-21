@@ -26,100 +26,123 @@ function fills_add_by_item(idx, callback) {
   );
   var fillpxsize = parseFloat($("#fillpxsize").val());
   var fillpolylines = []; // polylines aka path
-  var lines = [];
-  // setup loop function
+
+  // Pre-process: collect all segments with their Y-bounds for fast filtering
+  var segments = [];
+  for (var p = 0; p < allPaths.length; p++) {
+    var path = allPaths[p];
+    for (var i = 0; i < path.length; i++) {
+      var polyline = path[i];
+      if (polyline.length > 1) {
+        var pv = polyline[0];
+        for (var j = 1; j < polyline.length; j++) {
+          var v = polyline[j];
+          segments.push({
+            x1: pv[0],
+            y1: pv[1],
+            x2: v[0],
+            y2: v[1],
+            minY: Math.min(pv[1], v[1]),
+            maxY: Math.max(pv[1], v[1]),
+          });
+          pv = v;
+        }
+        // Auto-close: check intersection with closing segment (last to first point)
+        var first = polyline[0];
+        var last = polyline[polyline.length - 1];
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+          segments.push({
+            x1: last[0],
+            y1: last[1],
+            x2: first[0],
+            y2: first[1],
+            minY: Math.min(last[1], first[1]),
+            maxY: Math.max(last[1], first[1]),
+          });
+        }
+      }
+    }
+  }
+
+  // Sort segments by minY for efficient active edge tracking
+  segments.sort(function (a, b) {
+    return a.minY - b.minY;
+  });
+
   var y = combinedBounds[1] + 0.001;
   var max_y_bounds = combinedBounds[3];
-  loop_lines();
-  // loop function
-  function loop_lines() {
-    if (y > max_y_bounds) {
-      finalize();
-      return;
-    }
-    // for every fill line
-    // intersect with all segments of all same-color paths
-    lines.push([
-      [min_x, y],
-      [max_x, y],
-    ]);
-    var intersections = [];
-    for (var p = 0; p < allPaths.length; p++) {
-      var path = allPaths[p];
-      for (var i = 0; i < path.length; i++) {
-        var polyline = path[i];
-        if (polyline.length > 1) {
-          var pv = polyline[0];
-          for (var j = 1; j < polyline.length; j++) {
-            var v = polyline[j];
-            var res = fills_intersect(
-              min_x,
-              y,
-              max_x,
-              y,
-              pv[0],
-              pv[1],
-              v[0],
-              v[1],
-            );
-            if (res.onSeg1 && res.onSeg2) {
-              intersections.push([res.x, res.y]);
-            }
-            pv = v;
-          }
-          // Auto-close: check intersection with closing segment (last to first point)
-          var first = polyline[0];
-          var last = polyline[polyline.length - 1];
-          if (first[0] !== last[0] || first[1] !== last[1]) {
-            var res = fills_intersect(
-              min_x,
-              y,
-              max_x,
-              y,
-              last[0],
-              last[1],
-              first[0],
-              first[1],
-            );
-            if (res.onSeg1 && res.onSeg2) {
-              intersections.push([res.x, res.y]);
-            }
-          }
+  var segmentIndex = 0; // Index into sorted segments
+  var activeSegments = []; // Segments that span the current Y range
+
+  // Process in batches to keep UI responsive
+  var BATCH_SIZE = 100;
+  var linesProcessed = 0;
+
+  function processBatch() {
+    var batchEnd = linesProcessed + BATCH_SIZE;
+
+    while (y <= max_y_bounds && linesProcessed < batchEnd) {
+      // Add new segments that start at or before current Y
+      while (
+        segmentIndex < segments.length &&
+        segments[segmentIndex].minY <= y
+      ) {
+        activeSegments.push(segments[segmentIndex]);
+        segmentIndex++;
+      }
+
+      // Remove segments that end before current Y
+      activeSegments = activeSegments.filter(function (seg) {
+        return seg.maxY >= y;
+      });
+
+      // Find intersections with active segments only
+      var intersections = [];
+      for (var i = 0; i < activeSegments.length; i++) {
+        var seg = activeSegments[i];
+        var ix = fills_horizontal_intersect(y, seg.x1, seg.y1, seg.x2, seg.y2);
+        if (ix !== null) {
+          intersections.push(ix);
         }
       }
-    }
-    // sort intersection points by x
-    intersections = intersections.sort(function (a, b) {
-      return a[0] - b[0];
-    });
-    // generate cut path
-    if (intersections.length > 1) {
-      var pv = intersections[0];
-      var x_i = intersections[0][0];
-      var y_i = intersections[0][1];
-      var min_x_opti = Math.max(x_i - leadin, 0);
-      var max_x_opti = Math.min(
-        intersections[intersections.length - 1][0] + leadin,
-        app_config_main.workspace[0],
-      );
-      // fillpolylines.push([[min_x, y_i]])  // polyline of one
-      fillpolylines.push([[min_x_opti, y_i]]); // polyline of one
-      for (var k = 1; k < intersections.length; k++) {
-        var v = intersections[k];
-        if (k % 2 == 1) {
+
+      // Sort intersection points by x
+      intersections.sort(function (a, b) {
+        return a - b;
+      });
+
+      // Generate cut path
+      if (intersections.length > 1) {
+        var x_i = intersections[0];
+        var y_i = y;
+        var min_x_opti = Math.max(x_i - leadin, 0);
+        var max_x_opti = Math.min(
+          intersections[intersections.length - 1] + leadin,
+          app_config_main.workspace[0],
+        );
+        fillpolylines.push([[min_x_opti, y_i]]); // polyline of one
+        for (var k = 0; k + 1 < intersections.length; k += 2) {
           fillpolylines.push([
-            [pv[0], pv[1]],
-            [v[0], v[1]],
+            [intersections[k], y_i],
+            [intersections[k + 1], y_i],
           ]); // polyline of two
         }
-        pv = v;
+        fillpolylines.push([[max_x_opti, y_i]]); // polyline of one
       }
-      // fillpolylines.push([[max_x, y_i]])  // polyline of one
-      fillpolylines.push([[max_x_opti, y_i]]); // polyline of one
+
+      y += fillpxsize;
+      linesProcessed++;
     }
-    y += fillpxsize;
-    setTimeout(loop_lines, 0);
+
+    if (y <= max_y_bounds) {
+      // More work to do, yield to UI then continue
+      setTimeout(processBatch, 0);
+    } else {
+      finalize();
+    }
   }
+
+  processBatch();
 
   function finalize() {
     // generate a new color shifted from the old
@@ -156,43 +179,14 @@ function fills_add_by_item(idx, callback) {
   }
 }
 
-function fills_intersect(Ax, Ay, Bx, By, Dx, Dy, Ex, Ey) {
-  // intersect two line segments: A-B and D-E.
-  // If the lines intersect, the result contains the x and y of the
-  // intersection (treating the lines as infinite) and booleans for
-  // whether line segment 1 or line segment 2 contain the point
-  var denominator,
-    a,
-    b,
-    numerator1,
-    numerator2,
-    result = {
-      x: null,
-      y: null,
-      onSeg1: false,
-      onSeg2: false,
-    };
-  denominator = (Ey - Dy) * (Bx - Ax) - (Ex - Dx) * (By - Ay);
-  if (denominator == 0) {
-    return result;
+// Optimized intersection for horizontal scanline with a segment
+// Returns the x-coordinate of intersection, or null if no intersection
+function fills_horizontal_intersect(y, x1, y1, x2, y2) {
+  // Check if segment spans this Y (exclusive to avoid double-counting at vertices)
+  if ((y1 < y && y2 > y) || (y1 > y && y2 < y)) {
+    // Calculate x at intersection using linear interpolation
+    var t = (y - y1) / (y2 - y1);
+    return x1 + t * (x2 - x1);
   }
-  a = Ay - Dy;
-  b = Ax - Dx;
-  numerator1 = (Ex - Dx) * a - (Ey - Dy) * b;
-  numerator2 = (Bx - Ax) * a - (By - Ay) * b;
-  a = numerator1 / denominator;
-  b = numerator2 / denominator;
-  // ray intersection
-  result.x = Ax + a * (Bx - Ax);
-  result.y = Ay + a * (By - Ay);
-  // if A-B is a segment and D-E is a ray, they intersect if:
-  if (a > 0 && a < 1) {
-    result.onSeg1 = true;
-  }
-  // if D-E is a segment and A-B is a ray, they intersect if:
-  if (b > 0 && b < 1) {
-    result.onSeg2 = true;
-  }
-  // if A-B and D-E are segments, they intersect if both are true
-  return result;
+  return null;
 }
