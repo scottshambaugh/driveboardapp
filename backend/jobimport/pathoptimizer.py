@@ -47,7 +47,7 @@ def connect_segments(path, epsilon2):
             path[newIdx] = pathseg
 
     # remove exessive slots
-    for i in range(len(path) - (newIdx + 1)):
+    for _ in range(len(path) - (newIdx + 1)):
         path.pop()
 
     # report if excessive joins

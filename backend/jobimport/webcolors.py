@@ -451,7 +451,7 @@ def normalize_hex(hex_value):
     try:
         hex_digits = HEX_COLOR_RE.match(hex_value).groups()[0]
     except AttributeError:
-        raise ValueError(f"'{hex_value}' is not a valid hexadecimal color value.")
+        raise ValueError(f"'{hex_value}' is not a valid hexadecimal color value.") from None
     if len(hex_digits) == 3:
         hex_digits = "".join([2 * s for s in hex_digits])
     return f"#{hex_digits.lower()}"
@@ -501,13 +501,15 @@ def name_to_hex(name, spec="css3"):
     """
     if spec not in SUPPORTED_SPECIFICATIONS:
         raise TypeError(
-            "'{}' is not a supported specification for color name lookups; supported specifications are: {}.".format(spec, ", ".join(SUPPORTED_SPECIFICATIONS))
+            "'{}' is not a supported specification for color name lookups; supported specifications are: {}.".format(
+                spec, ", ".join(SUPPORTED_SPECIFICATIONS)
+            )
         )
     normalized = name.lower()
     try:
         hex_value = globals()[f"{spec}_names_to_hex"][normalized]
     except KeyError:
-        raise ValueError(f"'{name}' is not defined as a named color in {spec}.")
+        raise ValueError(f"'{name}' is not defined as a named color in {spec}.") from None
     return hex_value
 
 
@@ -610,13 +612,15 @@ def hex_to_name(hex_value, spec="css3"):
     """
     if spec not in SUPPORTED_SPECIFICATIONS:
         raise TypeError(
-            "'{}' is not a supported specification for color name lookups; supported specifications are: {}.".format(spec, ", ".join(SUPPORTED_SPECIFICATIONS))
+            "'{}' is not a supported specification for color name lookups; supported specifications are: {}.".format(
+                spec, ", ".join(SUPPORTED_SPECIFICATIONS)
+            )
         )
     normalized = normalize_hex(hex_value)
     try:
         name = globals()[f"{spec}_hex_to_names"][normalized]
     except KeyError:
-        raise ValueError(f"'{hex_value}' has no defined color name in {spec}.")
+        raise ValueError(f"'{hex_value}' has no defined color name in {spec}.") from None
     return name
 
 

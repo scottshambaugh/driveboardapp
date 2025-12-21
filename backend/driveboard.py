@@ -682,29 +682,25 @@ def find_controller(baudrate=conf["baudrate"], verbose=True):
     iterator = sorted(serial.tools.list_ports.comports())
     # look for Arduinos
     arduinos = []
-    for port, desc, _hwid in iterator:
+    for port, desc, _ in iterator:
         if "uino" in desc:
             arduinos.append(port)
     # check these arduinos for driveboard firmware, take first
     for port in arduinos:
         try:
-            s = serial.Serial(port=port, baudrate=baudrate, timeout=2.0)
-            lasaur_hello = s.read(8)
-            if lasaur_hello.find(ord(INFO_HELLO)) > -1:
-                s.close()
-                return port
-            s.close()
+            with serial.Serial(port=port, baudrate=baudrate, timeout=2.0) as s:
+                lasaur_hello = s.read(8)
+                if lasaur_hello.find(ord(INFO_HELLO)) > -1:
+                    return port
         except serial.SerialException:
             pass
     # check all comports for driveboard firmware
-    for port, desc, _hwid in iterator:
+    for port, _desc, _hwid in iterator:
         try:
-            s = serial.Serial(port=port, baudrate=baudrate, timeout=2.0)
-            lasaur_hello = s.read(8)
-            if lasaur_hello.find(ord(INFO_HELLO)) > -1:
-                s.close()
-                return port
-            s.close()
+            with serial.Serial(port=port, baudrate=baudrate, timeout=2.0) as s:
+                lasaur_hello = s.read(8)
+                if lasaur_hello.find(ord(INFO_HELLO)) > -1:
+                    return port
         except serial.SerialException:
             pass
     # handle the case Arduino without firmware
@@ -1323,7 +1319,7 @@ def job_laser(jobdict):
                 # so, chop off all whitespace at the beginning and end of each line
                 # additionally, break the line into segments so that large interior whitespaces can be travelled over quicker
                 # the threshold for a "large" interior whitespace is 2x the raster_leadin distance so we can still lead in/out properly
-                for i in range(line_count):
+                for _ in range(line_count):
                     line_end += px_w
                     line = pxarray[line_start:line_end]
                     if not all(px == 255 for px in line):  # skip completely white raster lines
@@ -1618,7 +1614,7 @@ def disable_computer_sleep():
         ]
         try:
             subprocess.run(["systemctl", "mask", *args])
-        except:
+        except Exception:
             print("Failed to disable hibernation")
     else:  # if system == 'Darwin':
         print(f"Display disabling not implemented in {system}")
@@ -1641,7 +1637,7 @@ def enable_computer_sleep():
         ]
         try:
             subprocess.run(["systemctl", "unmask", *args])
-        except:
+        except Exception:
             print("Failed to reenable hibernation")
     else:  # if system == 'Darwin':
         print(f"Display disabling not implemented in {system}")
@@ -1651,8 +1647,6 @@ if __name__ == "__main__":
     # run like this to profile: python -m cProfile driveboard.py
     connect()
     if connected():
-        testjob()
-        time.sleep(0.5)
         while not status()["ready"]:
             time.sleep(1)
             sys.stdout.write(".")

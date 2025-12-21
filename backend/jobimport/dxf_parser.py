@@ -6,7 +6,7 @@
 __author__ = "jet <jet@allartburns.org>"
 
 import io
-from math import *
+from math import acos, cos, pi, radians, sin, sqrt
 
 import dxfgrabber
 
@@ -181,7 +181,7 @@ class DXFParser:
                 layer = dwg.layers[entity.layer]
                 entity.color = layer.color
                 if self.debug:
-                    print("set entity color to layer color %d" % layer.color)
+                    print(f"set entity color to layer color {layer.color:d}")
 
             if entity.dxftype == "LINE":
                 self.addLine(entity)
@@ -308,16 +308,13 @@ class DXFParser:
             self.black_colorLayer.append(flippedPath)
         else:
             if self.verbose:
-                print("unrecognized color %d, setting to cyan" % color)
+                print(f"unrecognized color {color:d}, setting to cyan")
             # TODO: we need a better way to handle this
             # don't know what to do with this color, assigning to red/cut
             self.cyan_colorLayer.append(flippedPath)
 
     def flipPathAxis(self, path, axis):
         flippedPath = []
-
-
-
 
         for x, y in path:
             if axis == "X":
@@ -512,5 +509,5 @@ class DXFParser:
             return round(value * 914.4, self.round)
         else:
             raise RuntimeError(
-                "don't know how to convert INSUNIT value %d, %s " % (self.units, self.unitsString)
+                f"don't know how to convert INSUNIT value {self.units:d}, {self.unitsString} "
             )

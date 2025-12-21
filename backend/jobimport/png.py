@@ -248,14 +248,14 @@ def check_palette(palette):
     seen_triple = False
     for i, t in enumerate(p):
         if len(t) not in (3, 4):
-            raise ValueError("palette entry %d: entries must be 3- or 4-tuples." % i)
+            raise ValueError(f"palette entry {i:d}: entries must be 3- or 4-tuples.")
         if len(t) == 3:
             seen_triple = True
         if seen_triple and len(t) == 4:
-            raise ValueError("palette entry %d: all 4-tuples must precede all 3-tuples" % i)
+            raise ValueError(f"palette entry {i:d}: all 4-tuples must precede all 3-tuples")
         for x in t:
             if int(x) != x or not (0 <= x <= 255):
-                raise ValueError("palette entry %d: values must be integer: 0 <= x <= 255" % i)
+                raise ValueError(f"palette entry {i:d}: values must be integer: 0 <= x <= 255")
     return p
 
 
@@ -484,7 +484,9 @@ class Writer:
             raise ValueError("transparent colour not allowed with alpha channel")
 
         if bytes_per_sample is not None:
-            warnings.warn("please use bitdepth instead of bytes_per_sample", DeprecationWarning, stacklevel=2)
+            warnings.warn(
+                "please use bitdepth instead of bytes_per_sample", DeprecationWarning, stacklevel=2
+            )
             if bytes_per_sample not in (0.125, 0.25, 0.5, 1, 2):
                 raise ValueError("bytes per sample must be .125, .25, .5, 1, or 2")
             bitdepth = int(8 * bytes_per_sample)
@@ -600,7 +602,7 @@ class Writer:
 
         nrows = self.write_passes(outfile, rows)
         if nrows != self.height:
-            raise ValueError("rows supplied (%d) does not match height (%d)" % (nrows, self.height))
+            raise ValueError(f"rows supplied ({nrows:d}) does not match height ({self.height:d})")
 
     def write_passes(self, outfile, rows, packed=False):
         """
@@ -651,7 +653,7 @@ class Writer:
             write_chunk(
                 outfile,
                 "sBIT",
-                struct.pack("%dB" % self.planes, *[self.rescale[0]] * self.planes),
+                struct.pack(f"{self.planes:d}B", *[self.rescale[0]] * self.planes),
             )
 
         # :chunk:order: Without a palette (PLTE chunk), ordering is
@@ -695,7 +697,7 @@ class Writer:
         elif self.bitdepth == 16:
             # Decompose into bytes
             def extend(sl):
-                fmt = "!%dH" % len(sl)
+                fmt = f"!{len(sl):d}H"
                 data.extend(array("B", struct.pack(fmt, *sl)))
         else:
             # Pack into bytes
@@ -707,13 +709,13 @@ class Writer:
                 a = array("B", sl)
                 # Adding padding bytes so we can group into a whole
                 # number of spb-tuples.
-                l = float(len(a))
-                extra = math.ceil(l / float(spb)) * spb - l
+                line = float(len(a))
+                extra = math.ceil(line / float(spb)) * spb - line
                 a.extend([0] * int(extra))
                 # Pack into bytes
-                l = group(a, spb)
-                l = [reduce(lambda x, y: (x << self.bitdepth) + y, e) for e in l]
-                data.extend(l)
+                line = group(a, spb)
+                line = [reduce(lambda x, y: (x << self.bitdepth) + y, e) for e in line]
+                data.extend(line)
 
         if self.rescale:
             oldextend = extend
@@ -751,7 +753,7 @@ class Writer:
             del wrapmapint
             extend(row)
 
-        for i, row in enumrows:
+        for i, row in enumrows:  # noqa: B007 - i is used after loop in return
             # Add "None" filter type.  Currently, it's essential that
             # this filter type be used for every scanline as we do not
             # mark the first row of a reduced pass image; that means we
@@ -806,7 +808,7 @@ class Writer:
         """
 
         if self.rescale:
-            raise Error("write_packed method not suitable for bit depth %d" % self.rescale[0])
+            raise Error(f"write_packed method not suitable for bit depth {self.rescale[0]:d}")
         return self.write_passes(outfile, rows, packed=True)
 
     def convert_pnm(self, infile, outfile):
@@ -862,7 +864,7 @@ class Writer:
         if self.bitdepth > 8:
             assert self.bitdepth == 16
             row_bytes *= 2
-            fmt = ">%dH" % vpr
+            fmt = f">%{vpr:d}H"
 
             def line():
                 return array("H", struct.unpack(fmt, infile.read(row_bytes)))
@@ -925,11 +927,13 @@ class Writer:
                     yield row
 
 
-def write_chunk(outfile, tag, data=strtobytes("")):
+def write_chunk(outfile, tag, data=None):
     """
     Write a PNG chunk to the output file, including length and
     checksum.
     """
+    if data is None:
+        data = strtobytes("")
 
     # http://www.w3.org/TR/PNG/#5Chunk-layout
     outfile.write(struct.pack("!I", len(data)))
@@ -1155,16 +1159,16 @@ def from_array(a, mode=None, info=None):
             try:
                 bitdepth = int(mode)
             except (TypeError, ValueError):
-                raise Error()
+                raise Error() from None
     except Error:
-        raise Error("mode string should be 'RGB' or 'L;16' or similar.")
+        raise Error("mode string should be 'RGB' or 'L;16' or similar.") from None
     mode = gotmode
 
     # Get bitdepth from *mode* if possible.
     if bitdepth:
         if info.get("bitdepth") and bitdepth != info["bitdepth"]:
             raise Error(
-                "mode bitdepth (%d) should match info bitdepth (%d)." % (bitdepth, info["bitdepth"])
+                f"mode bitdepth ({bitdepth:d}) should match info bitdepth ({info['bitdepth']:d})."
             )
         info["bitdepth"] = bitdepth
 
@@ -1179,10 +1183,10 @@ def from_array(a, mode=None, info=None):
         info["width"], info["height"] = info["size"]
     if "height" not in info:
         try:
-            l = len(a)
+            line = len(a)
         except TypeError:
-            raise Error("len(a) does not work, supply info['height'] instead.")
-        info["height"] = l
+            raise Error("len(a) does not work, supply info['height'] instead.") from None
+        info["height"] = line
     # Colour format.
     if "greyscale" in info:
         if bool(info["greyscale"]) != ("L" in mode):
@@ -1280,12 +1284,11 @@ class Image:
 
         w = Writer(**self.info)
 
-        try:
-            file.write
+        if hasattr(file, "write"):
 
             def close():
                 pass
-        except AttributeError:
+        else:
             file = open(file, "wb")
 
             def close():
@@ -1391,10 +1394,10 @@ class Reader:
             self.atchunk = None
             data = self.file.read(length)
             if len(data) != length:
-                raise ChunkError("Chunk %s too short for required %i octets." % (type, length))
+                raise ChunkError(f"Chunk {type} too short for required {length:d} octets.")
             checksum = self.file.read(4)
             if len(checksum) != 4:
-                raise ValueError("Chunk %s too short for checksum.", tag)
+                raise ValueError(f"Chunk {type} too short for checksum")
             if seek and type != seek:
                 continue
             verify = zlib.crc32(strtobytes(type))
@@ -1601,7 +1604,7 @@ class Reader:
                 return array("B", raw)
             if self.bitdepth == 16:
                 raw = tostring(raw)
-                return array("H", struct.unpack("!%dH" % (len(raw) // 2), raw))
+                return array("H", struct.unpack(f"!{(len(raw) // 2):d}H", raw))
             assert self.bitdepth < 8
             width = self.width
             # Samples per byte
@@ -1624,7 +1627,7 @@ class Reader:
             return bytes
         if self.bitdepth == 16:
             bytes = tostring(bytes)
-            return array("H", struct.unpack("!%dH" % (len(bytes) // 2), bytes))
+            return array("H", struct.unpack(f"!{(len(bytes) // 2):d}H", bytes))
         assert self.bitdepth < 8
         if width is None:
             width = self.width
@@ -1633,12 +1636,12 @@ class Reader:
         out = array("B")
         mask = 2**self.bitdepth - 1
         shifts = list(map(self.bitdepth.__mul__, reversed(list(range(spb)))))
-        l = width
+        line = width
         for o in bytes:
-            out.extend([(mask & (o >> s)) for s in shifts][:l])
-            l -= spb
-            if l <= 0:
-                l = width
+            out.extend([(mask & (o >> s)) for s in shifts][:line])
+            line -= spb
+            if line <= 0:
+                line = width
         return out
 
     def iterstraight(self, raw):
@@ -1717,7 +1720,7 @@ class Reader:
         length, type = struct.unpack("!I4s", x)
         type = bytestostr(type)
         if length > 2**31 - 1:
-            raise FormatError("Chunk %s is too large: %d." % (type, length))
+            raise FormatError(f"Chunk {type} is too large: {length:d}.")
         return length, type
 
     def process_chunk(self, lenient=False):
@@ -1752,17 +1755,16 @@ class Reader:
         check_bitdepth_colortype(self.bitdepth, self.color_type)
 
         if self.compression != 0:
-            raise Error("unknown compression method %d" % self.compression)
+            raise Error(f"unknown compression method {self.compression:d}")
         if self.filter != 0:
             raise FormatError(
-                "Unknown filter method %d,"
-                " see http://www.w3.org/TR/2003/REC-PNG-20031110/#9Filters ." % self.filter
+                "Unknown filter method {self.filter:d},"
+                " see http://www.w3.org/TR/2003/REC-PNG-20031110/#9Filters ."
             )
         if self.interlace not in (0, 1):
             raise FormatError(
-                "Unknown interlace method %d,"
+                "Unknown interlace method {self.interlace:d},"
                 " see http://www.w3.org/TR/2003/REC-PNG-20031110/#8InterlaceMethods ."
-                % self.interlace
             )
 
         # Derived values
@@ -1810,9 +1812,9 @@ class Reader:
                     warnings.warn("PLTE chunk is required before bKGD chunk.", stacklevel=2)
                 self.background = struct.unpack("B", data)
             else:
-                self.background = struct.unpack("!%dH" % self.color_planes, data)
+                self.background = struct.unpack(f"!{self.color_planes:d}H", data)
         except struct.error:
-            raise FormatError("bKGD chunk has incorrect length.")
+            raise FormatError("bKGD chunk has incorrect length.") from None
 
     def _process_tRNS(self, data):
         # http://www.w3.org/TR/PNG/#11tRNS
@@ -1827,17 +1829,17 @@ class Reader:
                     raise FormatError("tRNS chunk is too long.")
         else:
             if self.alpha:
-                raise FormatError("tRNS chunk is not valid with colour type %d." % self.color_type)
+                raise FormatError(f"tRNS chunk is not valid with colour type {self.color_type:d}.")
             try:
-                self.transparent = struct.unpack("!%dH" % self.color_planes, data)
+                self.transparent = struct.unpack(f"!{self.color_planes:d}H", data)
             except struct.error:
-                raise FormatError("tRNS chunk has incorrect length.")
+                raise FormatError("tRNS chunk has incorrect length.") from None
 
     def _process_gAMA(self, data):
         try:
             self.gamma = struct.unpack("!L", data)[0] / 100000.0
         except struct.error:
-            raise FormatError("gAMA chunk has incorrect length.")
+            raise FormatError("gAMA chunk has incorrect length.") from None
 
     def _process_sBIT(self, data):
         self.sbit = data
@@ -1863,7 +1865,7 @@ class Reader:
                 try:
                     type, data = self.chunk(lenient=lenient)
                 except ValueError as e:
-                    raise ChunkError(e.args[0])
+                    raise ChunkError(e.args[0]) from e
                 if type == "IEND":
                     # http://www.w3.org/TR/PNG/#11IEND
                     break
@@ -2048,10 +2050,10 @@ class Reader:
             pixels = itertrns(pixels)
         targetbitdepth = None
         if self.sbit:
-            sbit = struct.unpack("%dB" % len(self.sbit), self.sbit)
+            sbit = struct.unpack(f"{len(self.sbit):d}B", self.sbit)
             targetbitdepth = max(sbit)
             if targetbitdepth > meta["bitdepth"]:
-                raise Error("sBIT chunk %r exceeds bitdepth %d" % (sbit, self.bitdepth))
+                raise Error(f"sBIT chunk {sbit!r} exceeds bitdepth {self.bitdepth:d}")
             if min(sbit) <= 0:
                 raise Error(f"sBIT chunk {sbit!r} has a 0-entry")
             if targetbitdepth == meta["bitdepth"]:
@@ -2224,23 +2226,23 @@ def check_bitdepth_colortype(bitdepth, colortype):
     """
 
     if bitdepth not in (1, 2, 4, 8, 16):
-        raise FormatError("invalid bit depth %d" % bitdepth)
+        raise FormatError(f"invalid bit depth {bitdepth:d}")
     if colortype not in (0, 2, 3, 4, 6):
-        raise FormatError("invalid colour type %d" % colortype)
+        raise FormatError(f"invalid colour type {colortype:d}")
     # Check indexed (palettized) images have 8 or fewer bits
     # per pixel; check only indexed or greyscale images have
     # fewer than 8 bits per pixel.
     if colortype & 1 and bitdepth > 8:
         raise FormatError(
-            "Indexed images (colour type %d) cannot"
-            " have bitdepth > 8 (bit depth %d)."
-            " See http://www.w3.org/TR/2003/REC-PNG-20031110/#table111 ." % (bitdepth, colortype)
+            "Indexed images (colour type {colortype:d}) cannot"
+            " have bitdepth > 8 (bit depth {bitdepth:d})."
+            " See http://www.w3.org/TR/2003/REC-PNG-20031110/#table111 ."
         )
     if bitdepth < 8 and colortype not in (0, 3):
         raise FormatError(
-            "Illegal combination of bit depth (%d)"
-            " and colour type (%d)."
-            " See http://www.w3.org/TR/2003/REC-PNG-20031110/#table111 ." % (bitdepth, colortype)
+            "Illegal combination of bit depth ({bitdepth:d})"
+            " and colour type ({colortype:d})."
+            " See http://www.w3.org/TR/2003/REC-PNG-20031110/#table111 ."
         )
 
 
@@ -2254,7 +2256,7 @@ def isinteger(x):
 # === Support for users without Cython ===
 
 try:
-    pngfilters
+    pngfilters  # noqa: B018 - check if Cython module exists
 except NameError:
 
     class pngfilters:
@@ -2367,18 +2369,18 @@ def read_pam_header(infile):
     # Unlike PBM, PGM, and PPM, we can read the header a line at a time.
     header = {}
     while True:
-        l = infile.readline().strip()
-        if l == strtobytes("ENDHDR"):
+        line = infile.readline().strip()
+        if line == strtobytes("ENDHDR"):
             break
-        if not l:
+        if not line:
             raise EOFError("PAM ended prematurely")
-        if l[0] == strtobytes("#"):
+        if line[0] == strtobytes("#"):
             continue
-        l = l.split(None, 1)
-        if l[0] not in header:
-            header[l[0]] = l[1]
+        line = line.split(None, 1)
+        if line[0] not in header:
+            header[line[0]] = line[1]
         else:
-            header[l[0]] += strtobytes(" ") + l[1]
+            header[line[0]] += strtobytes(" ") + line[1]
 
     required = ["WIDTH", "HEIGHT", "DEPTH", "MAXVAL"]
     required = [strtobytes(x) for x in required]
@@ -2496,7 +2498,7 @@ def write_pnm(file, width, height, pixels, meta):
         else:
             # PPM
             fmt = "P6"
-        header = "%s %d %d %d\n" % (fmt, width, height, maxval)
+        header = f"{fmt:s} {width:d} {height:d} {maxval:d}\n"
     if planes in (2, 4):
         # PAM
         # See http://netpbm.sourceforge.net/doc/pam.html
@@ -2504,18 +2506,12 @@ def write_pnm(file, width, height, pixels, meta):
             tupltype = "GRAYSCALE_ALPHA"
         else:
             tupltype = "RGB_ALPHA"
-        header = "P7\nWIDTH %d\nHEIGHT %d\nDEPTH %d\nMAXVAL %d\n" "TUPLTYPE %s\nENDHDR\n" % (
-            width,
-            height,
-            planes,
-            maxval,
-            tupltype,
-        )
+        header = f"P7\nWIDTH {width:d}\nHEIGHT {height:d}\nDEPTH {planes:d}\nMAXVAL {maxval:d}\nTUPLTYPE {tupltype}\nENDHDR\n"
     file.write(header.encode("ascii"))
     # Values per row
     vpr = planes * width
     # struct format
-    fmt = ">%d" % vpr
+    fmt = f">%{vpr:d}"
     if maxval > 0xFF:
         fmt = fmt + "H"
     else:
@@ -2659,7 +2655,7 @@ def _main(argv):
         except ValueError:
             raise NotImplementedError(
                 f"your maxval ({maxval}) not in supported list {str(supported)}"
-            )
+            ) from None
         bitdepth = mi + 1
         writer = Writer(
             width,

@@ -16,6 +16,7 @@
 
 import copy
 import glob
+import importlib.util
 import json
 import os
 import sys
@@ -152,9 +153,8 @@ conf["confdir"] = directory
 conf["hardware"] = "standard"
 if sys.platform == "linux2":
     try:
-        import RPi.GPIO
-
-        conf["hardware"] = "raspberrypi"
+        if importlib.util.find_spec("RPi.GPIO") is not None:
+            conf["hardware"] = "raspberrypi"
     except ImportError:
         # os.uname() on BBB:
         # ('Linux', 'lasersaur', '3.8.13-bone20',
@@ -184,7 +184,7 @@ elif conf["hardware"] == "beaglebone":
             fw.write(f"{0:X}")
         # echo 20 > /sys/kernel/debug/omap_mux/uart1_rxd
         with open("/sys/kernel/debug/omap_mux/uart1_rxd", "w") as fw:
-            fw.write("%X" % ((1 << 5) | 0))
+            fw.write(f"{(1 << 5) | 0:X}")
 
     ### if running on BBB/Ubuntu 14.04, setup pin muxing UART1
     pin24list = glob.glob("/sys/devices/ocp.*/P9_24_pinmux.*/state")
@@ -207,7 +207,7 @@ elif conf["hardware"] == "beaglebone":
 
     try:
         with open("/sys/class/gpio/export", "w") as fw:
-            fw.write("%d" % (71))
+            fw.write(f"{71:d}")
     except OSError:
         # probably already exported
         pass
@@ -233,7 +233,7 @@ elif conf["hardware"] == "beaglebone":
 
     try:
         with open("/sys/class/gpio/export", "w") as fw:
-            fw.write("%d" % (73))
+            fw.write(f"{73:d}")
     except OSError:
         # probably already exported
         pass
@@ -257,7 +257,7 @@ elif conf["hardware"] == "beaglebone":
 
     try:
         with open("/sys/class/gpio/export", "w") as fw:
-            fw.write("%d" % (76))
+            fw.write(f"{76:d}")
     except OSError:
         # probably already exported
         pass

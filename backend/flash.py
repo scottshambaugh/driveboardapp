@@ -53,9 +53,7 @@ def flash_upload(
             # os.chmod(AVRDUDEAPP, st.st_mode | stat.S_IEXEC)
 
         # call avrdude, returns 0 on success
-        command = (
-            f'{AVRDUDEAPP} -c {PROGRAMMER} -b {BITRATE} -P {serial_port} -p {DEVICE} -C {AVRDUDECONFIG} -Uflash:w:"{FIRMWARE}":i'
-        )
+        command = f'{AVRDUDEAPP} -c {PROGRAMMER} -b {BITRATE} -P {serial_port} -p {DEVICE} -C {AVRDUDECONFIG} -Uflash:w:"{FIRMWARE}":i'
 
         print(command)
         return subprocess.call(command, shell=True)
@@ -84,9 +82,7 @@ def flash_upload(
         SERIAL_OPTION = f"-P {SERIAL_PORT}"
         BITRATE = "115200"
 
-        command = (
-            f'"{AVRDUDEAPP}" -c {PROGRAMMER} -b {BITRATE} {SERIAL_OPTION} -p {DEVICE} -C "{AVRDUDECONFIG}" -Uflash:w:"{FIRMWARE}":i'
-        )
+        command = f'"{AVRDUDEAPP}" -c {PROGRAMMER} -b {BITRATE} {SERIAL_OPTION} -p {DEVICE} -C "{AVRDUDECONFIG}" -Uflash:w:"{FIRMWARE}":i'
 
         ### Trigger the atmega328's reset pin to invoke bootloader
 
@@ -97,9 +93,9 @@ def flash_upload(
             # echo 71 > /sys/class/gpio/export
             try:
                 with open("/sys/class/gpio/export", "w") as fw:
-                    fw.write("%d" % (71))
+                    fw.write(f"{71:d}")
                 with open("/sys/class/gpio/export", "w") as fwb:
-                    fwb.write("%d" % (73))
+                    fwb.write(f"{73:d}")
             except OSError:
                 # probably already exported
                 pass
@@ -159,9 +155,9 @@ def reset_atmega():
     if conf["hardware"] == "beaglebone":
         try:
             with open("/sys/class/gpio/export", "w") as fw:
-                fw.write("%d" % (71))
+                fw.write(f"{71:d}")
             with open("/sys/class/gpio/export", "w") as fwb:
-                fwb.write("%d" % (73))
+                fwb.write(f"{73:d}")
         except OSError:
             pass
 

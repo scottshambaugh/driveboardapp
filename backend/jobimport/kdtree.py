@@ -52,7 +52,7 @@ class Hyperrectangle:
         return result
 
     def __str__(self):
-        return "[(%d) %s:%s]" % (int(self.dim), str(self.min), str(self.max))
+        return f"[({int(self.dim)}) {str(self.min)}:{str(self.max)}]"
 
 
 class Node:
@@ -196,7 +196,7 @@ if __name__ == "__main__":
             super().__init__([float(a) for a in args])
 
         def __str__(self):
-            return "<{:.1f} {:.1f} {:.1f}>".format(*tuple(self[0:3]))
+            return f"<{self[0]:.1f} {self[1]:.1f} {self[2]:.1f}>"
 
         def __sub__(self, other):
             return vector(self[0] - other[0], self[1] - other[1], self[2] - other[2])
@@ -279,9 +279,9 @@ if __name__ == "__main__":
         def setUp(self):
             seed(42)
             r = (-1, 0, 1)
-            self.points = [vector(k, l, m) for k in r for l in r for m in r]
+            self.points = [vector(k, l, m) for k in r for l in r for m in r]  # noqa: E741
             d = (-0.1, 0, 0.1)
-            self.d = [vector(k, l, m) for k in d for l in d for m in d if (k * l * m) != 0]
+            self.d = [vector(k, l, m) for k in d for l in d for m in d if (k * l * m) != 0]  # noqa: E741
             self.repeats = 4
 
         def test_simple(self):
@@ -424,7 +424,7 @@ if __name__ == "__main__":
 
             print("<performance test, may take several seconds>")
             qpos = [vector(random(), random(), random()) for p in range(qsize)]
-            for p in range(tsize):
+            for _ in range(tsize):
                 pos = vector(random(), random(), random())
                 tree.insert(pos, pos)
             s = time()

@@ -340,7 +340,7 @@ def offset(x, y, z):
 @bottle.route("/offsetx/<x:float>")
 @bottle.auth_basic(checkuser)
 @checkserial
-def offset(x):
+def offsetx(x):
     if not driveboard.status()["ready"]:
         raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.offset(x=x)
@@ -370,7 +370,7 @@ def offsetz(z):
 @bottle.route("/absoffset/<x:float>/<y:float>/<z:float>")
 @bottle.auth_basic(checkuser)
 @checkserial
-def offset(x, y, z):
+def absoffset(x, y, z):
     if not driveboard.status()["ready"]:
         raise bottle.HTTPResponse("Machine not ready.", 400)
     driveboard.absoffset(x, y, z)
@@ -522,9 +522,9 @@ def load():
     except TypeError:
         if DEBUG:
             traceback.print_exc()
-        raise bottle.HTTPResponse("Invalid file type.", 400)
+        raise bottle.HTTPResponse("Invalid file type.", 400) from None
     except ValueError as e:
-        raise bottle.HTTPResponse(str(e), 422)
+        raise bottle.HTTPResponse(str(e), 422) from e
 
     if not overwrite:
         name = _unique_name(name)
@@ -640,7 +640,7 @@ def _read_presets():
             try:
                 presets = json.load(fp)
                 presets.sort(key=lambda x: x["name"].lower())
-            except:
+            except Exception:
                 print("ERROR: failed to read presets file")
     return presets
 
@@ -695,7 +695,7 @@ def run(jobname):
     try:
         driveboard.job(json.loads(job))
     except ValueError as e:
-        raise bottle.HTTPResponse(str(e), 422)
+        raise bottle.HTTPResponse(str(e), 422) from e
     return "{}"
 
 
@@ -716,7 +716,7 @@ def run_direct():
     try:
         driveboard.job(json.loads(job))
     except ValueError as e:
-        raise bottle.HTTPResponse(str(e), 422)
+        raise bottle.HTTPResponse(str(e), 422) from e
     return "{}"
 
 
@@ -792,7 +792,7 @@ def reset():
     try:
         driveboard.reset()
     except OSError:
-        raise bottle.HTTPResponse("Reset failed.", 400)
+        raise bottle.HTTPResponse("Reset failed.", 400) from None
     return "{}"
 
 
@@ -864,7 +864,7 @@ def start(browser=False, debug=False):
     print("Config Directory: " + conf["confdir"])
     print("Queue Directory: " + conf["stordir"])
     print("-----------------------------------------------------------------------------")
-    print("Starting server at http://%s:%d/" % ("127.0.0.1", conf["network_port"]))
+    print(f"Starting server at http://127.0.0.1:{conf['network_port']}/")
     print("-----------------------------------------------------------------------------")
     driveboard.connect_withfind()
     # open web-browser
@@ -882,7 +882,7 @@ def start(browser=False, debug=False):
         try:
             # will fail if board not flashed
             driveboard.homing()
-        except:
+        except Exception:
             pass
 
 
