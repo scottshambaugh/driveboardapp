@@ -123,15 +123,24 @@ class SVGReader:
             img_bytes = base64.b64decode(b64data)
             img = Image.open(io.BytesIO(img_bytes))
 
-            # Apply flips
+            # Convert palette or other modes to RGBA for consistent handling
+            if img.mode in ("P", "1", "L", "LA", "PA"):
+                img = img.convert("RGBA")
+
+            # Apply flips using Pillow's transpose method
             if flip_h:
-                img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
             if flip_v:
-                img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
             # Re-encode to base64
             buffer = io.BytesIO()
             img_format = "PNG" if "png" in header.lower() else "JPEG"
+
+            # For JPEG, convert RGBA to RGB (JPEG doesn't support alpha)
+            if img_format == "JPEG" and img.mode == "RGBA":
+                img = img.convert("RGB")
+
             img.save(buffer, format=img_format)
             new_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
@@ -402,16 +411,17 @@ class SVGReader:
                     flip_h = raster["size"][0] < 0
                     flip_v = raster["size"][1] < 0
 
-                    # Ensure size is always positive
-                    raster["size"][0] = abs(raster["size"][0])
-                    raster["size"][1] = abs(raster["size"][1])
-
-                    # Adjust position to compensate for flip
-                    # When flipping, the anchor point shifts by the size
+                    # When size is negative due to flip transform, the position we
+                    # computed is the far corner. We need to find the near corner
+                    # (top-left) for the final placement. Adding negative size moves
+                    # the position to the correct corner.
+                    # After that, make size positive and flip the image data.
                     if flip_h:
-                        raster["pos"][0] -= raster["size"][0]
+                        raster["pos"][0] += raster["size"][0]  # size is negative
+                        raster["size"][0] = -raster["size"][0]
                     if flip_v:
-                        raster["pos"][1] -= raster["size"][1]
+                        raster["pos"][1] += raster["size"][1]  # size is negative
+                        raster["size"][1] = -raster["size"][1]
 
                     # Apply flip to image data if needed
                     if (flip_h or flip_v) and Image is not None and raster["data"]:

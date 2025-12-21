@@ -309,9 +309,13 @@ jobhandler = {
     // fills, paths helper function
     function add_vector(item, i, parent_group) {
       var path = jobhandler.defs[item.def].data
+      var isFill = jobhandler.defs[item.def].kind === "fill"
       jobview_feedLayer.activate()
       var group = new paper.Group()
       group.itemidx = i
+      if (isFill) {
+        group.opacity = 0.5
+      }
       jobhandler.itemidx2group[i] = group
       parent_group.addChild(group)
       for (var j=0; j<path.length; j++) {
@@ -464,26 +468,53 @@ jobhandler = {
   },
 
 
-  getSeekPassesLength : function() {
+  getSeekPassesLength: function () {
     var length = 0
     // loop over the passes
-    this.loopPasses(function(pass, item_idxs) {
+    this.loopPasses(function (pass, item_idxs) {
       // loop over the items
       for (var iPass = 0; iPass < item_idxs.length; iPass++) {
-        // loop over the individual paths in the item
-        var item = item_idxs[iPass]
-        for ( var iPath = 0; iPath < jobhandler.defs[item].data.length - 1; iPath++) {
-          path     = jobhandler.defs[item].data[iPath]
-          nextPath = jobhandler.defs[item].data[iPath+1]
-          endPoint   = path[path.length-1]
-          startPoint = nextPath[0]
-          // add distance to the seek-length
-          length += Math.sqrt((startPoint[0]-endPoint[0])*(startPoint[0]-endPoint[0])+(startPoint[1]-endPoint[1])*(startPoint[1]-endPoint[1]))
+        var itemIdx = item_idxs[iPass]
+        var itemObj = jobhandler.items[itemIdx]
+        var def = jobhandler.defs[itemObj.def]
+
+        // Skip image items - they don't have path data for seek calculation
+        if (def.kind === "image") {
+          continue
         }
-        if (iPass < item_idxs.length-1) {
-          lastPointLastPass = nextPath[nextPath.length-1]
-          firstPointNextPass = jobhandler.defs[item_idxs[iPass+1]].data[0][0]
-          length += Math.sqrt((firstPointNextPass[0]-lastPointLastPass[0])*(firstPointNextPass[0]-lastPointLastPass[0])+(firstPointNextPass[1]-lastPointLastPass[1])*(firstPointNextPass[1]-lastPointLastPass[1]))
+
+        // loop over the individual paths in the item
+        var pathData = def.data
+        if (!pathData || !Array.isArray(pathData) || pathData.length < 2) {
+          continue
+        }
+
+        var lastPath = null
+        for (var iPath = 0; iPath < pathData.length - 1; iPath++) {
+          var path = pathData[iPath]
+          var nextPath = pathData[iPath + 1]
+          if (path && path.length > 0 && nextPath && nextPath.length > 0) {
+            var endPoint = path[path.length - 1]
+            var startPoint = nextPath[0]
+            // add distance to the seek-length
+            length += Math.sqrt((startPoint[0] - endPoint[0]) * (startPoint[0] - endPoint[0]) + (startPoint[1] - endPoint[1]) * (startPoint[1] - endPoint[1]))
+          }
+          lastPath = nextPath
+        }
+
+        // Calculate seek between items
+        if (iPass < item_idxs.length - 1 && lastPath && lastPath.length > 0) {
+          var nextItemIdx = item_idxs[iPass + 1]
+          var nextItemObj = jobhandler.items[nextItemIdx]
+          var nextItemDef = jobhandler.defs[nextItemObj.def]
+          if (nextItemDef.kind !== "image" && nextItemDef.data && Array.isArray(nextItemDef.data) && nextItemDef.data.length > 0) {
+            var lastPointLastPass = lastPath[lastPath.length - 1]
+            var firstPathNextItem = nextItemDef.data[0]
+            if (firstPathNextItem && firstPathNextItem.length > 0) {
+              var firstPointNextPass = firstPathNextItem[0]
+              length += Math.sqrt((firstPointNextPass[0] - lastPointLastPass[0]) * (firstPointNextPass[0] - lastPointLastPass[0]) + (firstPointNextPass[1] - lastPointLastPass[1]) * (firstPointNextPass[1] - lastPointLastPass[1]))
+            }
+          }
         }
       }
     })

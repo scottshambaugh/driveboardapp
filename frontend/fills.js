@@ -7,20 +7,32 @@ function fills_add_by_item(idx, callback) {
     return
   }
   var color = jobhandler.items[idx].color
-  var path = jobhandler.defs[jobhandler.items[idx].def].data
-  var bounds = jobhandler.stats.items[idx].bbox
+
+  // Collect all path items with the same color for nested fill support
+  var allPaths = []
+  var combinedBounds = [Infinity, Infinity, -Infinity, -Infinity]
+  jobhandler.loopItems(function(item, i) {
+    if (item.color === color) {
+      var pathData = jobhandler.defs[item.def].data
+      allPaths.push(pathData)
+      // expand combined bounds
+      var itemBounds = jobhandler.stats.items[i].bbox
+      jobhandler.bboxExpand2(combinedBounds, itemBounds)
+    }
+  }, "path")
+
   var leadin = app_config_main.fill_leadin
   if (app_config_main.fill_mode != 'Forward' && app_config_main.fill_mode != 'Reverse' && app_config_main.fill_mode != 'Bidirectional') {
     leadin = 0
   }
-  var min_x = Math.max(bounds[0]-leadin, 0)
-  var max_x = Math.min(bounds[2]+leadin, app_config_main.workspace[0])
+  var min_x = Math.max(combinedBounds[0]-leadin, 0)
+  var max_x = Math.min(combinedBounds[2]+leadin, app_config_main.workspace[0])
   var fillpxsize = parseFloat($('#fillpxsize').val())
   var fillpolylines = []  // polylines aka path
   var lines = []
   // setup loop function
-  var y = bounds[1]+0.001
-  var max_y_bounds = bounds[3]
+  var y = combinedBounds[1]+0.001
+  var max_y_bounds = combinedBounds[3]
   loop_lines()
   // loop function
   function loop_lines() {
@@ -29,20 +41,32 @@ function fills_add_by_item(idx, callback) {
       return
     }
     // for every fill line
-    // intersect with all segments of path
+    // intersect with all segments of all same-color paths
     lines.push([[min_x,y],[max_x,y]])
     var intersections = []
-    for (var i = 0; i < path.length; i++) {
-      var polyline = path[i]
-      if (polyline.length > 1) {
-        pv = polyline[0]
-        for (var j = 1; j < polyline.length; j++) {
-          var v = polyline[j]
-          res = fills_intersect(min_x, y, max_x, y, pv[0], pv[1], v[0], v[1])
-          if (res.onSeg1 && res.onSeg2) {
-            intersections.push([res.x, res.y])
+    for (var p = 0; p < allPaths.length; p++) {
+      var path = allPaths[p]
+      for (var i = 0; i < path.length; i++) {
+        var polyline = path[i]
+        if (polyline.length > 1) {
+          var pv = polyline[0]
+          for (var j = 1; j < polyline.length; j++) {
+            var v = polyline[j]
+            var res = fills_intersect(min_x, y, max_x, y, pv[0], pv[1], v[0], v[1])
+            if (res.onSeg1 && res.onSeg2) {
+              intersections.push([res.x, res.y])
+            }
+            pv = v
           }
-          pv = v
+          // Auto-close: check intersection with closing segment (last to first point)
+          var first = polyline[0]
+          var last = polyline[polyline.length - 1]
+          if (first[0] !== last[0] || first[1] !== last[1]) {
+            var res = fills_intersect(min_x, y, max_x, y, last[0], last[1], first[0], first[1])
+            if (res.onSeg1 && res.onSeg2) {
+              intersections.push([res.x, res.y])
+            }
+          }
         }
       }
     }
