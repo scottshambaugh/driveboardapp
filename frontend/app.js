@@ -173,8 +173,6 @@ function config_build_form() {
   var html =
     '<p class="text-muted" style="margin-bottom:15px; word-break:break-all;">';
   html += "<strong>Config file:</strong> " + (app_config_path || "Unknown");
-  html +=
-    "<br><small>Changes are saved immediately to this file when you click Save or Reset.</small>";
   html += "</p>";
 
   html += '<table class="table table-condensed" style="margin-bottom:0">';
@@ -375,15 +373,23 @@ function config_save() {
 }
 
 function config_reset_field(key) {
-  request_get({
-    url: "/config/" + key + "/_default_",
-    success: function () {
-      app_config_main[key] = app_config_defaults[key];
-      config_build_form();
-      $().uxmessage("success", key + " reset to default.");
-    },
-    error: function () {
-      $().uxmessage("error", "Failed to reset " + key);
-    },
-  });
+  // Reset the input field to the default value (doesn't save until Save is clicked)
+  var defaultValue = app_config_defaults[key];
+  var inputId = "#config_input_" + key;
+  var $input = $(inputId);
+
+  if (typeof defaultValue === "boolean") {
+    $input.prop("checked", defaultValue);
+  } else if (
+    Array.isArray(defaultValue) ||
+    (typeof defaultValue === "object" && defaultValue !== null)
+  ) {
+    $input.val(JSON.stringify(defaultValue));
+  } else {
+    $input.val(defaultValue);
+  }
+
+  // Update reset button state
+  $(".config-reset-btn[data-key='" + key + "']").prop("disabled", true);
+  $().uxmessage("notice", key + " reset to default. Click Save to apply.");
 }
