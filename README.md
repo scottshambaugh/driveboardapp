@@ -5,6 +5,7 @@ The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboa
 * Rastering completely rewritten: skips over large whitespace for speed, option for inverting, can select number of gray levels (set to 2-3 for dithering, max of 128)
 * Bidirectional and nearest neighbor pathing algorithms for fill and rastering speedups
 * Added a 'pulse' functionality for the laser (all safety interlocks still work)
+* Text in svgs is now converted to paths
 * You can save material preset laser settings through the UI and easily load them back up
 * The configuration is editable through the UI
 * The debug terminal can now be resized, scroll, and will not auto-jump back down when scrolling around
