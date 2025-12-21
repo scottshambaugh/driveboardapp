@@ -1,4 +1,7 @@
 var app_config_main = undefined;
+var app_config_editable = undefined;
+var app_config_defaults = undefined;
+var app_config_path = undefined;
 var app_run_btn = undefined;
 var app_fill_btn = undefined;
 var app_visibility = true;
@@ -130,7 +133,10 @@ $(document).ready(function () {
     url: "/config",
     success: function (data) {
       // $().uxmessage('success', "App config received.")
-      app_config_main = data;
+      app_config_main = data.values;
+      app_config_editable = data.editable;
+      app_config_defaults = data.defaults;
+      app_config_path = data.configpath;
       config_received();
     },
     error: function (data) {
@@ -141,13 +147,9 @@ $(document).ready(function () {
 });
 
 function config_received() {
-  // show in config modal
-  var html = "";
-  var keys_sorted = Object.keys(app_config_main).sort();
-  for (var i = 0; i < keys_sorted.length; i++) {
-    html += keys_sorted[i] + " : " + app_config_main[keys_sorted[i]] + "<br>";
-  }
-  $("#config_content").html(html);
+  // build editable config form
+  config_build_form();
+
   // about modal
   $("#app_version").html(app_config_main.version);
   // $('#firmware_version').html(app_config_main.)
@@ -164,4 +166,224 @@ function config_received() {
   status_ready();
   // call 'ready' of presets
   presets_ready();
+}
+
+function config_build_form() {
+  // Show config file path at top
+  var html =
+    '<p class="text-muted" style="margin-bottom:15px; word-break:break-all;">';
+  html += "<strong>Config file:</strong> " + (app_config_path || "Unknown");
+  html +=
+    "<br><small>Changes are saved immediately to this file when you click Save or Reset.</small>";
+  html += "</p>";
+
+  html += '<table class="table table-condensed" style="margin-bottom:0">';
+  html +=
+    "<thead><tr><th>Setting</th><th>Value</th><th></th></tr></thead><tbody>";
+
+  var keys_sorted = Object.keys(app_config_editable).sort();
+  for (var i = 0; i < keys_sorted.length; i++) {
+    var key = keys_sorted[i];
+    // Skip fields that aren't in the values (e.g., users is excluded for security)
+    if (!(key in app_config_main)) continue;
+    var value = app_config_main[key];
+    var description = app_config_editable[key];
+    var defaultValue = app_config_defaults[key];
+    var isDefault = JSON.stringify(value) === JSON.stringify(defaultValue);
+
+    html += '<tr data-key="' + key + '">';
+    html += '<td style="vertical-align:middle"><strong>' + key + "</strong>";
+    html += '<br><small class="text-muted">' + description + "</small></td>";
+    html += "<td>" + config_render_input(key, value) + "</td>";
+    html += '<td style="vertical-align:middle; white-space:nowrap;">';
+    html +=
+      '<button type="button" class="btn btn-xs btn-warning config-reset-btn" data-key="' +
+      key +
+      '" title="Reset to default: ' +
+      JSON.stringify(defaultValue) +
+      '"' +
+      (isDefault ? " disabled" : "") +
+      ">";
+    html += "Reset";
+    html += "</button>";
+    html += "</td>";
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+
+  $("#config_content").html(html);
+
+  // bind input change events to update reset button state
+  $("#config_content")
+    .off("change input", "input")
+    .on("change input", "input", function () {
+      var $input = $(this);
+      var key = $input.attr("data-key");
+      if (!key) return;
+
+      var currentValue = config_get_input_value(key);
+      var defaultValue = app_config_defaults[key];
+      var isDefault =
+        JSON.stringify(currentValue) === JSON.stringify(defaultValue);
+
+      var $resetBtn = $(".config-reset-btn[data-key='" + key + "']");
+      $resetBtn.prop("disabled", isDefault);
+    });
+
+  // bind reset button clicks using event delegation
+  $("#config_content")
+    .off("click", ".config-reset-btn")
+    .on("click", ".config-reset-btn", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var $btn = $(this);
+      if ($btn.prop("disabled")) return;
+      var key = $btn.attr("data-key");
+      config_reset_field(key);
+    });
+
+  // bind save button click
+  $("#config_save_btn")
+    .off("click")
+    .on("click", function () {
+      config_save();
+    });
+}
+
+function config_render_input(key, value) {
+  var inputId = "config_input_" + key;
+  var valueType = typeof value;
+
+  if (valueType === "boolean") {
+    return (
+      '<input type="checkbox" id="' +
+      inputId +
+      '" ' +
+      (value ? "checked" : "") +
+      ' data-key="' +
+      key +
+      '">'
+    );
+  } else if (Array.isArray(value)) {
+    return (
+      '<input type="text" class="form-control input-sm" id="' +
+      inputId +
+      "\" value='" +
+      JSON.stringify(value) +
+      "' data-key=\"" +
+      key +
+      '" style="width:200px">'
+    );
+  } else if (valueType === "object" && value !== null) {
+    return (
+      '<input type="text" class="form-control input-sm" id="' +
+      inputId +
+      "\" value='" +
+      JSON.stringify(value) +
+      "' data-key=\"" +
+      key +
+      '" style="width:200px">'
+    );
+  } else if (valueType === "number") {
+    return (
+      '<input type="number" class="form-control input-sm" id="' +
+      inputId +
+      '" value="' +
+      value +
+      '" data-key="' +
+      key +
+      '" style="width:120px" step="any">'
+    );
+  } else {
+    // string or other
+    return (
+      '<input type="text" class="form-control input-sm" id="' +
+      inputId +
+      '" value="' +
+      (value || "") +
+      '" data-key="' +
+      key +
+      '" style="width:200px">'
+    );
+  }
+}
+
+function config_get_input_value(key) {
+  var inputId = "#config_input_" + key;
+  var $input = $(inputId);
+  var originalValue = app_config_main[key];
+  var valueType = typeof originalValue;
+
+  if (valueType === "boolean") {
+    return $input.is(":checked");
+  } else if (
+    Array.isArray(originalValue) ||
+    (valueType === "object" && originalValue !== null)
+  ) {
+    try {
+      return JSON.parse($input.val());
+    } catch (e) {
+      return $input.val();
+    }
+  } else if (valueType === "number") {
+    var num = parseFloat($input.val());
+    return isNaN(num) ? $input.val() : num;
+  } else {
+    return $input.val();
+  }
+}
+
+function config_save() {
+  var keys = Object.keys(app_config_editable);
+  var changedCount = 0;
+  var pendingRequests = 0;
+
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    // Skip fields that aren't in the values
+    if (!(key in app_config_main)) continue;
+    var newValue = config_get_input_value(key);
+    var oldValue = app_config_main[key];
+
+    if (JSON.stringify(newValue) !== JSON.stringify(oldValue)) {
+      changedCount++;
+      pendingRequests++;
+
+      (function (k, v, encodedV) {
+        request_get({
+          url: "/config/" + k + "/" + encodedV,
+          success: function () {
+            app_config_main[k] = v;
+            pendingRequests--;
+            if (pendingRequests === 0) {
+              $().uxmessage("success", "Configuration saved.");
+              config_build_form();
+            }
+          },
+          error: function () {
+            pendingRequests--;
+            $().uxmessage("error", "Failed to save " + k);
+          },
+        });
+      })(key, newValue, encodeURIComponent(JSON.stringify(newValue)));
+    }
+  }
+
+  if (changedCount === 0) {
+    $().uxmessage("notice", "No changes to save.");
+  }
+}
+
+function config_reset_field(key) {
+  request_get({
+    url: "/config/" + key + "/_default_",
+    success: function () {
+      app_config_main[key] = app_config_defaults[key];
+      config_build_form();
+      $().uxmessage("success", key + " reset to default.");
+    },
+    error: function () {
+      $().uxmessage("error", "Failed to reset " + key);
+    },
+  });
 }

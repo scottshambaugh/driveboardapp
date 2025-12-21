@@ -12,6 +12,7 @@ import webbrowser
 import wsgiref.simple_server
 
 import bottle
+import config as config_module
 import driveboard
 import jobimport
 from config import conf, conf_defaults, userconfigurable, write_config_fields
@@ -120,7 +121,16 @@ def config(key=None, value=None):
     if not key or not value:
         confcopy = copy.deepcopy(conf)
         del confcopy["users"]
-        return json.dumps(confcopy)
+        # Build defaults for editable fields only
+        defaults = {k: conf_defaults[k] for k in userconfigurable}
+        return json.dumps(
+            {
+                "values": confcopy,
+                "editable": userconfigurable,
+                "defaults": defaults,
+                "configpath": config_module.configpath,
+            }
+        )
     else:
         if key in userconfigurable:
             if value == "_default_":
@@ -132,9 +142,9 @@ def config(key=None, value=None):
                     pass
             conf[key] = value
             write_config_fields({key: value})
-            return "Written to config file."
+            return json.dumps({"status": "ok", "message": "Written to config file."})
         else:
-            return "Not a user-configurable key."
+            return json.dumps({"status": "error", "message": "Not a user-configurable key."})
 
 
 @bottle.route("/confserial")
@@ -607,7 +617,7 @@ def clear():
 def listing_library():
     """List all library jobs by name."""
     files = _get_sorted("*.dba", library=True, stripext=True)
-    return json.dumps(files)
+    return json.dumps({"files": files, "path": os.path.join(conf["rootdir"], "library")})
 
 
 @bottle.route("/get_library/<jobname>")
@@ -631,9 +641,13 @@ def load_library(jobname):
 ### FAVORITES
 
 
+def _get_presets_path():
+    return os.path.join(conf["confdir"], "presets.json")
+
+
 def _read_presets():
     presets = []
-    path = os.path.join(conf["confdir"], "presets.json")
+    path = _get_presets_path()
     # load
     if os.path.exists(path):
         with open(path) as fp:
@@ -651,7 +665,7 @@ def listing_presets():
     """List all preset settings."""
     presets = _read_presets()
 
-    return json.dumps(presets)
+    return json.dumps({"presets": presets, "path": _get_presets_path()})
 
 
 @bottle.route("/save_preset/<name>/<feedrate:float>/<intensity:float>/<pxsize:float>")

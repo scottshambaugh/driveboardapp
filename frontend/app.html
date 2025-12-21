@@ -75,7 +75,7 @@
                 <li><a id="flash_btn" href="#">Flash Firmware</a></li>
                 <li><a id="rebuild_btn" href="#" title="Rebuild firmware from sources.">Rebuild Firmware</a></li>
                 <li><a id="reset_btn" href="#">Reset Atmega</a></li>
-                <li><a id="config_btn" href="#" data-toggle="modal" data-target="#config_modal" title="[C]">Show Configuration</a></li>
+                <li><a id="config_btn" href="#" data-toggle="modal" data-target="#config_modal" title="[C]">Configuration</a></li>
                 <li><a id="log_btn" href="#" data-toggle="modal" data-target="#log_modal" title="[SHIFT-L]">Log</a></li>
               </ul>
             </li>
@@ -231,9 +231,12 @@
               <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
               <h4 class="modal-title" id="config_header">Configuration</h4>
             </div>
-            <div class="modal-body row" style="padding:40px">
-              <div id="config_content" class="pull-left"></div>
-              <div id="status_content" class="pull-right"></div>
+            <div class="modal-body" style="padding:20px; max-height:70vh; overflow-y:auto;">
+              <div id="config_content"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary" id="config_save_btn">Save</button>
             </div>
           </div>
         </div>
@@ -363,10 +366,10 @@
         <form class="form-inline" style="display: inline-block">
 			<div class="input-group"  style="margin-right:1px">
 				<!-- dx-field -->
-				<span id="x_span" title="x-movement" class="input-group-addon">dx:</span>
+				<span id="x_span" title="x-movement mm" class="input-group-addon">dx:</span>
 				<input type="text" id="x_input" class="form-control input-sm" maxlength=6 size=6 value="0" style="width: 5em">
 				<!-- dy-field -->
-				<span id="y_span" title="y-movement" class="input-group-addon">dy:</span>
+				<span id="y_span" title="y-movement mm" class="input-group-addon">dy:</span>
 				<input type="text" id="y_input" class="form-control input-sm" maxlength=6 size=6 value="0" style="width: 5em">
 			</div>
 			<!-- move button
@@ -377,7 +380,7 @@
 		</form>
 		
 		<!-- it might look better if the button is in the input form, but then the page refreshes on button click...somebody with more knowledge and time might be able to fix it. -->
-		<button class="btn btn-default" type="button" id="moveBy_btn" title="relative move by dx, dy">-> (dx,dy)</button>
+		<button class="btn btn-default" type="button" id="moveBy_btn" title="relative move by (dx, dy) mm">-> (dx,dy)</button>
 
         <div class="btn-group footer_btn" data-toggle="buttons">
           <label id="select_btn" class="btn btn-default active" title="select paths">
@@ -386,10 +389,10 @@
           <label id="offset_set_btn" class="btn btn-default" title="set offset to current position [o]">
             <input type="radio" name="options" autocomplete="off"> Set Offset
           </label>
-		  <label id="offset_reset_btn" class="btn btn-default" title="reset offset to (0,0)">
+		  <label id="offset_reset_btn" class="btn btn-default" title="reset offset to (0,0) mm">
             <input type="radio" name="options" autocomplete="off"> Reset Offset
           </label>
-          <label id="motion_btn" class="btn btn-default" title="move laser head [m]">
+          <label id="motion_btn" class="btn btn-default" title="move laser head to position [m]">
             <input type="radio" name="options" autocomplete="off"> Move
           </label>
           <label id="jog_btn" class="btn btn-default" title="jog laser head [j]">
@@ -412,7 +415,7 @@
 		  
         </div>
 
-        <span id="jog_hotkey_hint" class="tool_extra_btn" style="display:none">Also arrow and shift-arrow keys.</span>
+        <span id="jog_hotkey_hint" class="tool_extra_btn" style="display:none">Arrow keys (10 mm), ctrl-arrow (1 mm), shift-arrow (50 mm).</span>
 
       </div>
     </footer>

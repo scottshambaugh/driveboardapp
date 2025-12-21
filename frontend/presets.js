@@ -35,8 +35,11 @@ function presets_update() {
   request_get({
     url: "/listing_presets",
     success: function (data) {
-      presets = data;
+      presets = data.presets;
       var html = `
+<p class="text-muted" style="margin-bottom:15px; word-break:break-all;">
+  <strong>Presets file:</strong> ${data.path || "Unknown"}
+</p>
 <table class="table table-hover table-condensed">
   <thead>
     <tr>
@@ -68,13 +71,13 @@ function presets_update() {
       </td>
     </tr>
   `;
-      for (var i = 0; i < data.length; i++) {
+      for (var i = 0; i < presets.length; i++) {
         html += `
     <tr>
-      <td class="preset-name">${data[i].name}</td>
-      <td style="text-align:right;">${data[i].feedrate}</td>
-      <td style="text-align:right;">${data[i].intensity}%</td>
-      <td style="text-align:right;">${data[i].pxsize}mm</td>
+      <td class="preset-name">${presets[i].name}</td>
+      <td style="text-align:right;">${presets[i].feedrate}</td>
+      <td style="text-align:right;">${presets[i].intensity}%</td>
+      <td style="text-align:right;">${presets[i].pxsize}mm</td>
       <td style="text-align:right;">
         <a id="del_preset_btn_${i}" class="btn btn-del-preset" style="margin-left:8px; position:relative; top:1px" role="button">
           <span class="glyphicon glyphicon-trash" style="color:#888888"></span>

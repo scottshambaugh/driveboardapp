@@ -272,7 +272,7 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
       <div class="form-group">
         <div class="input-group" style="margin-right:4px">
           <div class="input-group-addon" style="width:10px">F</div>
-          <input type="text" class="form-control input-sm feedrate" style="width:50px;" value="${feedrate}" title="feedrate">
+          <input type="text" class="form-control input-sm feedrate" style="width:50px;" value="${feedrate}" title="feedrate mm/min">
         </div>
         <div class="input-group" style="margin-right:4px">
           <div class="input-group-addon" style="width:10px">%</div>
