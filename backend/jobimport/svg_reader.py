@@ -205,7 +205,7 @@ class SVGReader:
         # 1. Get px2mm from argument
         if force_dpi is not None:
             self.px2mm = 25.4 / force_dpi
-            log.info("SVG import forced to %s dpi." % (force_dpi))
+            log.info(f"SVG import forced to {force_dpi} dpi.")
 
         # Get width, height, viewBox for further processing
         if not self.px2mm:
@@ -226,14 +226,14 @@ class SVGReader:
                 if width_unit != height_unit:
                     log.error("Conflicting units found.")
                 unit = width_unit
-                log.info("SVG w,h (unit) is %s,%s (%s)." % (width, height, unit))
+                log.info(f"SVG w,h (unit) is {width},{height} ({unit}).")
 
             # get viewBox
             # http://www.w3.org/TR/SVG11/coords.html#ViewBoxAttribute
             vb = svgRootElement.attrib.get("viewBox")
             if vb:
                 vb_x, vb_y, vb_w, vb_h = parseFloats(vb)
-                log.info("SVG viewBox (%s,%s,%s,%s)." % (vb_x, vb_y, vb_w, vb_h))
+                log.info(f"SVG viewBox ({vb_x},{vb_y},{vb_w},{vb_h}).")
 
         # 2. Get px2mm from width, height, viewBox
         if not self.px2mm:

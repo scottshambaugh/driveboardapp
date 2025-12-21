@@ -73,12 +73,12 @@ def main():
         total_points = 0
         for path in job["vector"]["paths"]:
             for polyline in path:
-                for point in polyline:
+                for _point in polyline:
                     total_points += 1
         print("STATS:")
-        print("\ttotal points: %s" % total_points)
+        print(f"\ttotal points: {total_points}")
         if "vector" in job and "optimized" in job["vector"]:
-            print("\ttolerance: %s" % job["vector"]["optimized"])
+            print("\ttolerance: {}".format(job["vector"]["optimized"]))
     else:
         jobpath = os.path.join(thislocation, "testjobs")
         cwd_temp = os.getcwd()

@@ -175,7 +175,9 @@ def simplify_all(path, tolerance2):
             log.info("INFO: polylines optimized by " + str(int(diffpct)) + "%")
 
 
-def sort_by_seektime(path, start=[0.0, 0.0]):
+def sort_by_seektime(path, start=None):
+    if start is None:
+        start = [0.0, 0.0]
     path_unsorted = []
     tree = kdtree.Tree(2)
     for i in range(len(path)):
@@ -190,7 +192,7 @@ def sort_by_seektime(path, start=[0.0, 0.0]):
     endpoint = start
     newIdx = 0
     usedIdxs = {}
-    for p in range(2 * len(path_unsorted)):
+    for _p in range(2 * len(path_unsorted)):
         node, distsq = tree.nearest(endpoint, checkempty=True)
         i, rev = node.data
         node.data = None

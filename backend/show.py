@@ -16,7 +16,7 @@ class PyApp(gtk.Window):
     def __init__(self):
         global args
 
-        super(PyApp, self).__init__()
+        super().__init__()
 
         self.set_title("Lasersaur")
         self.resize(1220, 610)
@@ -156,12 +156,12 @@ if __name__ == "__main__":
         total_points = 0
         for path in job["vector"]["paths"]:
             for polyline in path:
-                for point in polyline:
+                for _point in polyline:
                     total_points += 1
         print("STATS:")
-        print("\ttotal points: %s" % total_points)
+        print(f"\ttotal points: {total_points}")
         if "vector" in job and "optimized" in job["vector"]:
-            print("\ttolerance: %s" % job["vector"]["optimized"])
+            print("\ttolerance: {}".format(job["vector"]["optimized"]))
 
         # run gtk window
         PyApp()

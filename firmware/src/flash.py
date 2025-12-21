@@ -67,7 +67,7 @@ def build():
         SERIAL_OPTION = ""
     else:
         PROGRAMMER = "arduino"  # use this for bootloader
-        SERIAL_OPTION = "-P %(port)s" % {"port": SERIAL_PORT}
+        SERIAL_OPTION = f"-P {SERIAL_PORT}"
     BITRATE = "115200"
 
     BUILDNAME = "DriveboardFirmware"
@@ -84,35 +84,24 @@ def build():
     )
 
     for fileobj in OBJECTS:
-        os.system("%(compile)s -c %(obj)s.c -o %(obj)s.o" % {"compile": COMPILE, "obj": fileobj})
+        os.system(f"{COMPILE} -c {fileobj}.c -o {fileobj}.o")
 
     os.system(
-        "%(compile)s -o main.elf %(alldoto)s  -lm"
-        % {"compile": COMPILE, "alldoto": ".o ".join(OBJECTS) + ".o"}
+        "{compile} -o main.elf {alldoto}  -lm".format(compile=COMPILE, alldoto=".o ".join(OBJECTS) + ".o")
     )
 
     # os.system('rm -f %(product).hex' % {'product':BUILDNAME})
 
     os.system(
-        "%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex"
-        % {"objcopy": AVROBJCOPYAPP, "product": BUILDNAME}
+        f"{AVROBJCOPYAPP} -j .text -j .data -O ihex main.elf {BUILDNAME}.hex"
     )
 
-    os.system("%(size)s *.hex *.elf *.o" % {"size": AVRSIZEAPP})
+    os.system(f"{AVRSIZEAPP} *.hex *.elf *.o")
 
     # os.system('%(objdump)s -t -j .bss main.elf' % {'objdump':AVROBJDUMPAPP})
 
     os.system(
-        "%(dude)s -c %(programmer)s -b %(bps)s %(serial_option)s -p %(device)s -C %(dudeconf)s -Uflash:w:%(product)s.hex:i"
-        % {
-            "dude": AVRDUDEAPP,
-            "programmer": PROGRAMMER,
-            "bps": BITRATE,
-            "serial_option": SERIAL_OPTION,
-            "device": DEVICE,
-            "dudeconf": AVRDUDECONFIG,
-            "product": BUILDNAME,
-        }
+        f"{AVRDUDEAPP} -c {PROGRAMMER} -b {BITRATE} {SERIAL_OPTION} -p {DEVICE} -C {AVRDUDECONFIG} -Uflash:w:{BUILDNAME}.hex:i"
     )
     # os.system('%(dude)s -c %(programmer)s -b %(bps)s -P %(port)s -p %(device)s -C %(dudeconf)s -B 10 -F -U flash:w:%(product)s.hex:i' % {'dude':AVRDUDEAPP, 'programmer':PROGRAMMER, 'bps':BITRATE, 'port':SERIAL_PORT, 'device':DEVICE, 'dudeconf':AVRDUDECONFIG, 'product':BUILDNAME})
 
@@ -126,7 +115,7 @@ def build():
     current_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
     print(current_dir)
     for fileobj in OBJECTS:
-        file_abs = os.path.join(current_dir, "%(file)s.o" % {"file": fileobj})
+        file_abs = os.path.join(current_dir, f"{fileobj}.o")
         if os.path.isfile(file_abs):
             os.remove(file_abs)
     file_abs = os.path.join(current_dir, "main.elf")

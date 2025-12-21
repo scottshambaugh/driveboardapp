@@ -29,8 +29,6 @@ class NGCReader:
         current_path = []
         re_findall_attribs = re.compile(r"(S|F|X|Y|Z)(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)").findall
 
-        intensity = 0.0
-        feedrate = 1000.0
         target = [0.0, 0.0, 0.0]
         prev_motion_was_seek = True
 
@@ -65,19 +63,18 @@ class NGCReader:
                     elif attr[0] == "Z":
                         target[2] = float(attr[1])
                     elif attr[0] == "S":
-                        intensity = float(attr[1])
+                        float(attr[1])
                     elif attr[0] == "F":
-                        feedrate = float(attr[1])
+                        float(attr[1])
                 current_path.append([target[0], target[1], target[2]])
             elif line.startswith("S"):
                 attribs = re_findall_attribs(line)
                 for attr in attribs:
                     if attr[0] == "S":
-                        intensity = float(attr[1])
+                        float(attr[1])
             else:
                 print("Warning: Unsupported Gcode")
 
         print("Done!")
         self.boundarys = {"#000000": paths}
-        pass_ = ["1", feedrate, "", intensity, "", "#000000"]
         return {"boundarys": self.boundarys}

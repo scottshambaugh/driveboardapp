@@ -65,8 +65,8 @@ def build_all():
         shutil.copy("config.h", "~config.h")
         shutil.copy(config_file, "config.h")
         try:
-            firmware_name = "firmware.%s" % (hardware_designator)
-            print("INFO: building for %s" % (config_file))
+            firmware_name = f"firmware.{hardware_designator}"
+            print(f"INFO: building for {config_file}")
             # buid
             r = build_firmware(firmware_name)
             if r != 0:
@@ -111,29 +111,20 @@ def build_firmware(firmware_name="DriveboardFirmware"):
     # COMPILE = AVRGCCAPP + " -Wall -O3 -DF_CPU=" + CLOCK + " -mmcu=" + DEVICE + " -I. -ffunction-sections" + " --std=c99"
 
     for fileobj in OBJECTS:
-        command = "%(compile)s -c %(obj)s.c -o %(obj)s.o" % {
-            "compile": COMPILE,
-            "obj": fileobj,
-        }
+        command = f"{COMPILE} -c {fileobj}.c -o {fileobj}.o"
         ret += subprocess.call(command, shell=True)
 
-    command = "%(compile)s -o main.elf %(alldoto)s  -lm" % {
-        "compile": COMPILE,
-        "alldoto": ".o ".join(OBJECTS) + ".o",
-    }
+    command = "{compile} -o main.elf {alldoto}  -lm".format(
+        compile=COMPILE,
+        alldoto=".o ".join(OBJECTS) + ".o",
+    )
     ret += subprocess.call(command, shell=True)
 
-    command = "%(objcopy)s -j .text -j .data -O ihex main.elf %(product)s.hex" % {
-        "objcopy": AVROBJCOPYAPP,
-        "product": BUILDNAME,
-    }
+    command = f"{AVROBJCOPYAPP} -j .text -j .data -O ihex main.elf {BUILDNAME}.hex"
     ret += subprocess.call(command, shell=True)
 
     # command = '%(size)s *.hex *.elf *.o' % {'size':AVRSIZEAPP}
-    command = "%(size)s --mcu=%(mcu)s --format=avr main.elf" % {
-        "size": AVRSIZEAPP,
-        "mcu": DEVICE,
-    }
+    command = f"{AVRSIZEAPP} --mcu={DEVICE} --format=avr main.elf"
     ret += subprocess.call(command, shell=True)
 
     # command = '%(objdump)s -t -j .bss main.elf' % {'objdump':AVROBJDUMPAPP}
@@ -146,7 +137,7 @@ def build_firmware(firmware_name="DriveboardFirmware"):
         ## clean after upload
         print("Cleaning up build files.")
         for fileobj in OBJECTS:
-            f = "%s.o" % (fileobj)
+            f = f"{fileobj}.o"
             if os.path.isfile(f):
                 os.remove(f)
         if os.path.isfile("main.elf"):

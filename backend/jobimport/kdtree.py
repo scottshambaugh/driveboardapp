@@ -196,7 +196,7 @@ if __name__ == "__main__":
             super().__init__([float(a) for a in args])
 
         def __str__(self):
-            return "<%.1f %.1f %.1f>" % tuple(self[0:3])
+            return "<{:.1f} {:.1f} {:.1f}>".format(*tuple(self[0:3]))
 
         def __sub__(self, other):
             return vector(self[0] - other[0], self[1] - other[1], self[2] - other[2])
@@ -337,7 +337,7 @@ if __name__ == "__main__":
             self.assertAlmostEqual(distsq, 0.03)
 
         def test_nearest(self):
-            for n in range(self.repeats):
+            for _n in range(self.repeats):
                 tree = Tree(3)
                 shuffle(self.points)
                 for p in self.points:
@@ -346,13 +346,7 @@ if __name__ == "__main__":
                 for p in self.points:
                     for d in self.d:
                         node, distsq = tree.nearest(p + d)
-                        s = "%s %s %s %s\n%s" % (
-                            str(p + d),
-                            str(p),
-                            str(d),
-                            str(node.pos),
-                            str(tree.root),
-                        )
+                        s = f"{str(p + d)} {str(p)} {str(d)} {str(node.pos)}\n{str(tree.root)}"
                         self.assertListEqual(node.pos, p, msg=s)
                         self.assertListEqual(node.data, p)
                         self.assertAlmostEqual(distsq, d.dot(d), msg=s)
@@ -364,7 +358,7 @@ if __name__ == "__main__":
                     self.assertAlmostEqual(distsq, 0.0)
 
         def test_nearest_empty(self):
-            for n in range(self.repeats):
+            for _n in range(self.repeats):
                 tree = Tree(3)
                 shuffle(self.points)
                 for p in self.points:
@@ -373,13 +367,7 @@ if __name__ == "__main__":
                 for p in self.points:
                     for d in self.d:
                         node, distsq = tree.nearest(p + d)
-                        s = "%s %s %s %s\n%s" % (
-                            str(p + d),
-                            str(p),
-                            str(d),
-                            str(node.pos),
-                            str(tree.root),
-                        )
+                        s = f"{str(p + d)} {str(p)} {str(d)} {str(node.pos)}\n{str(tree.root)}"
                         self.assertListEqual(node.pos, p, msg=s)
                         self.assertListEqual(node.data, p)
                         self.assertAlmostEqual(distsq, d.dot(d), msg=s)
@@ -396,13 +384,7 @@ if __name__ == "__main__":
                 for p in self.points[:-1]:  # all but last
                     for d in self.d:
                         node, distsq = tree.nearest(p + d)
-                        s = "%s %s %s %s\n%s" % (
-                            str(p + d),
-                            str(p),
-                            str(d),
-                            str(node.pos),
-                            str(tree.root),
-                        )
+                        s = f"{str(p + d)} {str(p)} {str(d)} {str(node.pos)}\n{str(tree.root)}"
                         self.assertListEqual(node.pos, p, msg=s)
                         self.assertListEqual(node.data, p)
                         self.assertAlmostEqual(distsq, d.dot(d), msg=s)

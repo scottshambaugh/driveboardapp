@@ -6,12 +6,8 @@ Adapted from code by Eli Bendersky:
     http://eli.thegreenplace.net/2009/07/31/listing-all-serial-ports-on-windows-with-python/
 """
 
-import sys
 
-if sys.version_info.major > 2:
-    import winreg
-else:
-    import winreg as winreg
+import winreg
 
 port_prefix = b"\\\\.\\"  # two backlashes, a dot, and another backslash
 # port_prefix is not necessary for COM1 through COM9, but doesn't hurt

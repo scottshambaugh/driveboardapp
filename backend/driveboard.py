@@ -427,7 +427,7 @@ class SerialLoopClass(threading.Thread):
                     for data_num in recent_data:
                         data_char = chr(data_num)
                         if data_char in markers_tx:
-                            print("\t%s" % (markers_tx[data_char]))
+                            print(f"\t{markers_tx[data_char]}")
                         elif 127 < data_num < 256:
                             print("\t(data byte)")
                         else:
@@ -682,7 +682,7 @@ def find_controller(baudrate=conf["baudrate"], verbose=True):
     iterator = sorted(serial.tools.list_ports.comports())
     # look for Arduinos
     arduinos = []
-    for port, desc, hwid in iterator:
+    for port, desc, _hwid in iterator:
         if "uino" in desc:
             arduinos.append(port)
     # check these arduinos for driveboard firmware, take first
@@ -697,7 +697,7 @@ def find_controller(baudrate=conf["baudrate"], verbose=True):
         except serial.SerialException:
             pass
     # check all comports for driveboard firmware
-    for port, desc, hwid in iterator:
+    for port, desc, _hwid in iterator:
         try:
             s = serial.Serial(port=port, baudrate=baudrate, timeout=2.0)
             lasaur_hello = s.read(8)
@@ -762,14 +762,14 @@ def connect(port=conf["serial_port"], baudrate=conf["baudrate"], verbose=True):
                 if data.find(ord(INFO_HELLO)) > -1:
                     if verbose:
                         print("Controller says Hello!")
-                        print("Connected on serial port: %s" % (port))
+                        print(f"Connected on serial port: {port}")
                     break
 
             SerialLoop.start()  # this calls run() in a thread
         except serial.SerialException:
             SerialLoop = None
             if verbose:
-                print("ERROR: Cannot connect serial on port: %s" % (port))
+                print(f"ERROR: Cannot connect serial on port: {port}")
     else:
         if verbose:
             print("ERROR: disconnect first")
@@ -785,7 +785,7 @@ def connect_withfind(port=conf["serial_port"], baudrate=conf["baudrate"], verbos
         serialfindresult = find_controller(verbose=verbose)
         if serialfindresult:
             if verbose:
-                print("INFO: Hardware found at %s." % serialfindresult)
+                print(f"INFO: Hardware found at {serialfindresult}.")
             connect(port=serialfindresult, baudrate=baudrate, verbose=verbose)
             if not connected():  # special case arduino found, but no firmware
                 yesno = input("Firmware appears to be missing. Want to flash-upload it (Y/N)? ")
@@ -795,7 +795,7 @@ def connect_withfind(port=conf["serial_port"], baudrate=conf["baudrate"], verbos
                         connect(port=serialfindresult, baudrate=baudrate, verbose=verbose)
         if connected():
             if verbose:
-                print("INFO: Connected at %s." % serialfindresult)
+                print(f"INFO: Connected at {serialfindresult}.")
             conf["serial_port"] = serialfindresult
             write_config_fields({"serial_port": serialfindresult})
         else:
@@ -1544,14 +1544,14 @@ def job_mill(jobdict):
                 ipct = item[1] * (100.0 / conf["mill_max_rpm"])
                 intensity(ipct)
             elif item[0] == "MIST":
-                if item[1] == True:
+                if item[1]:
                     air_on()
-                elif item[1] == False:
+                elif not item[1]:
                     air_off()
             elif item[0] == "FLOOD":
-                if item[1] == True:
+                if item[1]:
                     aux_on()
-                elif item[1] == False:
+                elif not item[1]:
                     aux_off()
     # finalize job
     air_off()

@@ -59,7 +59,7 @@ class Lasersaur:
             requests.HTTPError: Web server responded with an error code.
         """
 
-        url = "http://%s:%s%s" % (self.host, self.port, url)
+        url = f"http://{self.host}:{self.port}{url}"
         if postdict is None:
             r = requests.get(url, auth=(self.user, self.pass_))
         else:
@@ -106,10 +106,10 @@ class Lasersaur:
         self._request("/homing")
 
     def feedrate(self, val):
-        self._request("/feedrate/%.2f" % val)
+        self._request(f"/feedrate/{val:.2f}")
 
     def intensity(self, val):
-        self._request("/intensity/%.2f" % val)
+        self._request(f"/intensity/{val:.2f}")
 
     def relative(self):
         self._request("/relative")
@@ -118,7 +118,7 @@ class Lasersaur:
         self._request("/absolute")
 
     def move(self, x, y, z=0.0):
-        self._request("/move/%.4f/%.4f/%.4f" % (x, y, z))
+        self._request(f"/move/{x:.4f}/{y:.4f}/{z:.4f}")
 
     def air_on(self):
         self._request("/air_on")
@@ -136,7 +136,7 @@ class Lasersaur:
         self._request("/pulse")
 
     def offset(self, x, y, z=0.0):
-        self._request("/offset/%.4f/%.4f/%.4f" % (x, y, z))
+        self._request(f"/offset/{x:.4f}/{y:.4f}/{z:.4f}")
 
     def clear_offset(self):
         self._request("/clear_offset")
@@ -183,10 +183,10 @@ class Lasersaur:
         name, ext = os.path.splitext(name)
         job = self.open_file(jobfile, optimize=optimize, tolerance=tolerance)
         job = json.dumps(job)
-        outfile = os.path.join(base, "%s.conv.dba" % (name))
+        outfile = os.path.join(base, f"{name}.conv.dba")
         with open(outfile, "w") as fp:
             fp.write(job)
-        print("INFO: job file written to: %s" % outfile)
+        print(f"INFO: job file written to: {outfile}")
 
     def load(self, job, name="job", optimize=True):
         """Load a job to the machine.
@@ -289,19 +289,19 @@ class Lasersaur:
 
     def get(self, jobname):
         """Get a queue job in .dba format."""
-        return self._request("/get/%s" % jobname, ret=True)
+        return self._request(f"/get/{jobname}", ret=True)
 
     def star(self, jobname):
         """Star a job."""
-        self._request("/star/%s" % jobname)
+        self._request(f"/star/{jobname}")
 
     def unstar(self, jobname):
         """Unstar a job."""
-        self._request("/unstar/%s" % jobname)
+        self._request(f"/unstar/{jobname}")
 
     def remove(self, jobname):
         """Delete a job."""
-        self._request("/remove/%s" % jobname)
+        self._request(f"/remove/{jobname}")
 
     def clear(self):
         """Clear job list (does not delete starred jobs)."""
@@ -319,13 +319,13 @@ class Lasersaur:
 
     def load_library(self, jobname):
         """Load a library job into the queue."""
-        return self._request("/load_library/%s" % (jobname), ret=True)
+        return self._request(f"/load_library/{jobname}", ret=True)
 
     ### JOB EXECUTION
 
     def run(self, jobname, progress=True):
         """Send job from queue to the machine."""
-        self._request("/run/%s" % jobname)
+        self._request(f"/run/{jobname}")
         if progress:
             print("Processing [                                        ]", end=" ")
             print("\b" * 42, end=" ")
@@ -477,7 +477,7 @@ if __name__ == "__main__":
         lasersaur.run(jobname)
 
     while not lasersaur.ready():
-        print("%s done!" % (lasersaur.status()["progress"]))
+        print("{} done!".format(lasersaur.status()["progress"]))
         time.sleep(1)
 
     print("job done")

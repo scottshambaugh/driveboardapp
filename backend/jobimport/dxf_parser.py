@@ -114,13 +114,13 @@ class DXFParser:
         # 19 light years
         # 20 parsecs
 
-        if forced_unit == 0 or forced_unit == None:
+        if forced_unit == 0 or forced_unit is None:
             self.units = dwg.header.setdefault("$INSUNITS", 0)
         else:
             print(("using forced_unit", forced_unit))
             self.units = forced_unit
         if self.verbose:
-            print("dxf units read %s, default 0 " % self.units)
+            print(f"dxf units read {self.units}, default 0 ")
         if self.units == 0:
             self.unitsString = "unitless"
         elif self.units == 1:
@@ -164,7 +164,7 @@ class DXFParser:
         elif self.units == 20:
             self.unitsString = "parsecs"
         else:
-            print("DXF units: >%s< unsupported" % self.units)
+            print(f"DXF units: >{self.units}< unsupported")
             raise RuntimeError
 
         if self.verbose:
@@ -202,10 +202,10 @@ class DXFParser:
 
         if self.verbose:
             print("pre flipped")
-            print("x min %f" % self.x_min)
-            print("x max %f" % self.x_max)
-            print("y min %f" % self.y_min)
-            print("y max %f" % self.y_max)
+            print(f"x min {self.x_min:f}")
+            print(f"x max {self.x_max:f}")
+            print(f"y min {self.y_min:f}")
+            print(f"y max {self.y_max:f}")
 
         # remember that Y is in negative space relative to our bed,
         # CAD software has 0,0 and bottom left, lasersaur has
@@ -291,7 +291,7 @@ class DXFParser:
         flippedPath = self.flipPathAxis(path, "X")
         if self.debug:
             if flippedPath == path:
-                print("caution: flippedPath %s == path %s" % (flippedPath, path))
+                print(f"caution: flippedPath {flippedPath} == path {path}")
         if color == 1:
             self.red_colorLayer.append(flippedPath)
         elif color == 2:
@@ -316,23 +316,8 @@ class DXFParser:
     def flipPathAxis(self, path, axis):
         flippedPath = []
 
-        xFlip = [
-            [1, 0, 0],
-            [0, self.cos180, -self.sin180],
-            [0, self.sin180, self.cos180],
-        ]
 
-        yFlip = [
-            [self.cos180, 0, self.sin180],
-            [0, 1, 0],
-            [-self.sin180, 0, self.cos180],
-        ]
 
-        zFlip = [
-            [self.cos180, -self.sin180, 0],
-            [self.sin180, self.cos180, 0],
-            [0, 0, 1],
-        ]
 
         for x, y in path:
             if axis == "X":
@@ -455,9 +440,9 @@ class DXFParser:
         if self.x_min < 0:
             xShift = 0.0 - self.x_min - self.x_max
             if self.debug:
-                print("x_min %f" % self.x_min)
-                print("x_max %f" % self.x_max)
-                print("xShift %f" % xShift)
+                print(f"x_min {self.x_min:f}")
+                print(f"x_max {self.x_max:f}")
+                print(f"xShift {xShift:f}")
 
         if self.y_min < self.bedwidth[1]:
             self.y_min += 0
@@ -471,10 +456,10 @@ class DXFParser:
             else:
                 yShift = self.bedwidth[1]
             if self.debug:
-                print("y bedwidth %f" % self.bedwidth[1])
-                print("y_min %f" % self.y_min)
-                print("y_max %f" % self.y_max)
-                print("yShift %f" % yShift)
+                print(f"y bedwidth {self.bedwidth[1]:f}")
+                print(f"y_min {self.y_min:f}")
+                print(f"y_max {self.y_max:f}")
+                print(f"yShift {yShift:f}")
 
         for color in self.colorLayers:
             if len(self.colorLayers[color]) > 0:

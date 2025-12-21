@@ -190,7 +190,7 @@ class GcodeReader:
 
     def on_action(self, action):
         if not self.bTool:
-            print("ERROR: no tool defined at: %s:%s" % action)
+            print("ERROR: no tool defined at: {}:{}".format(*action))
             return
         self.path.append(action)
 

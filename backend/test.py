@@ -222,7 +222,7 @@ class TestQueue(unittest.TestCase):
         jobs = lasersaur.listing()
         self.assertListEqual(jobs, [])
         # constant job nums on add
-        for i in range(conf["max_jobs_in_list"] + 3):
+        for _i in range(conf["max_jobs_in_list"] + 3):
             lasersaur.load_library("lasersaur")
         jobs = lasersaur.listing()
         self.assertEqual(len(jobs), conf["max_jobs_in_list"])

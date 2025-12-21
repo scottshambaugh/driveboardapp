@@ -469,7 +469,7 @@ def _unique_name(jobname):
     files = _get_sorted("*.dba*", stripext=True)
     if jobname in files:
         for i in range(2, 999):
-            altname = "%s_%s" % (jobname, i)
+            altname = f"{jobname}_{i}"
             if altname in files:
                 continue
             else:
@@ -892,7 +892,7 @@ def stop():
     # recreate server to unbind
     # and allow restarting
     del S
-    S = Server()
+    Server()
 
 
 if __name__ == "__main__":

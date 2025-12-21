@@ -163,7 +163,7 @@ class DXFReader:
         numverts = int(self.readgroup(90))
         path = []
         self.black_boundarys.append(path)
-        for i in range(0, numverts):
+        for _i in range(0, numverts):
             x = float(self.readgroup(10))
             y = float(self.readgroup(20))
             if self.metricflag == 0:

@@ -65,7 +65,6 @@ def init():
     sys.stderr = output
 
     # output consumer, a recursive tkinter callback
-    update_callback_id = None
 
     def iterex(function, exception):
         # helper func, like builtin iter() but stops on exception

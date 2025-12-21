@@ -19,7 +19,7 @@ def flash_upload(
     firmware=conf["firmware"],
 ):
     firmware = firmware.replace("/", "").replace("\\", "")  # make sure no evil injection
-    FIRMWARE = os.path.join(resources_dir, "firmware", "firmware.%s.hex" % (firmware))
+    FIRMWARE = os.path.join(resources_dir, "firmware", f"firmware.{firmware}.hex")
 
     if not os.path.exists(FIRMWARE):
         print("ERROR: invalid firmware path")
@@ -28,7 +28,6 @@ def flash_upload(
 
     if not (conf["hardware"] == "beaglebone" or conf["hardware"] == "raspberrypi"):
         DEVICE = "atmega328p"
-        CLOCK = "16000000"
         PROGRAMMER = "arduino"
         BITRATE = "115200"
 
@@ -55,16 +54,7 @@ def flash_upload(
 
         # call avrdude, returns 0 on success
         command = (
-            '%(dude)s -c %(programmer)s -b %(bps)s -P %(port)s -p %(device)s -C %(dudeconf)s -Uflash:w:"%(firmware)s":i'
-            % {
-                "dude": AVRDUDEAPP,
-                "programmer": PROGRAMMER,
-                "bps": BITRATE,
-                "port": serial_port,
-                "device": DEVICE,
-                "dudeconf": AVRDUDECONFIG,
-                "firmware": FIRMWARE,
-            }
+            f'{AVRDUDEAPP} -c {PROGRAMMER} -b {BITRATE} -P {serial_port} -p {DEVICE} -C {AVRDUDECONFIG} -Uflash:w:"{FIRMWARE}":i'
         )
 
         print(command)
@@ -91,20 +81,11 @@ def flash_upload(
         SERIAL_PORT = serial_port
         DEVICE = "atmega328p"
         PROGRAMMER = "arduino"  # use this for bootloader
-        SERIAL_OPTION = "-P %(port)s" % {"port": SERIAL_PORT}
+        SERIAL_OPTION = f"-P {SERIAL_PORT}"
         BITRATE = "115200"
 
         command = (
-            '"%(dude)s" -c %(programmer)s -b %(bps)s %(serial_option)s -p %(device)s -C "%(dudeconf)s" -Uflash:w:"%(product)s":i'
-            % {
-                "dude": AVRDUDEAPP,
-                "programmer": PROGRAMMER,
-                "bps": BITRATE,
-                "serial_option": SERIAL_OPTION,
-                "device": DEVICE,
-                "dudeconf": AVRDUDECONFIG,
-                "product": FIRMWARE,
-            }
+            f'"{AVRDUDEAPP}" -c {PROGRAMMER} -b {BITRATE} {SERIAL_OPTION} -p {DEVICE} -C "{AVRDUDECONFIG}" -Uflash:w:"{FIRMWARE}":i'
         )
 
         ### Trigger the atmega328's reset pin to invoke bootloader
