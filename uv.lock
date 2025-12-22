@@ -173,7 +173,7 @@ wheels = [
 
 [[package]]
 name = "driveboardapp"
-version = "20.12"
+version = "25.12"
 source = { editable = "." }
 dependencies = [
     { name = "bottle" },

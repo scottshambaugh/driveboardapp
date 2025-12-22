@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "driveboardapp"
-version = "20.12"
+version = "25.12"
 description = "Control software for Driveboard-based CNC machines like Lasersaur"
 readme = "README.md"
 requires-python = ">=3.9"
