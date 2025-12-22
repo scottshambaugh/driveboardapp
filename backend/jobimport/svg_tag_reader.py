@@ -58,9 +58,18 @@ class SVGTagReader:
         if tagName in self._handlers:
             # log.debug("reading tag: " + tagName)
             # parse own attributes and overwrite in node
+            # Parse style attribute LAST so inline styles take precedence
+            # over presentation attributes (CSS specificity rules)
+            style_value = None
             for attr, value in list(tag.attrib.items()):
                 # log.debug("considering attrib: " + attr)
-                self._attribReader.read_attrib(node, attr, value)
+                if attr == "style" or attr.endswith("}style"):
+                    style_value = value
+                else:
+                    self._attribReader.read_attrib(node, attr, value)
+            # Now parse style to override presentation attributes
+            if style_value is not None:
+                self._attribReader.read_attrib(node, "style", style_value)
             # accumulate transformations
             node["xformToWorld"] = matrixMult(node["xformToWorld"], node["xform"])
             # read tag
