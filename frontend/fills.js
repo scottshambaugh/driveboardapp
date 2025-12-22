@@ -125,6 +125,21 @@ function fills_add_by_item(idx, callback) {
         return a - b;
       });
 
+      // Remove duplicate/nearly-coincident intersections
+      // This can happen with overlapping contours from text conversion
+      var MIN_INTERSECTION_GAP = 0; // 0mm minimum gap
+      var filtered = [];
+      for (var fi = 0; fi < intersections.length; fi++) {
+        if (
+          filtered.length === 0 ||
+          intersections[fi] - filtered[filtered.length - 1] >
+            MIN_INTERSECTION_GAP
+        ) {
+          filtered.push(intersections[fi]);
+        }
+      }
+      intersections = filtered;
+
       // Generate cut path
       if (intersections.length > 1) {
         var x_i = intersections[0];
@@ -179,8 +194,6 @@ function fills_optimize_and_add(
     dataType: "json",
     success: function (result) {
       var optimizedData = result.data;
-      var fillMode = result.fill_mode;
-      console.log("Fill optimized with mode: " + fillMode);
       fills_add_to_job(optimizedData, originalColor, fillpxsize, callback);
     },
     error: function (xhr, status, error) {
@@ -209,6 +222,7 @@ function fills_add_to_job(fillData, originalColor, fillpxsize, callback) {
       break;
     }
   }
+
   // add to jobhandler
   jobhandler.defs.push({ kind: "fill", data: fillData });
   jobhandler.items.push({
@@ -216,6 +230,7 @@ function fills_add_to_job(fillData, originalColor, fillpxsize, callback) {
     color: newcolor,
     pxsize: fillpxsize,
   });
+
   jobhandler.calculateStats(); // TODO: only caclulate fill
   // update pass widgets
   jobhandler.passes = passes_get_active();

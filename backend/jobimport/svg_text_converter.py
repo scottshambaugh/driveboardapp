@@ -5,6 +5,7 @@ to path elements, ensuring text is rendered correctly regardless of font
 availability on the target system.
 
 Uses fonttools for font loading and glyph-to-path conversion.
+Optionally uses skia-pathops for removing overlapping contours.
 """
 
 import logging
@@ -14,6 +15,15 @@ import re
 import xml.etree.ElementTree as ET
 
 log = logging.getLogger("svg_text_converter")
+
+# Try to import pathops for removing overlapping contours
+try:
+    import pathops
+
+    PATHOPS_AVAILABLE = True
+except ImportError:
+    PATHOPS_AVAILABLE = False
+    log.debug("pathops not available, overlapping contours won't be removed")
 
 # Global list to collect warnings during conversion
 # This is reset at the start of each convert_text_to_paths call
@@ -320,6 +330,50 @@ def get_text_width(text, font, font_size):
     return width
 
 
+def simplify_path(path_data):
+    """Remove overlapping contours from SVG path data using pathops.
+
+    This converts the SVG path to a pathops Path, performs a union operation
+    (which merges overlapping regions), and converts back to SVG path string.
+
+    Args:
+        path_data: SVG path 'd' attribute string
+
+    Returns:
+        Simplified SVG path 'd' attribute string
+    """
+    if not PATHOPS_AVAILABLE:
+        return path_data
+
+    # Parse SVG path to pathops Path
+    path = pathops.Path()
+    pen = path.getPen()
+
+    # Use fontTools to parse the SVG path and draw to the pen
+    from fontTools.svgLib.path import SVGPath
+
+    svg_path = SVGPath.fromstring(f'<path d="{path_data}"/>')
+    svg_path.draw(pen)
+
+    # Perform union operation to merge overlapping contours
+    result = pathops.Path()
+    pathops.union([path], result)
+
+    # Convert back to SVG path string
+
+    from fontTools.pens.svgPathPen import SVGPathPen
+
+    class PathOpsSVGPen(SVGPathPen):
+        """SVGPathPen that works with pathops paths."""
+
+        def __init__(self):
+            super().__init__(None)
+
+    svg_pen = PathOpsSVGPen()
+    result.draw(svg_pen)
+    return svg_pen.getCommands()
+
+
 def text_to_path(text, font, font_size, x=0, y=0, text_anchor="start"):
     """Convert text string to SVG path data.
 
@@ -372,6 +426,14 @@ def text_to_path(text, font, font_size, x=0, y=0, text_anchor="start"):
             glyph_path = pen.getCommands()
 
             if glyph_path:
+                # Remove overlapping contours if pathops is available
+                # This prevents duplicate lines when filling
+                if PATHOPS_AVAILABLE:
+                    try:
+                        glyph_path = simplify_path(glyph_path)
+                    except Exception as e:
+                        log.debug(f"pathops simplify failed for glyph '{char}': {e}")
+
                 # Transform the path: scale and translate
                 # Font coordinates have Y going up, SVG has Y going down
                 # So we need to flip Y and translate
