@@ -16,6 +16,7 @@ import config as config_module
 import driveboard
 import jobimport
 from config import conf, conf_defaults, userconfigurable, write_config_fields
+from jobimport import pathoptimizer
 
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
@@ -732,6 +733,42 @@ def run_direct():
     except ValueError as e:
         raise bottle.HTTPResponse(str(e), 422) from e
     return "{}"
+
+
+@bottle.route("/optimize_fill", method="POST")
+def optimize_fill():
+    """Optimize fill path data according to fill_mode setting.
+
+    This allows the frontend to preview the optimized fill path.
+
+    Args (via POST JSON):
+        data: Fill path data (list of polylines)
+
+    Returns:
+        JSON with optimized path data
+    """
+    try:
+        request_data = json.loads(bottle.request.body.read().decode("utf-8"))
+        fill_data = request_data.get("data", [])
+        fill_mode = conf["fill_mode"]
+        tolerance = conf["tolerance"]
+
+        # Make a copy to avoid modifying the original
+        optimized = [list(seg) for seg in fill_data]
+
+        if fill_mode == "Forward":
+            pass  # No optimization
+        elif fill_mode == "Reverse":
+            pathoptimizer.reverse_path(optimized)
+        elif fill_mode == "Bidirectional":
+            pathoptimizer.fill_optimize(optimized, tolerance)
+        elif fill_mode == "NearestNeighbor":
+            pathoptimizer.optimize(optimized, tolerance)
+
+        return json.dumps({"data": optimized, "fill_mode": fill_mode})
+    except Exception as e:
+        traceback.print_exc()
+        raise bottle.HTTPResponse(f"Error optimizing fill: {str(e)}", 400) from e
 
 
 @bottle.route("/pause")
