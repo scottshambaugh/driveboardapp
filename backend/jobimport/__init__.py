@@ -38,18 +38,19 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
                         fill_mode = conf["fill_mode"]
                         if fill_mode not in [
                             "Forward",
+                            "Reverse",
                             "Bidirectional",
                             "NearestNeighbor",
                         ]:
                             fill_mode = "Bidirectional"
                             print("WARN: fill_mode not recognized. Please check your config file.")
-                        if conf["fill_mode"] == "Forward":
+                        if fill_mode == "Forward":
                             pass
-                        elif conf["fill_mode"] == "Reverse":
+                        elif fill_mode == "Reverse":
                             pathoptimizer.reverse_path(def_["data"])
-                        elif conf["fill_mode"] == "Bidirectional":
+                        elif fill_mode == "Bidirectional":
                             pathoptimizer.fill_optimize(def_["data"], tolerance)
-                        elif conf["fill_mode"] == "NearestNeighbor":
+                        elif fill_mode == "NearestNeighbor":
                             pathoptimizer.optimize(def_["data"], tolerance)
                 if "head" not in job:
                     job["head"] = {}
