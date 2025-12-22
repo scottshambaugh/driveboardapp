@@ -125,6 +125,20 @@ function fills_add_by_item(idx, callback) {
         return a - b;
       });
 
+      // Remove duplicate intersections
+      var MIN_INTERSECTION_GAP = 0; // 0mm minimum gap
+      var filtered = [];
+      for (var fi = 0; fi < intersections.length; fi++) {
+        if (
+          filtered.length === 0 ||
+          intersections[fi] - filtered[filtered.length - 1] >
+            MIN_INTERSECTION_GAP
+        ) {
+          filtered.push(intersections[fi]);
+        }
+      }
+      intersections = filtered;
+
       // Generate cut path
       if (intersections.length > 1) {
         var x_i = intersections[0];
