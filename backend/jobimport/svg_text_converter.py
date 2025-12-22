@@ -414,24 +414,29 @@ def transform_path(path_data, scale_x, scale_y, translate_x, translate_y):
         cmd, num = token
         if cmd:
             # Process previous command
-            if current_cmd and coords:
-                result.append(
-                    transform_command(
-                        current_cmd, coords, scale_x, scale_y, translate_x, translate_y
+            if current_cmd:
+                if coords:
+                    result.append(
+                        transform_command(
+                            current_cmd, coords, scale_x, scale_y, translate_x, translate_y
+                        )
                     )
-                )
+                elif current_cmd in "Zz":
+                    # Z command has no coordinates
+                    result.append(current_cmd + " ")
             current_cmd = cmd
             coords = []
         elif num:
             coords.append(float(num))
 
     # Process last command
-    if current_cmd and coords:
-        result.append(
-            transform_command(current_cmd, coords, scale_x, scale_y, translate_x, translate_y)
-        )
-    elif current_cmd:
-        result.append(current_cmd)
+    if current_cmd:
+        if coords:
+            result.append(
+                transform_command(current_cmd, coords, scale_x, scale_y, translate_x, translate_y)
+            )
+        elif current_cmd in "Zz":
+            result.append(current_cmd + " ")
 
     return "".join(result)
 
@@ -578,8 +583,13 @@ def convert_text_to_paths(svg_string):
                 if not font:
                     continue
 
-                # Collect all path data from text and tspan elements
-                all_paths = []
+                # Collect path data grouped by color
+                # Each entry: {'paths': [...], 'color': '#...'}
+                path_groups = []
+
+                # Default color from text element
+                default_color = get_style_attr(text_elem, "fill", "#000000")
+                default_color = normalize_color(default_color)
 
                 # Process direct text content of the text element
                 if text_elem.text and text_elem.text.strip():
@@ -587,7 +597,7 @@ def convert_text_to_paths(svg_string):
                         text_elem.text, font, font_size, default_x, default_y, text_anchor
                     )
                     if path_data:
-                        all_paths.append(path_data)
+                        path_groups.append({"paths": [path_data], "color": default_color})
 
                 # Process tspan children
                 for child in text_elem:
@@ -599,51 +609,75 @@ def convert_text_to_paths(svg_string):
                         x = float(tspan_x) if tspan_x else default_x
                         y = float(tspan_y) if tspan_y else default_y
 
+                        # Get tspan-specific font size (falls back to parent's size)
+                        tspan_font_size_str = get_style_attr(child, "font-size")
+                        if tspan_font_size_str:
+                            tspan_font_size = parse_font_size(tspan_font_size_str)
+                        else:
+                            tspan_font_size = font_size
+
+                        # Get tspan-specific color (falls back to parent's color)
+                        tspan_color = get_style_attr(child, "fill")
+                        if tspan_color:
+                            tspan_color = normalize_color(tspan_color)
+                        else:
+                            tspan_color = default_color
+
                         # Get tspan text content
                         tspan_text = child.text or ""
                         if tspan_text.strip():
-                            path_data = text_to_path(tspan_text, font, font_size, x, y, text_anchor)
+                            path_data = text_to_path(
+                                tspan_text, font, tspan_font_size, x, y, text_anchor
+                            )
                             if path_data:
-                                all_paths.append(path_data)
+                                path_groups.append({"paths": [path_data], "color": tspan_color})
 
                         # Handle tail text (text after tspan closing tag)
                         if child.tail and child.tail.strip():
-                            # Tail text continues from where previous ended
-                            # This is approximate - proper handling would need cursor tracking
+                            # Tail text uses parent's color and size
                             path_data = text_to_path(child.tail, font, font_size, x, y, text_anchor)
                             if path_data:
-                                all_paths.append(path_data)
+                                path_groups.append({"paths": [path_data], "color": default_color})
 
-                if not all_paths:
+                if not path_groups:
                     continue
 
-                # Create path element to replace text
-                path_elem = ET.Element("path")
-                path_elem.set("d", " ".join(all_paths))
+                # Group paths by color
+                color_to_paths = {}
+                for group in path_groups:
+                    color = group["color"]
+                    if color not in color_to_paths:
+                        color_to_paths[color] = []
+                    color_to_paths[color].extend(group["paths"])
 
-                # Copy styling attributes
-                fill = get_style_attr(text_elem, "fill", "black")
-                stroke = get_style_attr(text_elem, "stroke", "none")
-                path_elem.set("fill", fill)
-                if stroke and stroke != "none":
-                    path_elem.set("stroke", stroke)
+                # Create path elements for each color
+                path_elements = []
+                for color, paths in color_to_paths.items():
+                    path_elem = ET.Element("path")
+                    path_elem.set("d", " ".join(paths))
+                    path_elem.set("stroke", color)
+                    path_elem.set("fill", color)
+                    path_elements.append(path_elem)
 
-                # Copy transform if present
+                # Copy transform and id to all path elements
                 transform = text_elem.get("transform")
-                if transform:
-                    path_elem.set("transform", transform)
-
-                # Copy id if present
                 text_id = text_elem.get("id")
-                if text_id:
-                    path_elem.set("id", text_id + "_path")
 
-                # Replace text element with path in parent
+                for i, path_elem in enumerate(path_elements):
+                    if transform:
+                        path_elem.set("transform", transform)
+                    if text_id:
+                        suffix = f"_path_{i}" if len(path_elements) > 1 else "_path"
+                        path_elem.set("id", text_id + suffix)
+
+                # Replace text element with path element(s) in parent
                 parent = find_parent(root, text_elem)
                 if parent is not None:
                     idx = list(parent).index(text_elem)
                     parent.remove(text_elem)
-                    parent.insert(idx, path_elem)
+                    # Insert all path elements at the same position
+                    for i, path_elem in enumerate(path_elements):
+                        parent.insert(idx + i, path_elem)
                     converted_count += 1
 
             except Exception as e:
@@ -675,14 +709,62 @@ def get_text_content(elem):
     return text
 
 
-def get_style_attr(elem, attr_name, default=None):
-    """Get a style attribute from element, checking both attribute and style property."""
-    # Check direct attribute first
-    value = elem.get(attr_name)
-    if value:
-        return value
+def normalize_color(color):
+    """Convert a color value to a hex color code.
 
-    # Check style attribute
+    Handles:
+    - Hex colors (#rgb, #rrggbb)
+    - Named colors (red, blue, etc.)
+    - rgb() format
+
+    Args:
+        color: Color string in any supported format
+
+    Returns:
+        Hex color code (e.g., '#ff0000') or '#000000' if conversion fails
+    """
+    if not color or color == "none":
+        return "#000000"
+
+    color = color.strip().lower()
+
+    # Already a hex color
+    if color.startswith("#"):
+        # Handle 3-digit hex (#rgb -> #rrggbb)
+        if len(color) == 4:
+            return "#" + color[1] * 2 + color[2] * 2 + color[3] * 2
+        return color
+
+    # Try to convert named color to hex using webcolors
+    try:
+        from . import webcolors
+
+        return webcolors.name_to_hex(color)
+    except (ValueError, KeyError):
+        pass
+
+    # Handle rgb() format
+    if color.startswith("rgb(") and color.endswith(")"):
+        try:
+            rgb_str = color[4:-1]
+            parts = [p.strip() for p in rgb_str.split(",")]
+            if len(parts) == 3:
+                r, g, b = [int(p) for p in parts]
+                return f"#{r:02x}{g:02x}{b:02x}"
+        except ValueError:
+            pass
+
+    # Default to black
+    return "#000000"
+
+
+def get_style_attr(elem, attr_name, default=None):
+    """Get a style attribute from element, checking both style property and attribute.
+
+    CSS style properties take precedence over presentation attributes in SVG,
+    so we check the style attribute first.
+    """
+    # Check style attribute first (higher precedence in CSS)
     style = elem.get("style", "")
     if style:
         for part in style.split(";"):
@@ -690,6 +772,11 @@ def get_style_attr(elem, attr_name, default=None):
                 name, val = part.split(":", 1)
                 if name.strip() == attr_name:
                     return val.strip()
+
+    # Fall back to direct attribute (presentation attribute)
+    value = elem.get(attr_name)
+    if value:
+        return value
 
     return default
 
