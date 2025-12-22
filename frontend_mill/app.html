@@ -21,6 +21,18 @@
     <script src="js/jquery.min.js"></script>
     <script src="js/bootstrap.min.js"></script>
     <script src="js/jquery.toastmessage.js"></script>
+    <script>
+      (function() {
+        var originalGetContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(type, attrs) {
+          if (type === '2d') {
+            attrs = attrs || {};
+            attrs.willReadFrequently = true;
+          }
+          return originalGetContext.call(this, type, attrs);
+        };
+      })();
+      </script>
     <script src="js/paper-full.min.js"></script>
     <script src="js/mousetrap.min.js"></script>
     <script src="js/FileSaver.js"></script>

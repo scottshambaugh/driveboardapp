@@ -269,7 +269,9 @@ jobhandler = {
     var canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
-    canvas.getContext("2d").drawImage(img.data, 0, 0, width, height);
+    canvas
+      .getContext("2d", { willReadFrequently: true })
+      .drawImage(img.data, 0, 0, width, height);
     var thumb = new Image();
     thumb.src = canvas.toDataURL("image/png");
     return thumb;

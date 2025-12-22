@@ -142,6 +142,7 @@ function jobview_ready() {
   jobview_height_last = jobview_height;
   // setup paper with job_canvas
   var canvas = document.getElementById("job_canvas");
+  canvas.getContext("2d", { willReadFrequently: true });
   paper.setup(canvas);
 
   // grid
