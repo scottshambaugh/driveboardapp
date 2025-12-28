@@ -3,7 +3,6 @@
 ## Unreleased
 
 ### New Features
-
 - 
 
 ### Bug Fixes
@@ -18,7 +17,7 @@
 ### New Features
 
 #### SVG Import
-- Automatically convert SVG text elements to paths for proper laser cutting/engraving
+- Automatically convert SVG text elements to paths. Text color is used as the path color
 - Import SVG fills as paths
 
 #### Fill Engraving
@@ -81,7 +80,6 @@
 
 - New raster modes:
   - Bidirectional - Halves engraving time by engraving in both forward and reverse directions (also for fills)
-  - NearestNeighbor - Optimized pathing for complex shapes
   - Reverse - Engrave in reverse direction
 - Allow inverting raster images (useful for etching white on black, e.g., on slate)
 - Speed up by skipping completely white lines and large whitespace areas in raster images
@@ -99,7 +97,8 @@
 - Serial data prettified into human-readable serial format
 
 #### Other
-- Pulse Mode: Implement lsser pulsing with frontend button and firmware support (safety interlocks still work)
+- New fill mode: NearestNeighbor, to more quickly fill complex shapes
+- Pulsing: Implement laser pulsing with frontend button and firmware support (safety interlocks still work)
 - User option to run homing cycle on startup (disabled by default for safety)
 - Use transformation matrices to align jobs when opening files
 
