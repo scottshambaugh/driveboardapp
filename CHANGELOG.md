@@ -11,7 +11,7 @@
 
 ### Development
 - Add CHANGELOG.md
-- Drop the develop branch
+- Rename master branch to main, drop the develop branch
 
 ## v25.12 (December 2025)
 

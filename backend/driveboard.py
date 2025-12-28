@@ -800,7 +800,7 @@ def connect_withfind(port=conf["serial_port"], baudrate=conf["baudrate"], verbos
                     "-----------------------------------------------------------------------------"
                 )
                 print("How to configure:")
-                print("https://github.com/nortd/driveboardapp/blob/master/docs/configure.md")
+                print("https://github.com/nortd/driveboardapp/blob/main/docs/configure.md")
                 print(
                     "-----------------------------------------------------------------------------"
                 )

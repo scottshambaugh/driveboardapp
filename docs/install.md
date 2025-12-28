@@ -88,7 +88,7 @@ DriveboardApp is quite flexible software and can be run on any Windows, OSX, or 
 - Open the command line.
 - Make sure you have Python 3.8+, run `python --version`
   - If not, get installers from the [Python Website](http://python.org/download/).
-- Download the latest [stable DriveboardApp](https://github.com/scottshambaugh/driveboardapp/archive/master.zip) and unzip to a convenient location.
+- Download the latest [stable DriveboardApp](https://github.com/scottshambaugh/driveboardapp/archive/main.zip) and unzip to a convenient location.
   - For advanced users we recommend using `git clone https://github.com/scottshambaugh/driveboardapp.git` instead. This way you can easily update with `git pull`
 - Change directory to that location and run:
 ```bash
