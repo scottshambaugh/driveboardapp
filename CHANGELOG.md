@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-New changes will be logged here
+### New Features
+
+- 
+
+### Bug Fixes
+- 
+
+### Development
+- Add CHANGELOG.md
+- Drop the develop branch
 
 ## v25.12 (December 2025)
 
