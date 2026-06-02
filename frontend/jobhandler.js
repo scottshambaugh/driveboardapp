@@ -581,12 +581,14 @@ jobhandler = {
   bboxExpand: function (bbox, x, y) {
     if (x < bbox[0]) {
       bbox[0] = x;
-    } else if (x > bbox[2]) {
+    }
+    if (x > bbox[2]) {
       bbox[2] = x;
     }
     if (y < bbox[1]) {
       bbox[1] = y;
-    } else if (y > bbox[3]) {
+    }
+    if (y > bbox[3]) {
       bbox[3] = y;
     }
   },
