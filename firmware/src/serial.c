@@ -60,7 +60,7 @@ bool buffer_underrun_marked = false;
 
 #define RX_CHUNK_SIZE 16
 volatile uint8_t chunks_processed = 0;
-uint8_t rx_buffer_processed = 0;
+volatile uint8_t rx_buffer_processed = 0;
 
 volatile bool raster_mode = false;
 volatile bool consume_data = false;
@@ -153,14 +153,19 @@ inline uint8_t serial_read() {
   // return data, advance tail
   uint8_t data = rx_buffer[rx_buffer_tail];
   if (++rx_buffer_tail == RX_BUFFER_SIZE) {rx_buffer_tail = 0;}  // increment
-  // ATOMIC_BLOCK(ATOMIC_FORCEON) {
+  // Called from both the main loop and the stepper ISR (serial_raster_read),
+  // so this chunk counting must be atomic; otherwise the ISR drops a boundary
+  // mid-increment, fewer CMD_CHUNK_PROCESSED are sent than bytes consumed, and
+  // the host deadlocks mid raster. RESTORESTATE (not FORCEON) keeps interrupts
+  // disabled on exit when called from within the ISR.
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     rx_buffer_processed++;
-    if (rx_buffer_processed == RX_CHUNK_SIZE) {
+    if (rx_buffer_processed >= RX_CHUNK_SIZE) {
       chunks_processed++;
       UCSR0B |=  (1 << UDRIE0);  // enable tx interrupt
       rx_buffer_processed = 0;
     }
-  // }
+  }
   return data;
 }
 

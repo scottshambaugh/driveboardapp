@@ -216,6 +216,11 @@ class SerialLoopClass(threading.Thread):
         self.RX_CHUNK_SIZE = 32
         self.FIRMBUF_SIZE = 256  # needs to match device firmware
         self.firmbuf_used = 0
+        # Resync firmbuf_used if the sender is gated this long with no send/ack
+        # (lost-ack desync). Far longer than a chunk round-trip (~ms), but the
+        # firmware buffer drains in <0.2s, so resyncing to 0 afterwards is safe.
+        self.FIRMBUF_STALL_TIMEOUT = 2.0  # seconds
+        self.last_tx_progress = 0.0
 
         # used for calculating percentage done
         self.job_size = 0
@@ -359,6 +364,7 @@ class SerialLoopClass(threading.Thread):
             if data_num < 32:  ### flow
                 if data_char == CMD_CHUNK_PROCESSED:
                     self.firmbuf_used -= self.TX_CHUNK_SIZE
+                    self.last_tx_progress = time.time()
                     if self.firmbuf_used < 0:
                         print("ERROR: firmware buffer tracking too low")
                 elif data_char == STATUS_END:
@@ -536,6 +542,7 @@ class SerialLoopClass(threading.Thread):
         if self.tx_buffer and len(self.tx_buffer) > self.tx_pos:
             if not self._paused:
                 if (self.FIRMBUF_SIZE - self.firmbuf_used) > self.TX_CHUNK_SIZE:
+                    self.last_tx_progress = time.time()
                     try:
                         # to_send = ''.join(islice(self.tx_buffer, 0, self.TX_CHUNK_SIZE))
                         to_send = self.tx_buffer[self.tx_pos : self.tx_pos + self.TX_CHUNK_SIZE]
@@ -575,6 +582,11 @@ class SerialLoopClass(threading.Thread):
                         print(str(e))
 
                     self.tx_pos += assumedSent
+                elif time.time() - self.last_tx_progress > self.FIRMBUF_STALL_TIMEOUT:
+                    # gated with no send/ack too long: tally desynced, drained -> resync
+                    print("WARN: firmbuf tally desync, resyncing to resume send")
+                    self.firmbuf_used = 0
+                    self.last_tx_progress = time.time()
         else:
             if self.tx_buffer:  # job finished sending
                 self.job_size = 0
