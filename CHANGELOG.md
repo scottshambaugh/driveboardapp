@@ -11,6 +11,7 @@
 - Fixed incorrect job bounding boxes from the first point of each shape.
 - Fixed exported jobs missing their stats.
 - Fixed the job name not resetting when clearing a job.
+- Improved raster streaming performance by reducing serial lock contention.
 
 ### Development
 - 

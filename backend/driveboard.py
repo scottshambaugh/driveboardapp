@@ -296,16 +296,16 @@ class SerialLoopClass(threading.Thread):
         self.job_size += 5
 
     def send_raster_data(self, data, start, end):
-        count = 2
-        with self.lock:
-            self.tx_buffer.append(ord(CMD_RASTER_DATA_START))
+        # Build the whole chunk first, then splice it in under a single lock.
+        # Locking per-pixel here meant thousands of acquire/release cycles per
+        # raster line on the hot path.
+        chunk = [ord(CMD_RASTER_DATA_START)]
         for val in itertools.islice(data, start, end):
-            with self.lock:
-                self.tx_buffer.append(int((255 - val) / 2) + 128)
-            count += 1
+            chunk.append(int((255 - val) / 2) + 128)
+        chunk.append(ord(CMD_RASTER_DATA_END))
         with self.lock:
-            self.tx_buffer.append(ord(CMD_RASTER_DATA_END))
-            self.job_size += count
+            self.tx_buffer.extend(chunk)
+            self.job_size += len(chunk)
 
     def run(self):
         """Main loop of the serial thread."""
