@@ -648,7 +648,7 @@ jobhandler = {
               new_path.push(path[p]);
             }
             copy_from = 0;
-            paths[k] = new_path;
+            def.data = new_path;
           }
         }
       }

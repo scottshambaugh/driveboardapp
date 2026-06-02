@@ -7,6 +7,7 @@
 
 ### Bug Fixes
 - Fixed the low-memory safety stop never triggering.
+- Fixed job import failing on segments longer than the max segment length.
 
 ### Development
 - 
