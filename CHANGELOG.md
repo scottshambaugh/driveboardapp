@@ -9,6 +9,7 @@
 - Fixed the low-memory safety stop never triggering.
 - Fixed job import failing on segments longer than the max segment length.
 - Fixed incorrect job bounding boxes from the first point of each shape.
+- Fixed exported jobs missing their stats.
 
 ### Development
 - 

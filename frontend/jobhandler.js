@@ -192,7 +192,7 @@ jobhandler = {
       passes: this.passes,
       items: this.items,
       defs: defs_out,
-      stats: this.stat,
+      stats: this.stats,
     };
   },
 
