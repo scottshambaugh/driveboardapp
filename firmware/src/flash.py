@@ -71,7 +71,7 @@ def build():
     BITRATE = "115200"
 
     BUILDNAME = "DriveboardFirmware"
-    OBJECTS = ["main", "serial", "gcode", "planner", "sense_control", "stepper"]
+    OBJECTS = ["main", "serial", "protocol", "planner", "sense_control", "stepper"]
 
     COMPILE = (
         AVRGCCAPP
@@ -87,14 +87,14 @@ def build():
         os.system(f"{COMPILE} -c {fileobj}.c -o {fileobj}.o")
 
     os.system(
-        "{compile} -o main.elf {alldoto}  -lm".format(compile=COMPILE, alldoto=".o ".join(OBJECTS) + ".o")
+        "{compile} -o main.elf {alldoto}  -lm".format(
+            compile=COMPILE, alldoto=".o ".join(OBJECTS) + ".o"
+        )
     )
 
     # os.system('rm -f %(product).hex' % {'product':BUILDNAME})
 
-    os.system(
-        f"{AVROBJCOPYAPP} -j .text -j .data -O ihex main.elf {BUILDNAME}.hex"
-    )
+    os.system(f"{AVROBJCOPYAPP} -j .text -j .data -O ihex main.elf {BUILDNAME}.hex")
 
     os.system(f"{AVRSIZEAPP} *.hex *.elf *.o")
 

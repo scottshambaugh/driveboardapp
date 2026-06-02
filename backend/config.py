@@ -24,7 +24,7 @@ import tempfile
 
 conf = {
     "appname": "driveboardapp",
-    "version": "20.12",
+    "version": "26.06",
     "company_name": "com.nortd.labs",
     "network_host": "",  # '' for all nics
     "network_port": 4444,

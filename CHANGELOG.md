@@ -9,8 +9,21 @@
 - 
 
 ### Development
+- 
+
+## v26.06 (June 2026)
+
+### Bug Fixes
+- Fixed raster engraving freezing mid-job. A firmware data race on the serial
+  chunk-acknowledgement counters (shared between the main loop and the stepper
+  interrupt) dropped CMD_CHUNK_PROCESSED acks under sustained rastering, causing
+  the host's buffer tally to desync and deadlock. The accounting is now atomic,
+  with a host-side resync as a safety net.
+
+### Development
 - Add CHANGELOG.md
 - Rename master branch to main, drop the develop branch
+- Bump firmware VERSION to 2606
 
 ## v25.12 (December 2025)
 
