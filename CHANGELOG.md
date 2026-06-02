@@ -6,7 +6,7 @@
 - 
 
 ### Bug Fixes
-- 
+- Fixed the low-memory safety stop never triggering.
 
 ### Development
 - 

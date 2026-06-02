@@ -329,11 +329,11 @@ var status_handlers = {
   underruns: function (status) {},
   stackclear: function (status) {
     if (typeof status.stackclear == "number") {
-      if (status.stackclear < 200) {
-        $().uxmessage("warn", "Drive hardware low on memory.");
-      } else if (status.stackclear < 100) {
+      if (status.stackclear < 100) {
         $().uxmessage("error", "Drive hardware low on memory. Stopping!");
         $("#stop_btn").trigger("click");
+      } else if (status.stackclear < 200) {
+        $().uxmessage("warn", "Drive hardware low on memory.");
       }
     }
   },
