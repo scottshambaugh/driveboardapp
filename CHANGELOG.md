@@ -10,6 +10,7 @@
 - Fixed job import failing on segments longer than the max segment length.
 - Fixed incorrect job bounding boxes from the first point of each shape.
 - Fixed exported jobs missing their stats.
+- Fixed the job name not resetting when clearing a job.
 
 ### Development
 - 

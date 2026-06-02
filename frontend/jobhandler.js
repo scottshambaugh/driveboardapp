@@ -48,7 +48,7 @@ jobhandler = {
     this.defs = [];
     this.stats = {};
     this.itemidx2group = [];
-    name = "";
+    this.name = "";
     jobview_clear();
     passes_clear();
     $("#job_info_name").html("");
