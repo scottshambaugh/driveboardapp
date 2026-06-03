@@ -1,7 +1,3 @@
-function queue_clear() {
-  $("#queue_content").html("");
-}
-
 function queue_ready() {
   queue_update();
 }

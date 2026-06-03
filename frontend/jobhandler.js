@@ -208,10 +208,6 @@ jobhandler = {
     );
   },
 
-  getKind: function (item) {
-    return this.defs[item.def].kind;
-  },
-
   getAllColors: function () {
     colors = [];
     this.loopItems(function (item, i) {

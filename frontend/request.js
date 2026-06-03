@@ -187,38 +187,6 @@ function request_absolute_move(x, y, z, seekrate, success_msg) {
   });
 }
 
-function request_path_job(path, seekrate, feedrate, air_assist, success_msg) {
-  // Args:
-  //     path: [[[0,-10, 0],],]
-  //         list of polylines, list of points, list of coordinates
-  //     seekrate:
-  //     feedrate:
-  //     air_assist: one of "feed", "pass", "off"
-  var job = {
-    passes: [
-      {
-        items: [0],
-        seekrate: seekrate,
-        feedrate: feedrate,
-        air_assist: air_assist,
-      },
-    ],
-    items: [{ def: 0 }],
-    defs: [{ kind: "path", data: path }],
-  };
-  // json stringify while limiting numbers to 3 decimals
-  var json_job = JSON.stringify(job, function (key, val) {
-    return val.toFixed ? Number(val.toFixed(3)) : val;
-  });
-  request_post({
-    url: "/run",
-    data: { job: json_job },
-    success: function (data) {
-      $().uxmessage("notice", success_msg);
-    },
-  });
-}
-
 function request_stringify(data) {
   // json stringify while limiting numbers to 3 decimals
   return JSON.stringify(data, function (key, val) {

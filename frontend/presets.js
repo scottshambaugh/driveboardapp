@@ -1,9 +1,5 @@
 var presets = [];
 
-function presets_clear() {
-  $("#presets_content").html("");
-}
-
 function presets_ready() {
   presets_update();
   // Make the name input field active when the modal is shown

@@ -2,7 +2,6 @@ var tools_tselect = undefined;
 var tools_toffset = undefined;
 var tools_tmove = undefined;
 var tools_tjog = undefined;
-var tools_tpos = undefined;
 var posText = undefined;
 
 function tools_tselect_init() {

@@ -12,7 +12,6 @@ var jobview_moveLayer = undefined;
 var jobview_jogLayer = undefined;
 
 var nav_height_init = 0;
-var footer_height = 0;
 var info_width_init = 0;
 
 var jobview_width_last = 0;
@@ -26,25 +25,6 @@ function jobview_clear() {
   jobview_feedLayer.removeChildren();
   paper.view.draw();
   jobview_item_selected = undefined;
-}
-
-function jobview_reset_layer(layer) {
-  if (layer) {
-    layer.remove();
-  }
-  layer = new paper.Layer();
-  layer.pivot = new paper.Point(0, 0);
-  var x = 0;
-  var y = 0;
-  if ("offset" in status_cache) {
-    var x_mm = status_cache.offset[0];
-    var y_mm = status_cache.offset[1];
-    x = Math.floor(x_mm * jobview_mm2px);
-    y = Math.floor(y_mm * jobview_mm2px);
-  }
-  console.log("status_cahce.offset: " + x_mm + "," + y_mm);
-  layer.position = new paper.Point(x, y);
-  return layer;
 }
 
 function jobview_resize() {

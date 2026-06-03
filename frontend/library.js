@@ -1,7 +1,3 @@
-function library_clear() {
-  $("#library_content").html("");
-}
-
 function library_ready() {
   library_update();
 }
