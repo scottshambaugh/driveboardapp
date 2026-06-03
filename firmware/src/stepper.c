@@ -484,7 +484,8 @@ ISR(TIMER1_COMPA_vect) {
               // map [128,255] -> [0, nominal_laser_intensity]
               // (chr-128)*2/255 * (current_block->nominal_laser_intensity)
               // Note: this will go from 0 - 254/255 = 0 - 99.6% of nominal_laser_intensity
-              control_laser_intensity( (chr-128)*2*current_block->nominal_laser_intensity/255 );  // TODO: Maybe do this in preprocessing
+              // unsigned: the product reaches 64770 and would overflow a signed 16-bit int
+              control_laser_intensity( (unsigned)(chr-128)*2*current_block->nominal_laser_intensity/255 );
             }
           // otherwise make sure intensity at nominal
           } else {
