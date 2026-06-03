@@ -262,14 +262,22 @@ jobhandler = {
     width = Math.max(1, Math.round(width));
     height = Math.max(1, Math.round(height));
 
-    var canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    canvas
-      .getContext("2d", { willReadFrequently: true })
-      .drawImage(img.data, 0, 0, width, height);
+    // cache the rendered data URL per size (lives on the def, get() ignores it)
+    var key = width + "x" + height;
+    if (!img._thumbCache) {
+      img._thumbCache = {};
+    }
+    if (!(key in img._thumbCache)) {
+      var canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas
+        .getContext("2d", { willReadFrequently: true })
+        .drawImage(img.data, 0, 0, width, height);
+      img._thumbCache[key] = canvas.toDataURL("image/png");
+    }
     var thumb = new Image();
-    thumb.src = canvas.toDataURL("image/png");
+    thumb.src = img._thumbCache[key];
     return thumb;
   },
 
