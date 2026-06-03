@@ -27,7 +27,7 @@ What is covered
 - **Configuration** - load/write round-trips against an isolated temporary config, so the developer's real config is never touched (`test_config.py`).
 - **Web API** - auth, the work-area gates on motion endpoints, the emergency endpoints, and the status-poll reconnect, driven through the real WSGI app (`test_web.py`).
 - **Frontend** - every static asset the app serves returns 200, and CI runs `node --check` over all frontend JavaScript (`test_frontend.py`).
-- **Firmware compilation** - every `config.*.h` variant is compiled and linked with `avr-gcc` (`test_firmware.py`).
+- **Firmware compilation** - every `config.*.h` variant is compiled and linked with `avr-gcc`, and each committed `firmware/firmware.*.hex` is checked to still match a fresh build of the source (`test_firmware.py`).
 - **Firmware behavior** - the real compiled firmware is run in simavr (`test_simavr.py`, `test_firmware_safety.py`).
 - **End to end** - a real `.dba` job is taken all the way through convert, work-area validation, and serialization, and the exact bytes that would reach the controller are checked (`test_e2e.py`).
 
