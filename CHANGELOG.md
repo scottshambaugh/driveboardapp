@@ -36,6 +36,7 @@
 - Fixed DXF imports not being path-optimized.
 - Fixed placement of DXF files with negative coordinates.
 - Fixed import crash for unit-less SVGs from some editors.
+- Fixed import crash for SVGs with physical dimension units (mm, cm, pt, pc, in).
 - Fixed import crash for circles/ellipses missing a radius.
 - Fixed import crash for SVGs with non-numeric width/height.
 - Fixed raster dithering artifacts when error diffusion pushed pixels out of range.

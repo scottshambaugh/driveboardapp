@@ -225,16 +225,19 @@ class SVGAttributeReader:
                 if unit == "":
                     return num
 
+                # physical units -> px (user units)
+                px2mm = self.svgreader.px2mm or (25.4 / 90.0)
+                dpi = 25.4 / px2mm
                 if unit == "cm":
-                    num *= self.svgreader.dpi / 2.54
+                    num *= dpi / 2.54
                 elif unit == "mm":
-                    num *= self.svgreader.dpi / 25.4
+                    num *= dpi / 25.4
                 elif unit == "pt":
-                    num *= self.svgreader.dpi / 72.0
+                    num *= dpi / 72.0
                 elif unit == "pc":
-                    num *= 12 * self.svgreader.dpi / 72
+                    num *= 12 * dpi / 72
                 elif unit == "in":
-                    num *= self.svgreader.dpi
+                    num *= dpi
                 elif unit == "%" or unit == "em" or unit == "ex":
                     log.error("%, em, ex dimension units not supported, use px or mm instead")
 
