@@ -43,6 +43,7 @@
 - Fixed a serial write error being swallowed mid-job instead of stopping the laser; the job no longer skips past the un-sent commands.
 - Fixed a possible firmware buffer overflow when a job was paused for an open door or chiller fault.
 - Fixed out-of-range coordinates and feedrates wrapping to wildly wrong values instead of being clamped; out-of-bounds move requests are now rejected.
+- Fixed a corrupted serial byte still being acted on after failing the transmission-error check (could undo the resulting stop).
 - Fixed import crash for circles/ellipses missing a radius.
 - Fixed import crash for SVGs with non-numeric width/height.
 - Fixed raster dithering artifacts when error diffusion pushed pixels out of range.

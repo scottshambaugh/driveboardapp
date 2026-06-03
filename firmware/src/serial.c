@@ -213,6 +213,7 @@ SIGNAL(USART_RX_vect) {
     first_transmission = true;
     if (data != data_prev) {
       stepper_request_stop(STOPERROR_TRANSMISSION_ERROR);
+      return;  // discard the corrupt byte, don't act on it
     }
   }
   // handle char
