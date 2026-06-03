@@ -1203,22 +1203,23 @@ def job_laser_validate(jobdict):
                             check_point(pos, passidx, kind)
 
 
-def _emit_raster_segment(o, seekrate, feedrate_, intensity_):
+def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_):
     """Stream one raster segment: seek to lead-in, ramp in, raster move with
-    pixel data, ramp out. `o` is an orientation descriptor with absolute mm
-    positions (leadin/start/end/leadout, line_y) and the pixel slice (data/lo/hi).
+    pixel data, ramp out. `orientation` describes one engraving direction of a
+    segment: absolute mm positions (leadin/start/end/leadout, line_y) and the
+    pixel slice (data/lo/hi).
     """
-    line_y = o["line_y"]
+    line_y = orientation["line_y"]
     intensity(0.0)  # intensity for seek and lead-in
     feedrate(seekrate)  # feedrate for seek
-    move(o["leadin"], line_y)  # seek to lead-in start
+    move(orientation["leadin"], line_y)  # seek to lead-in start
     feedrate(feedrate_)  # feedrate for lead-in, raster, and lead-out
-    move(o["start"], line_y)  # lead-in
+    move(orientation["start"], line_y)  # lead-in
     intensity(intensity_)  # intensity for raster move
-    rastermove(o["end"], line_y)  # raster move
-    rasterdata(o["data"], o["lo"], o["hi"])  # stream raster data for the move
+    rastermove(orientation["end"], line_y)  # raster move
+    rasterdata(orientation["data"], orientation["lo"], orientation["hi"])  # stream raster data
     intensity(0.0)  # intensity for lead-out
-    move(o["leadout"], line_y)  # lead-out
+    move(orientation["leadout"], line_y)  # lead-out
 
 
 def _raster_orientations(
@@ -1317,9 +1318,250 @@ def _emit_raster_nn(
         (fwd, rev), (node_fwd, node_rev) = orients[idx]
         node_fwd.data = None  # consume both orientations of this segment
         node_rev.data = None
-        o = fwd if which == 0 else rev
-        _emit_raster_segment(o, seekrate, feedrate_, intensity_)
-        current = [o["leadout"], o["line_y"]]
+        orientation = fwd if which == 0 else rev
+        _emit_raster_segment(orientation, seekrate, feedrate_, intensity_)
+        current = [orientation["leadout"], orientation["line_y"]]
+
+
+def _raster_load_pixels(data, px_w, px_h, n_raster_levels):
+    """Decode the base64 image to a flat grayscale pixel list (0=black/full
+    power, 255=white/no power), applying invert and dithering. Returns
+    (pxarray, pxarray_reversed, px_n)."""
+    imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
+    imgobj = imgobj.resize((px_w, px_h), resample=Image.BICUBIC)
+    if imgobj.mode in ["PA", "LA", "RGBA", "La", "RBGa"]:
+        imgobj = imgobj.convert("RGBA")
+        imgbg = Image.new("RGBA", imgobj.size, (255, 255, 255))
+        imgbg.paste(imgobj, imgobj)
+        imgobj = imgbg.convert("L")
+    else:
+        imgobj = imgobj.convert("L")
+
+    # 0 = black / full power, 255 = white / transparent / no power
+    pxarray = list(imgobj.getdata())
+    pxarray[:] = (value for value in pxarray if type(value) is not str)
+    if conf["raster_invert"]:
+        pxarray = [255 - px for px in pxarray]
+    if n_raster_levels < 128:  # skip dithering if max resolution
+        pxarray = raster_dither(px_w, px_h, pxarray, n_raster_levels)
+    pxarray_reversed = pxarray[::-1]
+
+    return pxarray, pxarray_reversed, len(pxarray)
+
+
+def _raster_line_segments(line, line_start, line_end, direction, pxsize_x, raster_leadin):
+    """Walk one scanline and yield the (segment_start, segment_end) index pairs
+    of engraved runs: trim leading/trailing whitespace and split on interior
+    whitespace wider than 2*raster_leadin (so the head can fast-seek the gaps).
+    Indices follow the direction convention; segment_end is already trimmed."""
+    whitespace_counter = 0
+    on_starting_edge = True
+    if direction == 1:  # fwd
+        segment_start = line_start
+        segment_end = segment_start - 1  # will immediately increment
+    else:  # rev
+        line = line[::-1]
+        segment_start = line_end
+        segment_end = segment_start + 1  # will immediately decrement
+
+    for j in range(len(line)):
+        segment_end += 1 * direction
+        if line[j] == 255:
+            whitespace_counter += 1
+        elif on_starting_edge:
+            # make the first non-white pixel our starting point
+            segment_start = segment_end
+            on_starting_edge = False
+            whitespace_counter = 0
+        elif whitespace_counter * pxsize_x <= 2 * raster_leadin:
+            # if the interior whitespace is too small, ignore it and travel at normal speeds
+            whitespace_counter = 0
+
+        segment_ended = False
+        if j == (len(line) - 1):
+            segment_ended = True
+        elif (
+            (whitespace_counter * pxsize_x > 2 * raster_leadin)
+            and (line[j + 1] != 255)
+            and not (on_starting_edge)
+        ):
+            # travel to the end of the interior whitespace, backtrack via whitespace_counter
+            segment_ended = True
+
+        if segment_ended:
+            if direction == 1:  # fwd
+                segment_end = segment_end - whitespace_counter + 1  # cut off ending whitespace
+            else:  # rev
+                segment_end = segment_end + whitespace_counter - 1  # cut off ending whitespace
+            yield segment_start, segment_end
+            # prime for next segment
+            segment_start = segment_end + whitespace_counter * direction
+            segment_end = segment_start - 1 * direction
+            whitespace_counter = 0
+
+
+def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_):
+    pos = def_["pos"]
+    size = def_["size"]
+    data = def_["data"]  # in base64, format: jpg, png, gif
+    px_w = int(size[0] / pxsize_x)
+    px_h = int(size[1] / pxsize_y)
+
+    # note that 0-255 pixel data is halved for serial protocol, so we only get 128 levels max
+    n_raster_levels = max(min(round(conf["raster_levels"]), 128), 2)
+    if n_raster_levels != conf["raster_levels"]:
+        print(
+            f"WARN: config raster_levels={conf['raster_levels']} invalid, set to {n_raster_levels}"
+        )
+    raster_mode = conf["raster_mode"]
+    if raster_mode not in ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"]:
+        raster_mode = "Bidirectional"
+        print("WARN: raster_mode not recognized. Please check your config file.")
+
+    pxarray, pxarray_reversed, px_n = _raster_load_pixels(data, px_w, px_h, n_raster_levels)
+
+    # assists on, beginning of feed if set to 'feed'
+    if pass_["air_assist"] == "feed":
+        air_on()
+
+    posx = pos[0]  # left edge location [mm]
+    posy = pos[1]  # top edge location [mm]
+    line_y = posy + 0.5 * pxsize_y
+    line_count = int(size[1] / pxsize_y)
+    line_start = line_end = 0
+
+    # warn if there isn't room for the lead-in / lead-out moves
+    if posx - conf["raster_leadin"] < 0:
+        print("WARN: not enough leadin space")
+    if posx + size[0] + conf["raster_leadin"] > conf["workspace"][0]:
+        print("WARN: not enough leadout space")
+
+    # set direction
+    if raster_mode == "Reverse":
+        direction = -1  # 1 is forward, -1 is reverse
+    else:  # 'Forward', 'Bidirectional', or 'NearestNeighbor'
+        direction = 1
+
+    # NearestNeighbor collects segments (found in forward direction) and emits
+    # them reordered after the scanline loop
+    nn_segments = []
+
+    for _ in range(line_count):
+        line_end += px_w
+        line = pxarray[line_start:line_end]
+        if not all(px == 255 for px in line):  # skip completely white raster lines
+            for segment_start, segment_end in _raster_line_segments(
+                line, line_start, line_end, direction, pxsize_x, conf["raster_leadin"]
+            ):
+                # limits for engraving and leading in/out for this segment
+                if direction == 1:  # fwd
+                    pos_start = posx + (segment_start - line_start + 0.5) * pxsize_x
+                    pos_end = posx + (segment_end - line_start - 0.5) * pxsize_x
+                    pos_leadin = max(
+                        posx + (segment_start - line_start) * pxsize_x - conf["raster_leadin"], 0
+                    )
+                    pos_leadout = min(
+                        posx + (segment_end - line_start) * pxsize_x + conf["raster_leadin"],
+                        conf["workspace"][0],
+                    )
+                    orientation = {
+                        "leadin": pos_leadin,
+                        "start": pos_start,
+                        "end": pos_end,
+                        "leadout": pos_leadout,
+                        "line_y": line_y,
+                        "data": pxarray,
+                        "lo": segment_start,
+                        "hi": segment_end,
+                    }
+                else:  # rev
+                    pos_start = posx + (segment_start - line_start - 0.5) * pxsize_x
+                    pos_end = posx + (segment_end - line_start + 0.5) * pxsize_x
+                    pos_leadin = min(
+                        posx + (segment_start - line_start) * pxsize_x + conf["raster_leadin"],
+                        conf["workspace"][0],
+                    )
+                    pos_leadout = max(
+                        posx + (segment_end - line_start) * pxsize_x - conf["raster_leadin"], 0
+                    )
+                    orientation = {
+                        "leadin": pos_leadin,
+                        "start": pos_start,
+                        "end": pos_end,
+                        "leadout": pos_leadout,
+                        "line_y": line_y,
+                        "data": pxarray_reversed,
+                        "lo": px_n - segment_start,
+                        "hi": px_n - segment_end,
+                    }
+
+                if raster_mode == "NearestNeighbor":
+                    nn_segments.append((segment_start, segment_end, line_start, line_y))
+                else:
+                    _emit_raster_segment(orientation, seekrate, feedrate_, intensity_)
+
+        # prime for next line
+        if (raster_mode == "Bidirectional") and (direction == 1):  # fwd
+            direction = -1  # switch to rev
+        elif (raster_mode == "Bidirectional") and (direction == -1):  # rev
+            direction = 1  # switch to fwd
+        line_start = line_end
+        line_y += pxsize_y
+
+    if raster_mode == "NearestNeighbor":
+        _emit_raster_nn(
+            nn_segments,
+            posx,
+            posy,
+            posx,
+            pxsize_x,
+            conf["raster_leadin"],
+            conf["workspace"][0],
+            pxarray,
+            pxarray_reversed,
+            px_n,
+            seekrate,
+            feedrate_,
+            intensity_,
+        )
+
+    # assists off, end of feed if set to 'feed'
+    if pass_["air_assist"] == "feed":
+        air_off()
+
+
+def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
+    path = def_["data"]
+    for polyline in path:
+        if len(polyline) > 0:
+            # first vertex -> seek
+            feedrate(seekrate)
+            if not pass_["seekzero"]:
+                intensity(intensity_)
+            else:
+                intensity(0.0)
+            is_2d = len(polyline[0]) == 2
+            if is_2d:
+                move(polyline[0][0], polyline[0][1])
+            else:
+                move(polyline[0][0], polyline[0][1], polyline[0][2])
+            # remaining vertices -> feed
+            if len(polyline) > 1:
+                feedrate(feedrate_)
+                intensity(intensity_)
+                # turn on assists if set to 'feed'
+                # also air_assist defaults to 'feed'
+                if pass_["air_assist"] == "feed":
+                    air_on()
+                if is_2d:
+                    for i in range(1, len(polyline)):
+                        move(polyline[i][0], polyline[i][1])
+                else:
+                    for i in range(1, len(polyline)):
+                        move(polyline[i][0], polyline[i][1], polyline[i][2])
+                # turn off assists if set to 'feed'
+                if pass_["air_assist"] == "feed":
+                    air_off()
 
 
 def job_laser(jobdict):
@@ -1401,256 +1643,9 @@ def job_laser(jobdict):
             def_ = jobdict["defs"][item["def"]]
             kind = def_["kind"]
             if kind == "image":
-                pos = def_["pos"]
-                size = def_["size"]
-                data = def_["data"]  # in base64, format: jpg, png, gif
-                px_w = int(size[0] / pxsize_x)
-                px_h = int(size[1] / pxsize_y)
-
-                # note that 0-255 pixel data is halved for serial protocol, so we only get 128 levels max
-                n_raster_levels = max(min(round(conf["raster_levels"]), 128), 2)
-                if n_raster_levels != conf["raster_levels"]:
-                    print(
-                        f"WARN: config raster_levels={conf['raster_levels']} invalid, set to {n_raster_levels}"
-                    )
-                raster_mode = conf["raster_mode"]
-                if raster_mode not in ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"]:
-                    raster_mode = "Bidirectional"
-                    print("WARN: raster_mode not recognized. Please check your config file.")
-
-                # create image obj, convert to grayscale, scale, loop through lines
-                imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
-                imgobj = imgobj.resize((px_w, px_h), resample=Image.BICUBIC)
-                if imgobj.mode in ["PA", "LA", "RGBA", "La", "RBGa"]:
-                    imgobj = imgobj.convert("RGBA")
-                    imgbg = Image.new("RGBA", imgobj.size, (255, 255, 255))
-                    imgbg.paste(imgobj, imgobj)
-                    imgobj = imgbg.convert("L")
-                else:
-                    imgobj = imgobj.convert("L")
-
-                # assists on, beginning of feed if set to 'feed'
-                if pass_["air_assist"] == "feed":
-                    air_on()
-
-                # extract raw pixel data into one large list
-                # 0 = black / full power
-                # 255 = white / transparent / no power
-                pxarray = list(imgobj.getdata())
-                pxarray[:] = (value for value in pxarray if type(value) is not str)
-                if conf["raster_invert"]:
-                    pxarray = [255 - px for px in pxarray]
-                if n_raster_levels < 128:  # skip dithering if max resolution
-                    pxarray = raster_dither(px_w, px_h, pxarray, n_raster_levels)
-                pxarray_reversed = pxarray[::-1]
-                px_n = len(pxarray)
-
-                posx = pos[0]  # left edge location [mm]
-                posy = pos[1]  # top edge location [mm]
-                line_y = posy + 0.5 * pxsize_y
-                line_count = int(size[1] / pxsize_y)
-                line_start = line_end = 0
-
-                # calc leadin/out
-                pos_leadin = posx - conf["raster_leadin"]
-                if pos_leadin < 0:
-                    print("WARN: not enough leadin space")
-                    pos_leadin = 0
-                pos_leadout = posx + size[0] + conf["raster_leadin"]
-                if pos_leadout > conf["workspace"][0]:
-                    print("WARN: not enough leadout space")
-                    pos_leadout = conf["workspace"][0]
-
-                # set direction
-                if raster_mode == "Reverse":
-                    direction = -1  # 1 is forward, -1 is reverse
-                else:  # 'Forward', 'Bidirectional', or 'NearestNeighbor'
-                    direction = 1
-
-                # NearestNeighbor collects segments (found in forward direction)
-                # and emits them reordered after the scanline loop
-                nn_segments = []
-
-                # we don't want to waste time at low speeds travelling over whitespace where there is no engraving going on
-                # so, chop off all whitespace at the beginning and end of each line
-                # additionally, break the line into segments so that large interior whitespaces can be travelled over quicker
-                # the threshold for a "large" interior whitespace is 2x the raster_leadin distance so we can still lead in/out properly
-                for _ in range(line_count):
-                    line_end += px_w
-                    line = pxarray[line_start:line_end]
-                    if not all(px == 255 for px in line):  # skip completely white raster lines
-                        whitespace_counter = 0
-                        on_starting_edge = True
-                        if direction == 1:  # fwd
-                            segment_start = line_start
-                            segment_end = segment_start - 1  # will immediately increment
-                        elif direction == -1:  # rev
-                            line = line[::-1]
-                            segment_start = line_end
-                            segment_end = segment_start + 1  # will immediately decrement
-
-                        for j in range(len(line)):
-                            segment_end += 1 * direction
-                            if line[j] == 255:
-                                whitespace_counter += 1
-                            elif on_starting_edge:
-                                # make the first non-white pixel our starting point
-                                segment_start = segment_end
-                                on_starting_edge = False
-                                whitespace_counter = 0
-                            elif whitespace_counter * pxsize_x <= 2 * conf["raster_leadin"]:
-                                # if the interior whitespace is too small, ignore it and travel at normal speeds
-                                whitespace_counter = 0
-
-                            segment_ended = False
-                            if j == (len(line) - 1):
-                                segment_ended = True
-                            elif (
-                                (whitespace_counter * pxsize_x > 2 * conf["raster_leadin"])
-                                and (line[j + 1] != 255)
-                                and not (on_starting_edge)
-                            ):
-                                # we travel all the way to the end of the interior whitespace, and use whitespace_counter to figure out how far to backtrack
-                                segment_ended = True
-
-                            if segment_ended:
-                                # calculate the limits for engraving and leading in/out for this segment
-                                if direction == 1:  # fwd
-                                    segment_end = (
-                                        segment_end - whitespace_counter + 1
-                                    )  # cut off the ending whitespace
-                                    pos_start = posx + (segment_start - line_start + 0.5) * pxsize_x
-                                    pos_end = posx + (segment_end - line_start - 0.5) * pxsize_x
-                                    pos_leadin = max(
-                                        posx
-                                        + (segment_start - line_start) * pxsize_x
-                                        - conf["raster_leadin"],
-                                        0,
-                                    )  # ensure we stay in the workspace
-                                    pos_leadout = min(
-                                        posx
-                                        + (segment_end - line_start) * pxsize_x
-                                        + conf["raster_leadin"],
-                                        conf["workspace"][0],
-                                    )  # ensure we stay in the workspace
-                                elif direction == -1:  # rev
-                                    segment_end = (
-                                        segment_end + whitespace_counter - 1
-                                    )  # cut off the ending whitespace
-                                    pos_start = posx + (segment_start - line_start - 0.5) * pxsize_x
-                                    pos_end = posx + (segment_end - line_start + 0.5) * pxsize_x
-                                    pos_leadin = min(
-                                        posx
-                                        + (segment_start - line_start) * pxsize_x
-                                        + conf["raster_leadin"],
-                                        conf["workspace"][0],
-                                    )  # ensure we stay in the workspace
-                                    pos_leadout = max(
-                                        posx
-                                        + (segment_end - line_start) * pxsize_x
-                                        - conf["raster_leadin"],
-                                        0,
-                                    )  # ensure we stay in the workspace
-
-                                # write out the movement and engraving info for the segment
-                                if raster_mode == "NearestNeighbor":
-                                    # collect the canonical (forward) run; emitted
-                                    # reordered after the scanline loop
-                                    nn_segments.append(
-                                        (segment_start, segment_end, line_start, line_y)
-                                    )
-                                else:
-                                    if direction == 1:  # fwd
-                                        o = {
-                                            "leadin": pos_leadin,
-                                            "start": pos_start,
-                                            "end": pos_end,
-                                            "leadout": pos_leadout,
-                                            "line_y": line_y,
-                                            "data": pxarray,
-                                            "lo": segment_start,
-                                            "hi": segment_end,
-                                        }
-                                    else:  # rev
-                                        o = {
-                                            "leadin": pos_leadin,
-                                            "start": pos_start,
-                                            "end": pos_end,
-                                            "leadout": pos_leadout,
-                                            "line_y": line_y,
-                                            "data": pxarray_reversed,
-                                            "lo": px_n - segment_start,
-                                            "hi": px_n - segment_end,
-                                        }
-                                    _emit_raster_segment(o, seekrate, feedrate_, intensity_)
-
-                                # prime for next segment
-                                segment_start = segment_end + whitespace_counter * direction
-                                segment_end = segment_start - 1 * direction
-                                segment_ended = False
-                                whitespace_counter = 0
-
-                    # prime for next line
-                    if (raster_mode == "Bidirectional") and (direction == 1):  # fwd
-                        direction = -1  # switch to rev
-                    elif (raster_mode == "Bidirectional") and (direction == -1):  # rev
-                        direction = 1  # switch to fwd
-                    line_start = line_end
-                    line_y += pxsize_y
-
-                if raster_mode == "NearestNeighbor":
-                    _emit_raster_nn(
-                        nn_segments,
-                        posx,
-                        posy,
-                        posx,
-                        pxsize_x,
-                        conf["raster_leadin"],
-                        conf["workspace"][0],
-                        pxarray,
-                        pxarray_reversed,
-                        px_n,
-                        seekrate,
-                        feedrate_,
-                        intensity_,
-                    )
-
-                # assists off, end of feed if set to 'feed'
-                if pass_["air_assist"] == "feed":
-                    air_off()
-
+                _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_)
             elif kind == "fill" or kind == "path":
-                path = def_["data"]
-                for polyline in path:
-                    if len(polyline) > 0:
-                        # first vertex -> seek
-                        feedrate(seekrate)
-                        if not pass_["seekzero"]:
-                            intensity(intensity_)
-                        else:
-                            intensity(0.0)
-                        is_2d = len(polyline[0]) == 2
-                        if is_2d:
-                            move(polyline[0][0], polyline[0][1])
-                        else:
-                            move(polyline[0][0], polyline[0][1], polyline[0][2])
-                        # remaining vertices -> feed
-                        if len(polyline) > 1:
-                            feedrate(feedrate_)
-                            intensity(intensity_)
-                            # turn on assists if set to 'feed'
-                            # also air_assist defaults to 'feed'
-                            if pass_["air_assist"] == "feed":
-                                air_on()
-                            if is_2d:
-                                for i in range(1, len(polyline)):
-                                    move(polyline[i][0], polyline[i][1])
-                            else:
-                                for i in range(1, len(polyline)):
-                                    move(polyline[i][0], polyline[i][1], polyline[i][2])
-                            # turn off assists if set to 'feed'
-                            if pass_["air_assist"] == "feed":
-                                air_off()
+                _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_)
 
         # assists off, end of pass if set to 'pass'
         if pass_["air_assist"] == "pass":
