@@ -238,6 +238,7 @@ def jog(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def move(x, y, z):
+    driveboard.intensity(0)
     driveboard.move(x, y, z)
     return "{}"
 
@@ -246,6 +247,7 @@ def move(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movex(x):
+    driveboard.intensity(0)
     driveboard.move(x=x)
     return "{}"
 
@@ -254,6 +256,7 @@ def movex(x):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movey(y):
+    driveboard.intensity(0)
     driveboard.move(y=y)
     return "{}"
 
@@ -262,6 +265,7 @@ def movey(y):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movez(z):
+    driveboard.intensity(0)
     driveboard.move(z=z)
     return "{}"
 

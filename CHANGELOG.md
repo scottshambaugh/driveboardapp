@@ -12,6 +12,7 @@
 - Fixed exported jobs missing their stats.
 - Fixed the job name not resetting when clearing a job.
 - Improved raster streaming performance by reducing serial lock contention.
+- Fixed move commands firing the laser with leftover intensity from a prior job.
 
 ### Development
 - 
