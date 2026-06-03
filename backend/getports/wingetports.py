@@ -6,7 +6,6 @@ Adapted from code by Eli Bendersky:
     http://eli.thegreenplace.net/2009/07/31/listing-all-serial-ports-on-windows-with-python/
 """
 
-
 import winreg
 
 port_prefix = b"\\\\.\\"  # two backlashes, a dot, and another backslash

@@ -865,12 +865,3 @@ def parse_font_size(size_str):
         return float(size_str)
     except ValueError:
         return 16.0
-
-
-def find_parent(root, target):
-    """Find the parent element of target in the tree."""
-    for parent in root.iter():
-        for child in parent:
-            if child is target:
-                return parent
-    return None

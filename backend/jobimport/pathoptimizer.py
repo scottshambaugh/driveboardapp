@@ -256,18 +256,6 @@ def bidirectionalize_fill(path):
                 path_idx += 1
 
 
-def dxf_optimize(paths, tolerance):
-    tolerance2 = tolerance**2
-    epsilon2 = (0.1 * tolerance) ** 2
-    for path in paths:
-        # print "PATH before optimize: %s" % len(path)
-        connect_segments(path, epsilon2)
-        simplify_all(path, tolerance2)
-        remove_waypoints(path)
-        sort_by_seektime(path)
-        # print "PATH after optimize: %s" % len(path)
-
-
 def fill_optimize(path, tolerance):
     tolerance2 = tolerance**2
     epsilon2 = (0.1 * tolerance) ** 2
