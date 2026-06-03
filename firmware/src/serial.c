@@ -190,15 +190,11 @@ inline uint8_t serial_read() {
 
 // serial watchdog timeout: the host has gone silent. Force a safe state.
 // Zero the beam directly (in static-PWM mode an idle machine can hold the beam
-// on and the stepper ISR may not be running to act), then PAUSE rather than
-// stop: stepping freezes and the beam stays off, but the block buffer, current
-// position, and in-flight raster data are retained so the host can reconnect
-// and resume exactly where it left off (CMD_UNPAUSE). A host that never returns
-// just stays paused with the beam off. Re-arm WDIE to stay in interrupt mode.
+// on and the stepper ISR may not be running to act), then stop. Re-arm WDIE to
+// stay in interrupt mode.
 ISR(WDT_vect) {
   control_laser_intensity(0);
-  stepper_request_pause();
-  first_transmission = true;  // realign the duplicate-byte check to a fresh pair
+  stepper_request_stop(STOPERROR_SERIAL_WATCHDOG);
   WDTCSR |= (1 << WDIE);
 }
 
