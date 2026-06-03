@@ -31,6 +31,7 @@
 - Fixed move commands firing the laser with leftover intensity from a prior job.
 - Added a firmware serial watchdog that stops the laser if the host connection is lost.
 - Sped up path optimization for large vector jobs.
+- Sped up reverse and bidirectional ordering of large fills, which was quadratic in the number of segments.
 - Fixed serial disconnect errors always logging as "unknown".
 - Hardened firmware flashing against shell injection via the serial port setting.
 - Fixed DXF imports not being path-optimized.

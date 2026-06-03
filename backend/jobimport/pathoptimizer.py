@@ -216,43 +216,33 @@ def remove_waypoints(path):
 
 
 def reverse_path(path):
-    path_unsorted = path.copy()
+    # group fill segments by their start-point y in one pass, preserving
+    # original order within each level (avoids an O(levels*segments) rescan)
+    by_y = {}
+    for seg in path.copy():
+        by_y.setdefault(seg[0][1], []).append(seg)
     path_idx = 0
-    # sort unique y values of fill lines from top to bottom
-    y_vals = [point[1] for point in [segment[0] for segment in path_unsorted]]
-    y_vals = list(set(y_vals))
-    y_vals.sort()
-    for i in range(len(y_vals)):
-        inds = []
-        # find all segments at that y level
-        for j in range(len(path_unsorted)):
-            if path_unsorted[j][0][1] == y_vals[i]:
-                inds.append(j)
-        for k in inds[::-1]:
-            path[path_idx] = path_unsorted[k][::-1]
+    for y in sorted(by_y):
+        for seg in reversed(by_y[y]):
+            path[path_idx] = seg[::-1]
             path_idx += 1
 
 
 def bidirectionalize_fill(path):
-    path_unsorted = path.copy()
+    # group fill segments by their start-point y in one pass, preserving
+    # original order within each level (avoids an O(levels*segments) rescan)
+    by_y = {}
+    for seg in path.copy():
+        by_y.setdefault(seg[0][1], []).append(seg)
     path_idx = 0
-    # sort unique y values of fill lines from top to bottom
-    y_vals = [point[1] for point in [segment[0] for segment in path_unsorted]]
-    y_vals = list(set(y_vals))
-    y_vals.sort()
-    for i in range(len(y_vals)):
-        inds = []
-        # find all segments at that y level
-        for j in range(len(path_unsorted)):
-            if path_unsorted[j][0][1] == y_vals[i]:
-                inds.append(j)
+    for i, y in enumerate(sorted(by_y)):
         if i % 2 == 0:  # keep even-line passes forward
-            for k in inds:
-                path[path_idx] = path_unsorted[k]
+            for seg in by_y[y]:
+                path[path_idx] = seg
                 path_idx += 1
         else:  # reverse odd-line passes
-            for k in inds[::-1]:
-                path[path_idx] = path_unsorted[k][::-1]
+            for seg in reversed(by_y[y]):
+                path[path_idx] = seg[::-1]
                 path_idx += 1
 
 
