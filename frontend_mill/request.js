@@ -210,7 +210,7 @@ function request_path_job(path, seekrate, feedrate, air_assist, success_msg) {
   };
   // json stringify while limiting numbers to 3 decimals
   var json_job = JSON.stringify(job, function (key, val) {
-    return val.toFixed ? Number(val.toFixed(3)) : val;
+    return typeof val === "number" ? Number(val.toFixed(3)) : val;
   });
   request_post({
     url: "/run",
@@ -224,6 +224,6 @@ function request_path_job(path, seekrate, feedrate, air_assist, success_msg) {
 function request_stringify(data) {
   // json stringify while limiting numbers to 3 decimals
   return JSON.stringify(data, function (key, val) {
-    return val.toFixed ? Number(val.toFixed(3)) : val;
+    return typeof val === "number" ? Number(val.toFixed(3)) : val;
   });
 }
