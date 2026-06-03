@@ -164,11 +164,12 @@ def read_dxf(dxf_string, tolerance, optimize=True):
     dxfParser = DXFParser(tolerance)
     # second argument is the forced unit, TBI in Driverboard
     job = dxfParser.parse(dxf_string, None)
-    if "vector" in job:
-        if optimize:
-            vec = job["vector"]
-            pathoptimizer.dxf_optimize(vec["paths"], tolerance)
-            vec["optimized"] = tolerance
+    if optimize:
+        # optimize each path def in place
+        for def_ in job["defs"]:
+            if def_["kind"] == "path":
+                pathoptimizer.optimize(def_["data"], tolerance)
+        job["head"]["optimized"] = tolerance
     return job
 
 

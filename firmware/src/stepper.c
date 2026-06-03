@@ -46,6 +46,7 @@
 #include <stdlib.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include <util/atomic.h>
 #include <string.h>
 #include "stepper.h"
 #include "config.h"
@@ -64,6 +65,9 @@
 
 
 static int32_t stepper_position[3];  // real-time position in absolute steps
+// Updated byte-wise by the TIMER1 stepper ISR; the main loop accesses it only
+// via ATOMIC_BLOCK below (cli/sei + memory barrier gives a tear-free, fresh
+// read) so it doesn't need to be volatile and stays fast in the stepper ISR.
 static block_t *current_block;  // A pointer to the block currently being traced
 
 // Variables used by The Stepper Driver Interrupt
@@ -194,19 +198,29 @@ void stepper_stop_resume() {
 
 
 
+// stepper_position is updated byte-wise by the TIMER1 stepper ISR, so a 32-bit
+// read/write from the main loop can tear; snapshot under ATOMIC_RESTORESTATE.
 double stepper_get_position_x() {
-  return stepper_position[X_AXIS]/CONFIG_X_STEPS_PER_MM;
+  int32_t pos;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { pos = stepper_position[X_AXIS]; }
+  return pos/CONFIG_X_STEPS_PER_MM;
 }
 double stepper_get_position_y() {
-  return stepper_position[Y_AXIS]/CONFIG_Y_STEPS_PER_MM;
+  int32_t pos;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { pos = stepper_position[Y_AXIS]; }
+  return pos/CONFIG_Y_STEPS_PER_MM;
 }
 double stepper_get_position_z() {
-  return stepper_position[Z_AXIS]/CONFIG_Z_STEPS_PER_MM;
+  int32_t pos;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { pos = stepper_position[Z_AXIS]; }
+  return pos/CONFIG_Z_STEPS_PER_MM;
 }
 void stepper_set_position(double x, double y, double z) {
-  stepper_position[X_AXIS] = lround(x*CONFIG_X_STEPS_PER_MM);
-  stepper_position[Y_AXIS] = lround(y*CONFIG_Y_STEPS_PER_MM);
-  stepper_position[Z_AXIS] = lround(z*CONFIG_Z_STEPS_PER_MM);
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    stepper_position[X_AXIS] = lround(x*CONFIG_X_STEPS_PER_MM);
+    stepper_position[Y_AXIS] = lround(y*CONFIG_Y_STEPS_PER_MM);
+    stepper_position[Z_AXIS] = lround(z*CONFIG_Z_STEPS_PER_MM);
+  }
 }
 
 

@@ -306,18 +306,23 @@ var status_handlers = {
   },
   pos: function (status) {
     // jobview_head_move(status.pos, status.offset)
-    $("#head_position").animate(
-      {
-        left: Math.round(
-          (status.pos[0] + status.offset[0]) * jobview_mm2px - 10,
-        ),
-        top: Math.round(
-          (status.pos[1] + status.offset[1]) * jobview_mm2px - 10,
-        ),
-      },
-      status_every,
-      "linear",
-    );
+    // tween the head marker to the new position for smooth movement; stop() any
+    // in-flight tween first (without jumping to its end) so polls don't queue a
+    // backlog of animations that would lag the marker behind the real position
+    $("#head_position")
+      .stop(true, false)
+      .animate(
+        {
+          left: Math.round(
+            (status.pos[0] + status.offset[0]) * jobview_mm2px - 10,
+          ),
+          top: Math.round(
+            (status.pos[1] + status.offset[1]) * jobview_mm2px - 10,
+          ),
+        },
+        status_every,
+        "linear",
+      );
     // set values in X/Y 'input' fields
     x_pos = status.pos[0] + status.offset[0];
     y_pos = status.pos[1] + status.offset[1];

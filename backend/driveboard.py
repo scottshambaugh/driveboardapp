@@ -466,7 +466,7 @@ class SerialLoopClass(threading.Thread):
                     self._s["info"]["chiller"] = True
                 else:
                     print("ERROR: invalid info flag")
-                    sys.stdout.write("(", data_char, ",", data_num, ")")
+                    sys.stdout.write(f"({data_char},{data_num})")
                 self.pdata_count = 0
             elif 96 < data_num < 123:  # parameter
                 # data_char is in [a-z], process parameter
@@ -783,6 +783,13 @@ def connect(port=conf["serial_port"], baudrate=conf["baudrate"], verbose=True):
 
             SerialLoop.start()  # this calls run() in a thread
         except serial.SerialException:
+            # handshake/open failed: close the port if we opened it (the thread
+            # hasn't started yet) so we don't leak the OS serial handle
+            if SerialLoop and SerialLoop.device:
+                try:
+                    SerialLoop.device.close()
+                except Exception:
+                    pass
             SerialLoop = None
             if verbose:
                 print(f"ERROR: Cannot connect serial on port: {port}")
@@ -843,6 +850,12 @@ def close():
         if SerialLoop.is_alive():
             SerialLoop.stop_processing = True
             SerialLoop.join()
+        if SerialLoop.device:
+            # close after the thread has stopped so it isn't using the port
+            try:
+                SerialLoop.device.close()
+            except Exception:
+                pass
     else:
         ret = False
     SerialLoop = None
@@ -1596,9 +1609,12 @@ def raster_dither(px_w, px_h, pxarray, n_levels=2):
     cutoffs = [x + 255 / (n_levels - 1) / 2 for x in levels]
 
     for i in range(len(pxarray)):
+        # clamp accumulated diffusion error into range so a cutoff always matches
+        value = min(255, max(0, pxarray_dithered[i]))
+        residual = 0
         for j, cutoff in enumerate(cutoffs):
-            if pxarray_dithered[i] <= cutoff:
-                residual = pxarray_dithered[i] - levels[j]
+            if value <= cutoff:
+                residual = value - levels[j]
                 pxarray_dithered[i] = levels[j]
                 break
         row = i // px_w

@@ -435,7 +435,8 @@ class DXFParser:
         xShift = 0
         yShift = 0
         if self.x_min < 0:
-            xShift = 0.0 - self.x_min - self.x_max
+            # shift so x_min lands at 0
+            xShift = 0.0 - self.x_min
             if self.debug:
                 print(f"x_min {self.x_min:f}")
                 print(f"x_max {self.x_max:f}")
@@ -469,9 +470,10 @@ class DXFParser:
                         i += 1
 
     def setMinMax(self, x, y):
+        # a single point may set both x bounds
         if x < self.x_min:
             self.x_min = x
-        elif x > self.x_max:
+        if x > self.x_max:
             self.x_max = x
 
         if y > self.y_min:

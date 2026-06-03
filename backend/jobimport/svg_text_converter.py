@@ -619,6 +619,10 @@ def convert_text_to_paths(svg_string):
         fm = get_font_manager()
         converted_count = 0
 
+        # child -> parent map; a text element's parent stays valid even as
+        # siblings are replaced below, so one pass suffices
+        parent_map = {child: parent for parent in root.iter() for child in parent}
+
         for text_elem in text_elements:
             try:
                 # Get default styling from text element
@@ -733,7 +737,7 @@ def convert_text_to_paths(svg_string):
                         path_elem.set("id", text_id + suffix)
 
                 # Replace text element with path element(s) in parent
-                parent = find_parent(root, text_elem)
+                parent = parent_map.get(text_elem)
                 if parent is not None:
                     idx = list(parent).index(text_elem)
                     parent.remove(text_elem)

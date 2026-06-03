@@ -30,6 +30,16 @@
 - Sped up path optimization for large vector jobs.
 - Fixed serial disconnect errors always logging as "unknown".
 - Hardened firmware flashing against shell injection via the serial port setting.
+- Fixed DXF imports not being path-optimized.
+- Fixed placement of DXF files with negative coordinates.
+- Fixed import crash for unit-less SVGs from some editors.
+- Fixed import crash for circles/ellipses missing a radius.
+- Fixed import crash for SVGs with non-numeric width/height.
+- Fixed raster dithering artifacts when error diffusion pushed pixels out of range.
+- Sped up text-to-path conversion for SVGs with many text elements.
+- Fixed a serial port handle leak on disconnect/reconnect.
+- Hardened firmware against rare data races in position reporting and underrun counting.
+- Reduced UI overhead from the live head-position marker.
 
 ### Development
 - Add CHANGELOG.md

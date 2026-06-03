@@ -68,6 +68,7 @@ have enough bandwidth. It beats checksums in our case.
 #include <stdint.h>
 #include <stdlib.h>
 #include <avr/pgmspace.h>
+#include <util/atomic.h>
 #include "protocol.h"
 #include "config.h"
 #include "serial.h"
@@ -319,8 +320,12 @@ inline void protocol_request_superstatus() {
 
 
 inline void protocol_mark_underrun() {
-  rx_buffer_underruns += 1;
-  rx_buffer_underruns_reported = false;
+  // called from both the stepper ISR and the main loop; the 16-bit increment
+  // is a read-modify-write, so guard it (RESTORESTATE: safe in ISR context)
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    rx_buffer_underruns += 1;
+    rx_buffer_underruns_reported = false;
+  }
 }
 
 

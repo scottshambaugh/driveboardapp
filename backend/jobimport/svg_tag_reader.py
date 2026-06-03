@@ -216,7 +216,7 @@ class SVGTagReader:
         has_fill = self._has_valid_fill(node)
         if not has_stroke and not has_fill:
             return
-        r = node.get("r")
+        r = node.get("r") or 0.0
         cx = node.get("cx") or 0.0
         cy = node.get("cy") or 0.0
         if r > 0.0:
@@ -269,8 +269,8 @@ class SVGTagReader:
         has_fill = self._has_valid_fill(node)
         if not has_stroke and not has_fill:
             return
-        rx = node.get("rx")
-        ry = node.get("ry")
+        rx = node.get("rx") or 0.0
+        ry = node.get("ry") or 0.0
         cx = node.get("cx") or 0.0
         cy = node.get("cy") or 0.0
         if rx > 0.0 and ry > 0.0:

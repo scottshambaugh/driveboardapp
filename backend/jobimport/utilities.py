@@ -17,7 +17,10 @@ def parseFloats(float_strings):
 
 def parseScalar(scalar_unit_string):
     """Parse one scalar string with (optional) unit and return both."""
-    num, unit = re_scalar_unit(scalar_unit_string)[0]
+    matches = re_scalar_unit(scalar_unit_string)
+    if not matches:  # no number present (e.g. "auto") -> treat as missing
+        return (None, "")
+    num, unit = matches[0]
     num = float(num)
     return (num, unit)
 
