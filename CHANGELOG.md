@@ -6,17 +6,7 @@
 - 
 
 ### Bug Fixes
-- Fixed the low-memory safety stop never triggering.
-- Fixed job import failing on segments longer than the max segment length.
-- Fixed incorrect job bounding boxes from the first point of each shape.
-- Fixed exported jobs missing their stats.
-- Fixed the job name not resetting when clearing a job.
-- Improved raster streaming performance by reducing serial lock contention.
-- Fixed move commands firing the laser with leftover intensity from a prior job.
-- Added a firmware serial watchdog that stops the laser if the host connection is lost.
-- Sped up path optimization for large vector jobs.
-- Fixed serial disconnect errors always logging as "unknown".
-- Hardened firmware flashing against shell injection via the serial port setting.
+-
 
 ### Development
 - 
@@ -29,6 +19,17 @@
   interrupt) dropped CMD_CHUNK_PROCESSED acks under sustained rastering, causing
   the host's buffer tally to desync and deadlock. The accounting is now atomic,
   with a host-side resync as a safety net.
+- Fixed the low-memory safety stop never triggering.
+- Fixed job import failing on segments longer than the max segment length.
+- Fixed incorrect job bounding boxes from the first point of each shape.
+- Fixed exported jobs missing their stats.
+- Fixed the job name not resetting when clearing a job.
+- Improved raster streaming performance by reducing serial lock contention.
+- Fixed move commands firing the laser with leftover intensity from a prior job.
+- Added a firmware serial watchdog that stops the laser if the host connection is lost.
+- Sped up path optimization for large vector jobs.
+- Fixed serial disconnect errors always logging as "unknown".
+- Hardened firmware flashing against shell injection via the serial port setting.
 
 ### Development
 - Add CHANGELOG.md
