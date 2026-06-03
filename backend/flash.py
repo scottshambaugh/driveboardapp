@@ -53,10 +53,24 @@ def flash_upload(
             # os.chmod(AVRDUDEAPP, st.st_mode | stat.S_IEXEC)
 
         # call avrdude, returns 0 on success
-        command = f'{AVRDUDEAPP} -c {PROGRAMMER} -b {BITRATE} -P {serial_port} -p {DEVICE} -C {AVRDUDECONFIG} -Uflash:w:"{FIRMWARE}":i'
-
-        print(command)
-        return subprocess.call(command, shell=True)
+        # argv list + shell=False so the config-supplied serial_port/firmware
+        # cannot inject shell commands (and path spaces are handled natively)
+        command = [
+            AVRDUDEAPP,
+            "-c",
+            PROGRAMMER,
+            "-b",
+            BITRATE,
+            "-P",
+            serial_port,
+            "-p",
+            DEVICE,
+            "-C",
+            AVRDUDECONFIG,
+            f"-Uflash:w:{FIRMWARE}:i",
+        ]
+        print(" ".join(command))
+        return subprocess.call(command)
 
         # PROGRAMMER = "avrisp"  # old way, required pressing the reset button
         # os.system('%(dude)s -c %(programmer)s -b %(bps)s -P %(port)s -p %(device)s -C %(dudeconf)s -B 10 -F -U flash:w:%(firmware)s:i'
@@ -79,10 +93,22 @@ def flash_upload(
         SERIAL_PORT = serial_port
         DEVICE = "atmega328p"
         PROGRAMMER = "arduino"  # use this for bootloader
-        SERIAL_OPTION = f"-P {SERIAL_PORT}"
         BITRATE = "115200"
 
-        command = f'"{AVRDUDEAPP}" -c {PROGRAMMER} -b {BITRATE} {SERIAL_OPTION} -p {DEVICE} -C "{AVRDUDECONFIG}" -Uflash:w:"{FIRMWARE}":i'
+        command = [
+            AVRDUDEAPP,
+            "-c",
+            PROGRAMMER,
+            "-b",
+            BITRATE,
+            "-P",
+            SERIAL_PORT,
+            "-p",
+            DEVICE,
+            "-C",
+            AVRDUDECONFIG,
+            f"-Uflash:w:{FIRMWARE}:i",
+        ]
 
         ### Trigger the atmega328's reset pin to invoke bootloader
 
@@ -107,9 +133,10 @@ def flash_upload(
                 fwb.write("out")
             # set the gpio pin low -> high
             # echo 1 > /sys/class/gpio/gpio71/value
-            with open("/sys/class/gpio/gpio71/value", "w") as fw, open(
-                "/sys/class/gpio/gpio73/value", "w"
-            ) as fwb:
+            with (
+                open("/sys/class/gpio/gpio71/value", "w") as fw,
+                open("/sys/class/gpio/gpio73/value", "w") as fwb,
+            ):
                 fw.write("0")
                 fw.flush()
                 fwb.write("0")
@@ -146,8 +173,8 @@ def flash_upload(
             # GPIO.output(pinReset, GPIO.HIGH)
             # time.sleep(0.1)
 
-        print(command)
-        return subprocess.call(command, shell=True)
+        print(" ".join(command))
+        return subprocess.call(command)
 
 
 def reset_atmega():
@@ -166,9 +193,10 @@ def reset_atmega():
         with open("/sys/class/gpio/gpio73/direction", "w") as fwb:
             fwb.write("out")
 
-        with open("/sys/class/gpio/gpio71/value", "w") as fw, open(
-            "/sys/class/gpio/gpio73/value", "w"
-        ) as fwb:
+        with (
+            open("/sys/class/gpio/gpio71/value", "w") as fw,
+            open("/sys/class/gpio/gpio73/value", "w") as fwb,
+        ):
             fw.write("0")
             fw.flush()
             fwb.write("0")
@@ -200,12 +228,20 @@ def usb_reset_hack():
     # fails after replugging the usb arduino. It seems strictly related
     # to the USB stack on the Linux dev machine (possibly also on OSX or Win).
     # Note: This should be irrelevant on the Lasersaur/BBB.
-    command = (
-        "avrdude -p atmega328p -P "
-        + conf["serial_port"]
-        + " -c arduino -U flash:r:flash.bin:r -q -q"
-    )
-    return subprocess.call(command, shell=True)
+    command = [
+        "avrdude",
+        "-p",
+        "atmega328p",
+        "-P",
+        conf["serial_port"],
+        "-c",
+        "arduino",
+        "-U",
+        "flash:r:flash.bin:r",
+        "-q",
+        "-q",
+    ]
+    return subprocess.call(command)
 
 
 if __name__ == "__main__":

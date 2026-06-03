@@ -334,9 +334,9 @@ class SerialLoopClass(threading.Thread):
                         self.stop_processing = True
                         self._status["serial"] = False
                         self._status["ready"] = False
-                        if e is OSError:
+                        if isinstance(e, OSError):
                             print("ERROR: serial got disconnected 1.")
-                        elif e is ValueError:
+                        elif isinstance(e, ValueError):
                             print("ERROR: serial got disconnected 2.")
                         else:
                             print("ERROR: unknown serial error")
