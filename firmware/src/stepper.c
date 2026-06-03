@@ -87,6 +87,9 @@ static uint32_t adjusted_rate;                // The current rate of step_events
 static volatile bool processing_flag;         // indicates if blocks are being processed
 static volatile bool stop_requested;          // when set to true stepper interrupt will go idle on next entry
 static volatile uint8_t stop_status;          // yields the reason for a stop request
+static volatile bool paused;                  // when set, stepping is frozen (beam off) but block buffer/position are retained, so motion can resume exactly
+static volatile uint8_t resume_state;         // 0 none, 1 ramp requested, 2 ramping. eases the speed back up after a pause
+static uint32_t resume_rate_target;           // rate to ramp back up to when resuming from a pause
 static volatile uint8_t disable_limits;       // option to disable limts for homing cycle
 
 #if PWM_MODE == SYNCED_FREQ
@@ -178,6 +181,7 @@ void stepper_request_stop(uint8_t status) {
   if (!stop_requested) {  // prevent retriggering
     stop_status = status;
     stop_requested = true;
+    paused = false;  // a stop overrides a pause
     serial_stop();
   }
 }
@@ -193,6 +197,22 @@ bool stepper_stop_requested() {
 void stepper_stop_resume() {
   stop_status = STOPERROR_OK;
   stop_requested = false;
+  paused = false;  // a full resume also clears a pause
+}
+
+void stepper_request_pause() {
+  paused = true;
+}
+
+void stepper_clear_pause() {
+  if (paused) {
+    resume_state = 1;  // ramp the speed back up on resume
+  }
+  paused = false;
+}
+
+bool stepper_is_paused() {
+  return paused;
 }
 
 
@@ -259,6 +279,15 @@ ISR(TIMER1_COMPA_vect) {
     // Make sure to do this again from the protocol loop
     // because it could still be adding blocks after this call.
     planner_reset_block_buffer();
+    busy = false;
+    return;
+  }
+
+  if (paused) {
+    // freeze: hold position and force the beam off, but DON'T touch the block
+    // buffer, current-block progress, or position, so motion resumes exactly
+    // where it left off (e.g. mid raster line) once unpaused
+    control_laser_intensity(0);
     busy = false;
     return;
   }
@@ -378,6 +407,7 @@ ISR(TIMER1_COMPA_vect) {
       counter_y = counter_x;
       counter_z = counter_x;
       step_events_completed = 0;
+      resume_state = 0;  // new block starts at initial_rate, no resume ramp
     }
   }
 
@@ -429,8 +459,30 @@ ISR(TIMER1_COMPA_vect) {
       ////////// SPEED ADJUSTMENT
       if (step_events_completed < current_block->step_event_count) {  // block not finished
 
+        if (resume_state == 1) {
+          // resuming from a pause: drop to the block's start rate, then ramp
+          // back up to the pre-pause rate rather than jumping there directly
+          resume_rate_target = adjusted_rate;
+          adjusted_rate = current_block->initial_rate;
+          if (adjusted_rate > resume_rate_target) {
+            adjusted_rate = resume_rate_target;
+          }
+          acceleration_tick_counter = CYCLES_PER_ACCELERATION_TICK/2;
+          adjust_laser_speed_beam_dynamics( adjusted_rate );
+          resume_state = 2;
+        } else if (resume_state == 2) {
+          // ramping back up to the pre-pause rate
+          if ( acceleration_tick() ) {
+            adjusted_rate += current_block->rate_delta;
+            if (adjusted_rate >= resume_rate_target) {
+              adjusted_rate = resume_rate_target;
+              resume_state = 0;
+            }
+            adjust_laser_speed_beam_dynamics( adjusted_rate );
+          }
+
         // accelerating
-        if (step_events_completed < current_block->accelerate_until) {
+        } else if (step_events_completed < current_block->accelerate_until) {
           if ( acceleration_tick() ) {  // scheduled speed change
             adjusted_rate += current_block->rate_delta;
             if (adjusted_rate > current_block->nominal_rate) {  // overshot

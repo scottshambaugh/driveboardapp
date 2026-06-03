@@ -28,6 +28,8 @@ CMD_RESUME = chr(2)
 CMD_STATUS = chr(3)
 CMD_SUPERSTATUS = chr(4)
 CMD_CHUNK_PROCESSED = chr(5)
+CMD_UNPAUSE = chr(7)
+CMD_PAUSE = chr(8)
 CMD_RASTER_DATA_START = chr(16)
 CMD_RASTER_DATA_END = chr(17)
 STATUS_END = chr(6)
@@ -89,6 +91,7 @@ ERROR_SERIAL_WATCHDOG = ";"
 INFO_IDLE_YES = "A"
 INFO_DOOR_OPEN = "B"
 INFO_CHILLER_OFF = "C"
+INFO_PAUSED = "D"
 
 # status: info params
 INFO_POS_X = "x"
@@ -121,6 +124,8 @@ markers_tx = {
     chr(3): "CMD_STATUS",
     chr(4): "CMD_SUPERSTATUS",
     chr(5): "CMD_CHUNK_PROCESSED",
+    chr(7): "CMD_UNPAUSE",
+    chr(8): "CMD_PAUSE",
     chr(16): "CMD_RASTER_DATA_START",
     chr(17): "CMD_RASTER_DATA_END",
     chr(6): "STATUS_END",
@@ -157,6 +162,8 @@ markers_rx = {
     chr(3): "CMD_STATUS",
     chr(4): "CMD_SUPERSTATUS",
     chr(5): "CMD_CHUNK_PROCESSED",
+    chr(7): "CMD_UNPAUSE",
+    chr(8): "CMD_PAUSE",
     chr(16): "CMD_RASTER_DATA_START",
     chr(17): "CMD_RASTER_DATA_END",
     chr(6): "STATUS_END",
@@ -179,6 +186,7 @@ markers_rx = {
     "A": "INFO_IDLE_YES",
     "B": "INFO_DOOR_OPEN",
     "C": "INFO_CHILLER_OFF",
+    "D": "INFO_PAUSED",
     # status: info params
     "x": "INFO_POS_X",
     "y": "INFO_POS_Y",
@@ -232,9 +240,15 @@ class SerialLoopClass(threading.Thread):
         self._s = {}  # status fram currently assembling
         self.reset_status()
         self._paused = False
+        # set when a job is held paused due to a serial disconnect (vs a user
+        # pause); gates resume on the firmware actually reporting paused so we
+        # never resume into a controller that secretly reset
+        self._disconnected = False
 
         self.request_stop = False
         self.request_resume = False
+        self.request_pause = False
+        self.request_unpause = False
         self.request_status = 2  # 0: no request, 1: normal request, 2: super request
 
         self.pdata_count = 0
@@ -339,6 +353,12 @@ class SerialLoopClass(threading.Thread):
                         self.stop_processing = True
                         self._status["serial"] = False
                         self._status["ready"] = False
+                        # if a job was mid-flight, hold it paused so it can be
+                        # resumed after auto-reconnect (the firmware watchdog
+                        # freezes the controller similarly on its side)
+                        if self.tx_buffer and len(self.tx_buffer) > self.tx_pos:
+                            self._paused = True
+                            self._disconnected = True
                         if isinstance(e, OSError):
                             print("ERROR: serial got disconnected 1.")
                         elif isinstance(e, ValueError):
@@ -457,6 +477,7 @@ class SerialLoopClass(threading.Thread):
                 self.tx_pos = 0
                 self.job_size = 0
                 self._paused = False
+                self._disconnected = False  # clear any held resume state
                 self.device.flushOutput()
                 self.pdata_count = 0
                 self._s["ready"] = True  # ready but in stop mode
@@ -469,6 +490,10 @@ class SerialLoopClass(threading.Thread):
                     self._s["info"]["door"] = True
                 elif data_char == INFO_CHILLER_OFF:
                     self._s["info"]["chiller"] = True
+                elif data_char == INFO_PAUSED:
+                    # firmware froze (held position, beam off) — also proves it
+                    # did not reset since the pause, so a resume is safe
+                    self._s["info"]["paused"] = True
                 else:
                     print("ERROR: invalid info flag")
                     sys.stdout.write(f"({data_char},{data_num})")
@@ -551,6 +576,18 @@ class SerialLoopClass(threading.Thread):
             self.request_resume = False
             self.reset_status()
             self.request_status = 2  # super request
+
+        # pause/unpause freeze the controller in place (beam off) without
+        # discarding its buffer, so motion resumes exactly where it left off.
+        # Sent above the _paused gate so they apply even while paused. Unlike
+        # CMD_RESUME, CMD_UNPAUSE does NOT reset the firmware rx buffer (retained
+        # in-flight data keeps streaming), so firmbuf_used is left intact.
+        if self.request_pause:
+            self._send_char(CMD_PAUSE)
+            self.request_pause = False
+        if self.request_unpause:
+            self._send_char(CMD_UNPAUSE)
+            self.request_unpause = False
         ### send buffer chunk
         if self.tx_buffer and len(self.tx_buffer) > self.tx_pos:
             if not self._paused:
@@ -741,7 +778,7 @@ def find_controller(baudrate=conf["baudrate"], verbose=True):
     return None
 
 
-def connect(port=None, baudrate=None, verbose=True):
+def connect(port=None, baudrate=None, verbose=True, reset=True):
     global SerialLoop
     # resolve config at call time, not import time (serial_port is set after
     # auto-detect on first connect)
@@ -760,41 +797,71 @@ def connect(port=None, baudrate=None, verbose=True):
         # many bytes were actually written if this is different from requested.
         # Work around: use a big enough timeout and a small enough chunk size.
         try:
-            if conf["usb_reset_hack"]:
+            if reset and conf["usb_reset_hack"]:
                 import flash
 
                 flash.usb_reset_hack()
-            # connect
-            SerialLoop.device = serial.Serial(port, baudrate, timeout=0, writeTimeout=4)
-            if conf["hardware"] == "standard":
-                # clear throat
-                # Toggle DTR to reset Arduino
-                SerialLoop.device.setDTR(False)
-                time.sleep(1)
-                SerialLoop.device.flushInput()
-                SerialLoop.device.setDTR(True)
-                # for good measure
-                SerialLoop.device.flushOutput()
+            if reset:
+                # normal connect: reset the controller and wait for its hello
+                SerialLoop.device = serial.Serial(port, baudrate, timeout=0, writeTimeout=4)
+                if conf["hardware"] == "standard":
+                    # clear throat
+                    # Toggle DTR to reset Arduino
+                    SerialLoop.device.setDTR(False)
+                    time.sleep(1)
+                    SerialLoop.device.flushInput()
+                    SerialLoop.device.setDTR(True)
+                    # for good measure
+                    SerialLoop.device.flushOutput()
+                else:
+                    import flash
+
+                    flash.reset_atmega()
+                    time.sleep(0.5)
+                    SerialLoop.device.flushInput()
+                    SerialLoop.device.flushOutput()
+
+                start = time.time()
+                while True:
+                    if time.time() - start > 2:
+                        if verbose:
+                            print("ERROR: Cannot get 'hello' from controller")
+                        raise serial.SerialException
+                    data = SerialLoop.device.read(1)
+                    if data.find(ord(INFO_HELLO)) > -1:
+                        if verbose:
+                            print("Controller says Hello!")
+                            print(f"Connected on serial port: {port}")
+                        break
             else:
-                import flash
-
-                flash.reset_atmega()
-                time.sleep(0.5)
-                SerialLoop.device.flushInput()
-                SerialLoop.device.flushOutput()
-
-            start = time.time()
-            while True:
-                if time.time() - start > 2:
-                    if verbose:
-                        print("ERROR: Cannot get 'hello' from controller")
-                    raise serial.SerialException
-                data = SerialLoop.device.read(1)
-                if data.find(ord(INFO_HELLO)) > -1:
-                    if verbose:
-                        print("Controller says Hello!")
-                        print(f"Connected on serial port: {port}")
-                    break
+                # resume reconnect: open WITHOUT resetting the controller so its
+                # held (paused) state survives, and skip the hello (only sent at
+                # boot). NOTE: avoiding the Arduino's auto-reset-on-open is
+                # hardware/pyserial dependent (DTR polarity, hupcl) and must be
+                # verified on the actual board.
+                dev = serial.Serial()
+                dev.port = port
+                dev.baudrate = baudrate
+                dev.timeout = 0
+                dev.write_timeout = 4
+                dev.dtr = False  # hold DTR deasserted: no reset pulse on open
+                dev.open()
+                dev.flushInput()
+                dev.flushOutput()
+                # require a status reply before trusting the port: opening it
+                # succeeds even when the controller is dead or gone
+                dev.write([ord(CMD_STATUS), ord(CMD_STATUS)])
+                start = time.time()
+                while not dev.read(1):
+                    if time.time() - start > 2:
+                        if verbose:
+                            print("ERROR: no response from controller on reconnect")
+                        dev.close()
+                        raise serial.SerialException
+                dev.flushInput()  # discard the partial status frame
+                SerialLoop.device = dev
+                if verbose:
+                    print(f"Reconnected (no reset) on serial port: {port}")
 
             SerialLoop.start()  # this calls run() in a thread
         except serial.SerialException:
@@ -813,12 +880,12 @@ def connect(port=None, baudrate=None, verbose=True):
             print("ERROR: disconnect first")
 
 
-def connect_withfind(port=None, baudrate=None, verbose=True):
+def connect_withfind(port=None, baudrate=None, verbose=True, reset=True):
     if port is None:
         port = conf["serial_port"]
     if baudrate is None:
         baudrate = conf["baudrate"]
-    connect(port=port, baudrate=baudrate, verbose=verbose)
+    connect(port=port, baudrate=baudrate, verbose=verbose, reset=reset)
     if not connected():
         # try finding driveboard
         if verbose:
@@ -867,11 +934,28 @@ def connected():
 def reconnect():
     """Recover from a dropped serial link: tear down the dead serial loop (its
     thread has exited and can't be restarted) and re-establish the connection.
-    Safe to call when already connected (no-op) or never connected."""
+
+    If a job was held paused when the link dropped, reconnect WITHOUT resetting
+    the controller (so its frozen position/state survives) and carry the job
+    over, still paused, so the user can resume it. Otherwise do a normal
+    (resetting) reconnect. No-op when already connected."""
     global SerialLoop
     if connected():
         return
+    saved = None
     if SerialLoop is not None:
+        with SerialLoop.lock:
+            if (
+                SerialLoop._paused
+                and SerialLoop.tx_buffer
+                and len(SerialLoop.tx_buffer) > SerialLoop.tx_pos
+            ):
+                saved = {
+                    "tx_buffer": SerialLoop.tx_buffer,
+                    "tx_pos": SerialLoop.tx_pos,
+                    "job_size": SerialLoop.job_size,
+                    "firmbuf_used": SerialLoop.firmbuf_used,
+                }
         try:
             if SerialLoop.device:
                 SerialLoop.device.close()
@@ -881,7 +965,24 @@ def reconnect():
             SerialLoop.stop_processing = True
             SerialLoop.join()
         SerialLoop = None
-    connect_withfind(verbose=False)
+
+    if saved is not None:
+        # resume path: reconnect to the known port without resetting the
+        # controller, then carry the held job over (still paused)
+        connect(port=conf["serial_port"], verbose=False, reset=False)
+        if connected():
+            with SerialLoop.lock:
+                SerialLoop.tx_buffer = saved["tx_buffer"]
+                SerialLoop.tx_pos = saved["tx_pos"]
+                SerialLoop.job_size = saved["job_size"]
+                SerialLoop.firmbuf_used = saved["firmbuf_used"]
+                SerialLoop._paused = True  # stay paused until the user resumes
+                SerialLoop._disconnected = True  # gate resume on firmware-paused
+            print("INFO: reconnected with a held job; paused — resume to continue")
+        else:
+            print("WARN: could not reconnect to resume the held job")
+    else:
+        connect_withfind(verbose=False)
 
 
 def close():
@@ -1090,13 +1191,25 @@ def pause():
     global SerialLoop
     with SerialLoop.lock:
         if SerialLoop.tx_buffer:
-            SerialLoop._paused = True
+            SerialLoop._paused = True  # stop feeding the buffer
+            SerialLoop.request_pause = True  # freeze the controller in place
 
 
 def unpause():
     global SerialLoop
     with SerialLoop.lock:
-        SerialLoop._paused = False
+        # safety gate: when resuming a job that was held by a *disconnect*, only
+        # proceed if the controller is actually reporting paused. If it isn't, it
+        # likely reset (position unknown) and resuming would cut in the wrong
+        # place — refuse and leave it to the user to re-run.
+        if SerialLoop._disconnected and not SerialLoop._status["info"].get("paused"):
+            print(
+                "ERROR: controller not in held/paused state; cannot safely resume (re-run the job)"
+            )
+            return
+        SerialLoop.request_unpause = True  # release the freeze, resume motion
+        SerialLoop._paused = False  # resume feeding the buffer
+        SerialLoop._disconnected = False
 
 
 def stop():
@@ -1107,6 +1220,8 @@ def stop():
         SerialLoop.tx_pos = 0
         SerialLoop.job_size = 0
         SerialLoop.request_stop = True
+        SerialLoop._paused = False
+        SerialLoop._disconnected = False
 
 
 def unstop():

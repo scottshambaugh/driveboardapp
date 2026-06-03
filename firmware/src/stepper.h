@@ -46,6 +46,9 @@ void stepper_request_stop(uint8_t status);
 uint8_t stepper_stop_status();
 bool stepper_stop_requested();
 void stepper_stop_resume();
+void stepper_request_pause();  // freeze stepping (beam off), retain state
+void stepper_clear_pause();    // resume from a pause
+bool stepper_is_paused();
 
 // Get the actual position of the head in mm.
 // This is as accurate as an open loop system can be.

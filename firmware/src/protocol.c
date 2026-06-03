@@ -390,6 +390,9 @@ inline void protocol_idle() {
     if (SENSE_CHILLER_OFF) {
       serial_write(INFO_CHILLER_OFF);
     }
+    if (stepper_is_paused()) {
+      serial_write(INFO_PAUSED);
+    }
 
     // Handle STOPERROR conditions
     uint8_t stop_code = stepper_stop_status();

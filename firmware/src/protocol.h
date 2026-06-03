@@ -26,6 +26,8 @@
 #define CMD_STATUS 3
 #define CMD_SUPERSTATUS 4
 #define CMD_CHUNK_PROCESSED 5
+#define CMD_UNPAUSE 7
+#define CMD_PAUSE 8
 #define CMD_RASTER_DATA_START 16
 #define CMD_RASTER_DATA_END 17
 #define STATUS_END 6
@@ -88,6 +90,7 @@
 #define INFO_IDLE_YES 'A'
 #define INFO_DOOR_OPEN 'B'
 #define INFO_CHILLER_OFF 'C'
+#define INFO_PAUSED 'D'
 
 // status:  info params
 #define INFO_POS_X 'x'

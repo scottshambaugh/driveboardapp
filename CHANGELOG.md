@@ -16,6 +16,7 @@
 ### New Features
 - Added a NearestNeighbor raster mode that reorders engraved segments to minimize seek travel, speeding up sparse/large-whitespace images.
 - Engrave only the visible part of a cropped (rectangular clip-path) image from an SVG, including clips on a wrapping group.
+- Pausing now freezes the machine in place (beam off) and keeps its job, so a job can resume exactly where it left off. This also lets a job survive a serial disconnect: replug and resume from the pause instead of starting over.
 
 ### Bug Fixes
 - Fixed raster engraving freezing mid-job. A firmware data race on the serial

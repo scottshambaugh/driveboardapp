@@ -190,12 +190,15 @@ inline uint8_t serial_read() {
 
 // serial watchdog timeout: the host has gone silent. Force a safe state.
 // Zero the beam directly (in static-PWM mode an idle machine can hold the beam
-// on and the stepper ISR may not be running to act on the stop), then latch a
-// stop so motion halts and an explicit resume is required. Re-arm WDIE to stay
-// in interrupt mode rather than falling through to a system reset.
+// on and the stepper ISR may not be running to act), then PAUSE rather than
+// stop: stepping freezes and the beam stays off, but the block buffer, current
+// position, and in-flight raster data are retained so the host can reconnect
+// and resume exactly where it left off (CMD_UNPAUSE). A host that never returns
+// just stays paused with the beam off. Re-arm WDIE to stay in interrupt mode.
 ISR(WDT_vect) {
   control_laser_intensity(0);
-  stepper_request_stop(STOPERROR_SERIAL_WATCHDOG);
+  stepper_request_pause();
+  first_transmission = true;  // realign the duplicate-byte check to a fresh pair
   WDTCSR |= (1 << WDIE);
 }
 
@@ -228,6 +231,14 @@ SIGNAL(USART_RX_vect) {
       rx_buffer_head = rx_buffer_tail = 0;  // reset rx buffer
       rx_buffer_processed = 0;
       stepper_stop_resume();
+    } else if (data == CMD_PAUSE) {
+      // freeze immediately (beam off), retaining buffer/position; bypasses the
+      // rx buffer so it takes effect even while data is queued
+      stepper_request_pause();
+    } else if (data == CMD_UNPAUSE) {
+      // resume from a pause WITHOUT touching the rx buffer, so retained
+      // in-flight data (e.g. the rest of a raster line) keeps streaming
+      stepper_clear_pause();
     } else if (data == CMD_STATUS) {
       protocol_request_status();
     } else if (data == CMD_SUPERSTATUS) {
