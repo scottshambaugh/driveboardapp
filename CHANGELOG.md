@@ -13,6 +13,9 @@
 
 ## v26.06 (June 2026)
 
+### New Features
+- Added a NearestNeighbor raster mode that reorders engraved segments to minimize seek travel, speeding up sparse/large-whitespace images.
+
 ### Bug Fixes
 - Fixed raster engraving freezing mid-job. A firmware data race on the serial
   chunk-acknowledgement counters (shared between the main loop and the stepper

@@ -49,7 +49,7 @@ conf = {
     "print_serial_data": False,
     "raster_invert": False,  # Set to True for materials which etch light on dark (eg slate, black marble)
     "raster_levels": 128,
-    "raster_mode": "Bidirectional",  # 'Forward', 'Reverse', 'Bidirectional'
+    "raster_mode": "Bidirectional",  # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
     "raster_leadin": 10,
     "fill_mode": "Bidirectional",  # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
     "fill_leadin": 10,
@@ -86,7 +86,7 @@ userconfigurable = {
     "print_serial_data": "Print all raw serial communications to the debug window.",
     "raster_invert": r"If true, laser will set black pixels to 0% intensity and white pixels to 100% intensity.",
     "raster_levels": "Number of raster dithering levels, from 2 for complete on/off dithering, to 128 for a smooth image",
-    "raster_mode": "Pathing to use when rastering: 'Forward', 'Reverse', or 'Bidirectional'.",
+    "raster_mode": "Pathing to use when rastering: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor' (reorders segments to minimize seek travel, best for sparse images).",
     "raster_leadin": "Leadin for raster fills in mm. Note: rastering may fail if this is 0",
     "fill_mode": "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'.",
     "fill_leadin": "Leadin for vector fills in mm.",

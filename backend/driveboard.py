@@ -1203,6 +1203,125 @@ def job_laser_validate(jobdict):
                             check_point(pos, passidx, kind)
 
 
+def _emit_raster_segment(o, seekrate, feedrate_, intensity_):
+    """Stream one raster segment: seek to lead-in, ramp in, raster move with
+    pixel data, ramp out. `o` is an orientation descriptor with absolute mm
+    positions (leadin/start/end/leadout, line_y) and the pixel slice (data/lo/hi).
+    """
+    line_y = o["line_y"]
+    intensity(0.0)  # intensity for seek and lead-in
+    feedrate(seekrate)  # feedrate for seek
+    move(o["leadin"], line_y)  # seek to lead-in start
+    feedrate(feedrate_)  # feedrate for lead-in, raster, and lead-out
+    move(o["start"], line_y)  # lead-in
+    intensity(intensity_)  # intensity for raster move
+    rastermove(o["end"], line_y)  # raster move
+    rasterdata(o["data"], o["lo"], o["hi"])  # stream raster data for the move
+    intensity(0.0)  # intensity for lead-out
+    move(o["leadout"], line_y)  # lead-out
+
+
+def _raster_orientations(
+    lo,
+    hi,
+    line_start,
+    line_y,
+    posx,
+    pxsize_x,
+    leadin,
+    workspace_x,
+    pxarray,
+    pxarray_reversed,
+    px_n,
+):
+    """Build the two engraving orientations (left-to-right and right-to-left)
+    for a canonical raster run spanning pixel indices [lo, hi)."""
+    left_x = posx + (lo - line_start) * pxsize_x
+    right_x = posx + (hi - line_start) * pxsize_x
+    pos_start_fwd = posx + (lo - line_start + 0.5) * pxsize_x
+    pos_end_fwd = posx + (hi - line_start - 0.5) * pxsize_x
+    leadin_left = max(left_x - leadin, 0)
+    leadout_right = min(right_x + leadin, workspace_x)
+    fwd = {
+        "leadin": leadin_left,
+        "start": pos_start_fwd,
+        "end": pos_end_fwd,
+        "leadout": leadout_right,
+        "line_y": line_y,
+        "data": pxarray,
+        "lo": lo,
+        "hi": hi,
+    }
+    rev = {
+        "leadin": leadout_right,
+        "start": pos_end_fwd,
+        "end": pos_start_fwd,
+        "leadout": leadin_left,
+        "line_y": line_y,
+        "data": pxarray_reversed,
+        "lo": px_n - hi,
+        "hi": px_n - lo,
+    }
+    return fwd, rev
+
+
+def _emit_raster_nn(
+    segments,
+    start_x,
+    start_y,
+    posx,
+    pxsize_x,
+    leadin,
+    workspace_x,
+    pxarray,
+    pxarray_reversed,
+    px_n,
+    seekrate,
+    feedrate_,
+    intensity_,
+):
+    """Emit collected raster segments in greedy nearest-neighbor order, choosing
+    each segment's orientation by whichever end the head reaches first. Minimizes
+    seek travel between segments (useful for sparse / large-whitespace images)."""
+    from jobimport import kdtree
+
+    if not segments:
+        return
+    orients = []
+    tree = kdtree.Tree(2)
+    for idx, (lo, hi, line_start, line_y) in enumerate(segments):
+        fwd, rev = _raster_orientations(
+            lo,
+            hi,
+            line_start,
+            line_y,
+            posx,
+            pxsize_x,
+            leadin,
+            workspace_x,
+            pxarray,
+            pxarray_reversed,
+            px_n,
+        )
+        nodes = (
+            tree.insert([fwd["leadin"], line_y], (idx, 0)),
+            tree.insert([rev["leadin"], line_y], (idx, 1)),
+        )
+        orients.append(((fwd, rev), nodes))
+    current = [start_x, start_y]
+    for _ in range(len(segments)):
+        node, _distsq = tree.nearest(current, checkempty=True)
+        if node is None:
+            break
+        idx, which = node.data
+        (fwd, rev), (node_fwd, node_rev) = orients[idx]
+        node_fwd.data = None  # consume both orientations of this segment
+        node_rev.data = None
+        o = fwd if which == 0 else rev
+        _emit_raster_segment(o, seekrate, feedrate_, intensity_)
+        current = [o["leadout"], o["line_y"]]
+
+
 def job_laser(jobdict):
     """Queue a .dba laser job.
     A job dictionary can define vector and raster passes.
@@ -1295,7 +1414,7 @@ def job_laser(jobdict):
                         f"WARN: config raster_levels={conf['raster_levels']} invalid, set to {n_raster_levels}"
                     )
                 raster_mode = conf["raster_mode"]
-                if raster_mode not in ["Forward", "Reverse", "Bidirectional"]:
+                if raster_mode not in ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"]:
                     raster_mode = "Bidirectional"
                     print("WARN: raster_mode not recognized. Please check your config file.")
 
@@ -1345,8 +1464,12 @@ def job_laser(jobdict):
                 # set direction
                 if raster_mode == "Reverse":
                     direction = -1  # 1 is forward, -1 is reverse
-                else:  # if 'Forward' or 'Bidirectional'
+                else:  # 'Forward', 'Bidirectional', or 'NearestNeighbor'
                     direction = 1
+
+                # NearestNeighbor collects segments (found in forward direction)
+                # and emits them reordered after the scanline loop
+                nn_segments = []
 
                 # we don't want to waste time at low speeds travelling over whitespace where there is no engraving going on
                 # so, chop off all whitespace at the beginning and end of each line
@@ -1430,25 +1553,36 @@ def job_laser(jobdict):
                                     )  # ensure we stay in the workspace
 
                                 # write out the movement and engraving info for the segment
-                                intensity(0.0)  # intensity for seek and lead-in
-                                feedrate(seekrate)  # feedrate for seek
-                                move(pos_leadin, line_y)  # seek to lead-in start
-                                feedrate(feedrate_)  # feedrate for lead-in, raster, and lead-out
-                                move(pos_start, line_y)  # lead-in
-                                intensity(intensity_)  # intensity for raster move
-                                rastermove(pos_end, line_y)  # raster move
-                                if direction == 1:  # fwd
-                                    rasterdata(
-                                        pxarray, segment_start, segment_end
-                                    )  # stream raster data for above rastermove
-                                elif direction == -1:  # rev
-                                    rasterdata(
-                                        pxarray_reversed,
-                                        px_n - segment_start,
-                                        px_n - segment_end,
-                                    )  # stream raster data for above rastermove
-                                intensity(0.0)  # intensity for lead-out
-                                move(pos_leadout, line_y)  # lead-out
+                                if raster_mode == "NearestNeighbor":
+                                    # collect the canonical (forward) run; emitted
+                                    # reordered after the scanline loop
+                                    nn_segments.append(
+                                        (segment_start, segment_end, line_start, line_y)
+                                    )
+                                else:
+                                    if direction == 1:  # fwd
+                                        o = {
+                                            "leadin": pos_leadin,
+                                            "start": pos_start,
+                                            "end": pos_end,
+                                            "leadout": pos_leadout,
+                                            "line_y": line_y,
+                                            "data": pxarray,
+                                            "lo": segment_start,
+                                            "hi": segment_end,
+                                        }
+                                    else:  # rev
+                                        o = {
+                                            "leadin": pos_leadin,
+                                            "start": pos_start,
+                                            "end": pos_end,
+                                            "leadout": pos_leadout,
+                                            "line_y": line_y,
+                                            "data": pxarray_reversed,
+                                            "lo": px_n - segment_start,
+                                            "hi": px_n - segment_end,
+                                        }
+                                    _emit_raster_segment(o, seekrate, feedrate_, intensity_)
 
                                 # prime for next segment
                                 segment_start = segment_end + whitespace_counter * direction
@@ -1463,6 +1597,23 @@ def job_laser(jobdict):
                         direction = 1  # switch to fwd
                     line_start = line_end
                     line_y += pxsize_y
+
+                if raster_mode == "NearestNeighbor":
+                    _emit_raster_nn(
+                        nn_segments,
+                        posx,
+                        posy,
+                        posx,
+                        pxsize_x,
+                        conf["raster_leadin"],
+                        conf["workspace"][0],
+                        pxarray,
+                        pxarray_reversed,
+                        px_n,
+                        seekrate,
+                        feedrate_,
+                        intensity_,
+                    )
 
                 # assists off, end of feed if set to 'feed'
                 if pass_["air_assist"] == "feed":
