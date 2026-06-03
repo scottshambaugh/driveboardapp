@@ -287,6 +287,11 @@ class SerialLoopClass(threading.Thread):
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
         # three decimals are retained
         num = int(round((val + 134217.728) * 1000))
+        # saturate to the 28-bit protocol range; an out-of-range value would
+        # otherwise wrap and command a wildly wrong position/feedrate
+        if num < 0 or num > (1 << 28) - 1:
+            print(f"WARN: param {param} value {val} out of range, clamping")
+            num = max(0, min(num, (1 << 28) - 1))
         char0 = (num & 127) + 128
         char1 = ((num & (127 << 7)) >> 7) + 128
         char2 = ((num & (127 << 14)) >> 14) + 128
@@ -960,6 +965,26 @@ def absolute():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_REF_ABSOLUTE)
+
+
+def target_in_workarea(x=None, y=None, machine_coords=False):
+    """Whether an absolute move target stays within the work area.
+
+    x/y are in offset coordinates unless machine_coords is set (e.g. supermove).
+    z is not bounded (matches job validation). None coordinates are ignored.
+    """
+    global SerialLoop
+    if machine_coords:
+        x_off = y_off = 0.0
+    else:
+        with SerialLoop.lock:
+            x_off = SerialLoop._status["offset"][0]
+            y_off = SerialLoop._status["offset"][1]
+    if x is not None and not (-x_off <= x <= conf["workspace"][0] - x_off):
+        return False
+    if y is not None and not (-y_off <= y <= conf["workspace"][1] - y_off):
+        return False
+    return True
 
 
 def move(x=None, y=None, z=None):

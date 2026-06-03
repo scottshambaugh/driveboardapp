@@ -238,6 +238,8 @@ def jog(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def move(x, y, z):
+    if not driveboard.target_in_workarea(x, y):
+        bottle.abort(400, "move target outside work area")
     driveboard.intensity(0)
     driveboard.move(x, y, z)
     return "{}"
@@ -247,6 +249,8 @@ def move(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movex(x):
+    if not driveboard.target_in_workarea(x=x):
+        bottle.abort(400, "move target outside work area")
     driveboard.intensity(0)
     driveboard.move(x=x)
     return "{}"
@@ -256,6 +260,8 @@ def movex(x):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movey(y):
+    if not driveboard.target_in_workarea(y=y):
+        bottle.abort(400, "move target outside work area")
     driveboard.intensity(0)
     driveboard.move(y=y)
     return "{}"
@@ -274,6 +280,8 @@ def movez(z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def supermove(x, y, z):
+    if not driveboard.target_in_workarea(x, y, machine_coords=True):
+        bottle.abort(400, "move target outside work area")
     driveboard.supermove(x, y, z)
     return "{}"
 
@@ -282,6 +290,8 @@ def supermove(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def supermovex(x):
+    if not driveboard.target_in_workarea(x=x, machine_coords=True):
+        bottle.abort(400, "move target outside work area")
     driveboard.supermove(x=x)
     return "{}"
 
@@ -290,6 +300,8 @@ def supermovex(x):
 @bottle.auth_basic(checkuser)
 @checkserial
 def supermovey(y):
+    if not driveboard.target_in_workarea(y=y, machine_coords=True):
+        bottle.abort(400, "move target outside work area")
     driveboard.supermove(y=y)
     return "{}"
 
