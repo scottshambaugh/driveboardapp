@@ -10,6 +10,7 @@ installs gcc-avr and actually exercises these.
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 
@@ -33,6 +34,26 @@ FLAGS = [
 
 AVR_GCC = shutil.which("avr-gcc")
 AVR_OBJCOPY = shutil.which("avr-objcopy")
+
+# The committed firmware/*.hex are built with this avr-gcc. Other versions emit
+# different (still-valid) machine code, so the byte-for-byte comparison only
+# holds on this toolchain. A major-version mismatch fails fast (below) so we
+# know when the CI runner / committed hexes need realigning.
+# Ubuntu 24.04 "noble" ships 7.3.0 (20.04-22.04 shipped 5.4.0).
+HEX_BUILD_AVR_GCC = "7.3.0"
+
+
+def _avr_gcc_version():
+    if AVR_GCC is None:
+        return None
+    # Parse `--version` rather than `-dumpversion`: gcc 5 dumps the full "5.4.0"
+    # but gcc 7+ dumps only "7", whereas --version always carries the full X.Y.Z.
+    out = subprocess.run([AVR_GCC, "--version"], capture_output=True, text=True).stdout
+    m = re.search(r"\b(\d+\.\d+\.\d+)\b", out.splitlines()[0] if out else "")
+    return m.group(1) if m else None
+
+
+AVR_GCC_VERSION = _avr_gcc_version()
 
 pytestmark = pytest.mark.skipif(AVR_GCC is None, reason="avr-gcc not installed")
 
@@ -78,20 +99,40 @@ def test_config_variants_discovered():
     assert variants, "expected config.*.h firmware variants in firmware/src"
 
 
+def test_avr_gcc_toolchain_alignment():
+    """Fail fast when avr-gcc drifts a major version from the committed hexes.
+
+    When this trips (e.g. the CI runner image bumps its gcc-avr), realign:
+    rebuild the hexes with the new toolchain (``python backend/build.py``),
+    commit them, and update ``HEX_BUILD_AVR_GCC``.
+    """
+    have = (AVR_GCC_VERSION or "unknown").split(".")[0]
+    want = HEX_BUILD_AVR_GCC.split(".")[0]
+    assert have == want, (
+        f"avr-gcc {AVR_GCC_VERSION} found, but the committed firmware hexes were built "
+        f"with {HEX_BUILD_AVR_GCC}. Rebuild the hexes (backend/build.py), commit them, "
+        f"and update HEX_BUILD_AVR_GCC."
+    )
+
+
 @pytest.mark.parametrize("config_file", _config_variants())
 def test_firmware_variant_compiles(config_file, tmp_path):
     _build_main_elf(tmp_path / "src", config_file)
 
 
 @pytest.mark.skipif(AVR_OBJCOPY is None, reason="avr-objcopy not installed")
+@pytest.mark.skipif(
+    AVR_GCC_VERSION != HEX_BUILD_AVR_GCC,
+    reason=f"committed hexes reproduce only with avr-gcc {HEX_BUILD_AVR_GCC} (have {AVR_GCC_VERSION})",
+)
 @pytest.mark.parametrize("config_file", _config_variants())
 def test_firmware_variant_matches_committed_hex(config_file, tmp_path):
     """A fresh build of the source must reproduce the committed .hex.
 
     Catches committed firmware binaries drifting out of sync with the source
-    (e.g. source edited but the .hex not rebuilt + committed). The committed
-    hexes are reproducible byte-for-byte with avr-gcc 5.4.0 (the version Debian/
-    Ubuntu ship); a different toolchain would need them regenerated.
+    (e.g. source edited but the .hex not rebuilt + committed). Gated to the
+    avr-gcc version the committed hexes were built with, since other versions
+    emit different machine code.
     """
     committed = os.path.join(FIRMWARE_DIR, f"firmware.{_designator(config_file)}.hex")
     assert os.path.exists(committed), f"no committed hex for {config_file}: {committed}"

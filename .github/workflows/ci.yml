@@ -65,7 +65,9 @@ jobs:
 
   firmware:
     name: Firmware build + simavr
-    runs-on: ubuntu-latest
+    # Pinned to noble: its avr-gcc (7.3.0) is the canonical toolchain the
+    # committed firmware/*.hex are built with, so the hex-comparison test runs.
+    runs-on: ubuntu-24.04
     env:
       UV_PYTHON: "3.12"
     steps:
