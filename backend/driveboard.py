@@ -854,7 +854,34 @@ def connect_withfind(port=None, baudrate=None, verbose=True):
 
 def connected():
     global SerialLoop
-    return SerialLoop and bool(SerialLoop.device)
+    # a dead serial thread (e.g. after a disconnect) means we are NOT connected,
+    # even though the SerialLoop object and its (stale) device handle linger
+    return bool(
+        SerialLoop
+        and SerialLoop.device
+        and SerialLoop.is_alive()
+        and not SerialLoop.stop_processing
+    )
+
+
+def reconnect():
+    """Recover from a dropped serial link: tear down the dead serial loop (its
+    thread has exited and can't be restarted) and re-establish the connection.
+    Safe to call when already connected (no-op) or never connected."""
+    global SerialLoop
+    if connected():
+        return
+    if SerialLoop is not None:
+        try:
+            if SerialLoop.device:
+                SerialLoop.device.close()
+        except Exception:
+            pass
+        if SerialLoop.is_alive():
+            SerialLoop.stop_processing = True
+            SerialLoop.join()
+        SerialLoop = None
+    connect_withfind(verbose=False)
 
 
 def close():

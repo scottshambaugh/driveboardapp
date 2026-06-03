@@ -166,7 +166,7 @@ def confserial(port=None):
 def status():
     global time_status_last
     if not driveboard.connected() and (time.time() - time_status_last) > 6.0:
-        driveboard.connect_withfind(verbose=False)
+        driveboard.reconnect()
     time_status_last = time.time()
     return json.dumps(driveboard.status())
 
