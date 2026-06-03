@@ -741,8 +741,14 @@ def find_controller(baudrate=conf["baudrate"], verbose=True):
     return None
 
 
-def connect(port=conf["serial_port"], baudrate=conf["baudrate"], verbose=True):
+def connect(port=None, baudrate=None, verbose=True):
     global SerialLoop
+    # resolve config at call time, not import time (serial_port is set after
+    # auto-detect on first connect)
+    if port is None:
+        port = conf["serial_port"]
+    if baudrate is None:
+        baudrate = conf["baudrate"]
     if not SerialLoop:
         SerialLoop = SerialLoopClass()
 
@@ -807,7 +813,11 @@ def connect(port=conf["serial_port"], baudrate=conf["baudrate"], verbose=True):
             print("ERROR: disconnect first")
 
 
-def connect_withfind(port=conf["serial_port"], baudrate=conf["baudrate"], verbose=True):
+def connect_withfind(port=None, baudrate=None, verbose=True):
+    if port is None:
+        port = conf["serial_port"]
+    if baudrate is None:
+        baudrate = conf["baudrate"]
     connect(port=port, baudrate=baudrate, verbose=verbose)
     if not connected():
         # try finding driveboard
@@ -871,16 +881,25 @@ def close():
     return ret
 
 
-def flash(serial_port=conf["serial_port"], firmware=conf["firmware"]):
+def flash(serial_port=None, firmware=None):
     import flash
 
+    # read config at call time, not import time: the app only learns the serial
+    # port once it connects/auto-detects, well after this module is imported
+    if serial_port is None:
+        serial_port = conf["serial_port"]
+    if firmware is None:
+        firmware = conf["firmware"]
+    if not serial_port:
+        print("ERROR: no serial port set; connect to the machine first")
+        return 1
     reconnect = False
     if connected():
-        close()
+        close()  # release the port so avrdude can open it
         reconnect = True
     ret = flash.flash_upload(serial_port=serial_port, firmware=firmware)
     if reconnect:
-        connect()
+        connect(port=serial_port)
     if ret != 0:
         print("ERROR: flash failed")
     return ret
@@ -904,7 +923,7 @@ def reset():
         reconnect = True
     flash.reset_atmega()
     if reconnect:
-        connect()
+        connect(port=conf["serial_port"])
 
 
 def status():

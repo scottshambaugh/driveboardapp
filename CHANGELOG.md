@@ -58,6 +58,7 @@
 - Fixed a serial port handle leak on disconnect/reconnect.
 - Hardened firmware against rare data races in position reporting and underrun counting.
 - Reduced UI overhead from the live head-position marker.
+- Fixed firmware flashing using a stale/empty serial port instead of the connected one.
 
 ### Development
 - Add CHANGELOG.md

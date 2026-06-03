@@ -14,10 +14,18 @@ from config import AVR_BITRATE, AVR_DEVICE, AVR_PROGRAMMER, conf
 
 
 def flash_upload(
-    serial_port=conf["serial_port"],
-    resources_dir=conf["rootdir"],
-    firmware=conf["firmware"],
+    serial_port=None,
+    resources_dir=None,
+    firmware=None,
 ):
+    # resolve config at call time, not import time (serial_port is only known
+    # after the app connects/auto-detects the port)
+    if serial_port is None:
+        serial_port = conf["serial_port"]
+    if resources_dir is None:
+        resources_dir = conf["rootdir"]
+    if firmware is None:
+        firmware = conf["firmware"]
     firmware = firmware.replace("/", "").replace("\\", "")  # make sure no evil injection
     FIRMWARE = os.path.join(resources_dir, "firmware", f"firmware.{firmware}.hex")
 
