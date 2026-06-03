@@ -1160,24 +1160,32 @@ def dwell():
 
 def air_on():
     global SerialLoop
+    if SerialLoop is None:
+        return
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_ENABLE)
 
 
 def air_off():
     global SerialLoop
+    if SerialLoop is None:
+        return
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AIR_DISABLE)
 
 
 def aux_on():
     global SerialLoop
+    if SerialLoop is None:
+        return
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AUX_ENABLE)
 
 
 def aux_off():
     global SerialLoop
+    if SerialLoop is None:
+        return
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_AUX_DISABLE)
 

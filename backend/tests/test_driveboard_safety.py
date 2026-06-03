@@ -791,18 +791,14 @@ def test_mill_job_is_not_work_area_validated(loop):
 
 
 # ---------------------------------------------------------------------------
-# Known bug (documented regression): aux/air commands crash when disconnected.
+# Aux/air commands must be safe no-ops when no controller is connected.
 #
-# web.start() calls driveboard.air_off() unconditionally after attempting to
-# connect. With no controller attached, SerialLoop is None, so air_off() (and
-# air_on/aux_on/aux_off) raise AttributeError on `SerialLoop.lock` and take the
-# whole server down on launch. These commands should be safe no-ops while
-# disconnected. xfail(strict) so this flips to a failure once fixed, prompting
-# removal of the marker.
+# web.start() calls driveboard.air_off() after attempting to connect; with no
+# controller attached SerialLoop is None, so these must not raise (they used to
+# crash the server on launch with AttributeError on `SerialLoop.lock`).
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="air/aux commands crash when SerialLoop is None", strict=True)
 @pytest.mark.parametrize("fn", ["air_off", "air_on", "aux_off", "aux_on"])
 def test_aux_commands_safe_when_disconnected(monkeypatch, fn):
     monkeypatch.setattr(driveboard, "SerialLoop", None)
