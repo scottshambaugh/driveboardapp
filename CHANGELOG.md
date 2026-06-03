@@ -38,6 +38,7 @@
 - Fixed import crash for unit-less SVGs from some editors.
 - Fixed import crash for SVGs with physical dimension units (mm, cm, pt, pc, in).
 - Fixed distorted corners on rounded rectangles with a large ry.
+- Fixed running or exporting a job failing when it contained an empty field.
 - Fixed import crash for circles/ellipses missing a radius.
 - Fixed import crash for SVGs with non-numeric width/height.
 - Fixed raster dithering artifacts when error diffusion pushed pixels out of range.

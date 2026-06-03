@@ -190,6 +190,6 @@ function request_absolute_move(x, y, z, seekrate, success_msg) {
 function request_stringify(data) {
   // json stringify while limiting numbers to 3 decimals
   return JSON.stringify(data, function (key, val) {
-    return val.toFixed ? Number(val.toFixed(3)) : val;
+    return typeof val === "number" ? Number(val.toFixed(3)) : val;
   });
 }

@@ -202,7 +202,7 @@ jobhandler = {
       this.get(),
       function (key, val) {
         if (isNaN(+key)) return val;
-        return val.toFixed ? Number(val.toFixed(3)) : val;
+        return typeof val === "number" ? Number(val.toFixed(3)) : val;
       },
       whitespace,
     );
