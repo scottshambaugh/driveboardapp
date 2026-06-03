@@ -63,6 +63,8 @@
 - Fixed firmware flashing using a stale/empty serial port instead of the connected one.
 - Raster and fill mode settings are now dropdowns in the config UI instead of free text.
 - Quieted noisy systemctl errors when the app can't disable system sleep (e.g. on Crostini).
+- Starting the server with no controller connected no longer crashes: the air/aux commands are now safe no-ops while disconnected.
+- Mill jobs are now validated against the work area (like laser jobs); an off-bed G0/G1 move is rejected instead of being sent to the machine.
 
 ### Development
 - Add CHANGELOG.md

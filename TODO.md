@@ -7,8 +7,6 @@ bugs
 - stall between certain x-axis jogs
   - send a pierce command in between
 - unplugging usb is not always handled gracfully
-- (found by tests) job_mill issues moves with no target_in_workarea check, unlike
-  job_laser which validates. An off-bed mill job is sent to hardware unchecked.
 
 beauty bugs
 -----------

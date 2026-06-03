@@ -255,6 +255,12 @@ def conf_workspace_y():
     return conf["workspace"][1]
 
 
+def conf_workspace_z():
+    from config import conf
+
+    return conf["workspace"][2]
+
+
 # ---------------------------------------------------------------------------
 # Job validation - reject geometry outside the work area before lasing
 # ---------------------------------------------------------------------------
@@ -774,19 +780,37 @@ def test_job_without_head_is_noop(loop, monkeypatch):
     assert seen == {}
 
 
-def test_mill_job_is_not_work_area_validated(loop):
-    # ASYMMETRY (documented, not necessarily desired): job_laser runs
-    # job_laser_validate and rejects out-of-bed geometry, but job_mill issues
-    # moves straight from G-code with NO target_in_workarea check. This test
-    # pins the current behavior so a future bounds check would flip it loudly.
-    loop._status["offset"] = [0.0, 0.0, 0.0]
+def test_mill_job_rejects_off_bed_target(loop):
+    # job_mill validates G0/G1 targets against the work area, like job_laser.
     way_out = conf_workspace_x() + 10_000
     mill_job = {
         "head": {"kind": "mill"},
-        "defs": [{"data": [["G1", [way_out, way_out, 0.0]]]}],
+        "defs": [{"data": [["G1", [way_out, 10.0, 0.0]]]}],
     }
-    driveboard.job(mill_job)  # currently does NOT raise despite being off-bed
-    # the off-bed target was still encoded and queued
+    with pytest.raises(ValueError, match="work area"):
+        driveboard.job(mill_job)
+    # nothing should have been queued for the rejected job
+    assert ord(driveboard.CMD_LINE) not in loop.tx_buffer
+
+
+def test_mill_job_rejects_off_bed_z(loop):
+    # Z is bounded too (workspace[2]); a z move beyond it is rejected.
+    way_down = conf_workspace_z() + 10_000
+    mill_job = {
+        "head": {"kind": "mill"},
+        "defs": [{"data": [["G1", [10.0, 10.0, way_down]]]}],
+    }
+    with pytest.raises(ValueError, match="z="):
+        driveboard.job(mill_job)
+
+
+def test_mill_job_in_bounds_runs(loop):
+    # An in-bounds mill job validates and queues moves (z=0 is within [0, wz]).
+    mill_job = {
+        "head": {"kind": "mill"},
+        "defs": [{"data": [["G0", [10.0, 10.0, 0.0]], ["G1", [20.0, 20.0, 0.0]]]}],
+    }
+    driveboard.job(mill_job)  # must not raise
     assert ord(driveboard.CMD_LINE) in loop.tx_buffer
 
 

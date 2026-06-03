@@ -1783,6 +1783,32 @@ def job_laser(jobdict):
         move(0, 0, 0)
 
 
+def job_mill_validate(jobdict):
+    """Validate that a mill job's G0/G1 targets stay within the work area.
+
+    Mill jobs run in absolute (machine) coordinates, so each axis target is
+    bounded to [0, workspace] on that axis. Raises ValueError with a descriptive
+    message on the first out-of-bounds move.
+
+    NOTE: the Z bound is conf["workspace"][2]; a mill must configure a non-zero Z
+    work-area dimension for any Z move to validate.
+    """
+    limits = conf["workspace"]
+    axes = ("x", "y", "z")
+
+    for defidx, def_ in enumerate(jobdict["defs"]):
+        for item in def_["data"]:
+            if item[0] in ("G0", "G1"):
+                target = item[1]
+                for i, axis in enumerate(axes):
+                    val = target[i]
+                    if val < 0 or val > limits[i]:
+                        raise ValueError(
+                            f"def {defidx}: {item[0]} {axis}={val} beyond "
+                            f"[0, {limits[i]}] of work area"
+                        )
+
+
 def job_mill(jobdict):
     """Queue a .dba mill job.
     A typical mill job dict looks like this:
@@ -1809,6 +1835,8 @@ def job_mill(jobdict):
     if "defs" not in jobdict:
         print("ERROR: invalid job")
         return
+    # raises ValueError if any move falls outside the work area
+    job_mill_validate(jobdict)
     # prime job
     air_off()
     aux_off()
