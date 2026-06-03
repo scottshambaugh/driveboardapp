@@ -145,7 +145,10 @@ function passes_swap(pass1, pass2) {
     .children("div")
     .filter(":visible")
     .find(".idxmem")
-    .text();
+    .map(function () {
+      return $(this).text();
+    })
+    .get();
   // remove visible the colors
   $("#pass_" + pass1)
     .find(".color_remove_btn_" + pass1)
@@ -171,13 +174,16 @@ function passes_swap(pass1, pass2) {
       .find("input.pxsize")
       .val(),
   );
-  // get visible colors for pass1
+  // get visible colors for pass2
   var idx2 = $("#pass_" + pass2)
     .find("div.pass_colors")
     .children("div")
     .filter(":visible")
     .find(".idxmem")
-    .text();
+    .map(function () {
+      return $(this).text();
+    })
+    .get();
   // remove visible the colors
   $("#pass_" + pass2)
     .find(".color_remove_btn_" + pass2)
@@ -206,13 +212,13 @@ function passes_swap(pass1, pass2) {
 
   // add colors from pass2 to pass1
   for (var i = 0; i < idx2.length; i++) {
-    $("#passsel_" + pass1 + "_" + idx2.charAt(i)).hide();
-    $("#pass_" + pass1 + "_" + idx2.charAt(i)).show(300);
+    $("#passsel_" + pass1 + "_" + idx2[i]).hide();
+    $("#pass_" + pass1 + "_" + idx2[i]).show(300);
   }
   // add colors from pass1 to pass2
   for (var i = 0; i < idx1.length; i++) {
-    $("#passsel_" + pass2 + "_" + idx1.charAt(i)).hide();
-    $("#pass_" + pass2 + "_" + idx1.charAt(i)).show(300);
+    $("#passsel_" + pass2 + "_" + idx1[i]).hide();
+    $("#pass_" + pass2 + "_" + idx1[i]).show(300);
   }
 }
 
