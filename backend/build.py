@@ -26,12 +26,13 @@ if sys.platform == "darwin":  # OSX
     AVRDUDECONFIG = "/Applications/Arduino.app/Contents/Java/hardware/tools/avr/etc/avrdude.conf"
 
 elif sys.platform == "win32":  # Windows
-    AVRDUDEAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avrdude'
-    AVRGCCAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-gcc'
-    AVROBJCOPYAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-objcopy'
-    AVRSIZEAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-size'
-    AVROBJDUMPAPP = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\bin\\avr-objdump'
-    AVRDUDECONFIG = 'C:\\"Program Files (x86)"\\Arduino\\hardware\\tools\\avr\\etc\\avrdude.conf'
+    _avrbin = "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\avr\\bin"
+    AVRDUDEAPP = os.path.join(_avrbin, "avrdude")
+    AVRGCCAPP = os.path.join(_avrbin, "avr-gcc")
+    AVROBJCOPYAPP = os.path.join(_avrbin, "avr-objcopy")
+    AVRSIZEAPP = os.path.join(_avrbin, "avr-size")
+    AVROBJDUMPAPP = os.path.join(_avrbin, "avr-objdump")
+    AVRDUDECONFIG = "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\avr\\etc\\avrdude.conf"
 
 elif sys.platform == "linux" or sys.platform == "linux2":  # Linux
     AVRDUDEAPP = "avrdude"
@@ -99,36 +100,28 @@ def build_firmware(firmware_name="DriveboardFirmware"):
     BUILDNAME = firmware_name
     OBJECTS = ["main", "serial", "protocol", "planner", "sense_control", "stepper"]
 
-    COMPILE = (
-        AVRGCCAPP
-        + " -Wall -Os -DF_CPU="
-        + CLOCK
-        + " -mmcu="
-        + DEVICE
-        + " -I. -ffunction-sections"
-        + " --std=c99"
-    )
-    # COMPILE = AVRGCCAPP + " -Wall -O3 -DF_CPU=" + CLOCK + " -mmcu=" + DEVICE + " -I. -ffunction-sections" + " --std=c99"
+    # argv lists + shell=False: paths with spaces work natively, no injection
+    COMPILE = [
+        AVRGCCAPP,
+        "-Wall",
+        "-Os",
+        f"-DF_CPU={CLOCK}",
+        f"-mmcu={DEVICE}",
+        "-I.",
+        "-ffunction-sections",
+        "--std=c99",
+    ]
 
     for fileobj in OBJECTS:
-        command = f"{COMPILE} -c {fileobj}.c -o {fileobj}.o"
-        ret += subprocess.call(command, shell=True)
+        ret += subprocess.call(COMPILE + ["-c", f"{fileobj}.c", "-o", f"{fileobj}.o"])
 
-    command = "{compile} -o main.elf {alldoto}  -lm".format(
-        compile=COMPILE,
-        alldoto=".o ".join(OBJECTS) + ".o",
+    ret += subprocess.call(COMPILE + ["-o", "main.elf"] + [f"{o}.o" for o in OBJECTS] + ["-lm"])
+
+    ret += subprocess.call(
+        [AVROBJCOPYAPP, "-j", ".text", "-j", ".data", "-O", "ihex", "main.elf", f"{BUILDNAME}.hex"]
     )
-    ret += subprocess.call(command, shell=True)
 
-    command = f"{AVROBJCOPYAPP} -j .text -j .data -O ihex main.elf {BUILDNAME}.hex"
-    ret += subprocess.call(command, shell=True)
-
-    # command = '%(size)s *.hex *.elf *.o' % {'size':AVRSIZEAPP}
-    command = f"{AVRSIZEAPP} --mcu={DEVICE} --format=avr main.elf"
-    ret += subprocess.call(command, shell=True)
-
-    # command = '%(objdump)s -t -j .bss main.elf' % {'objdump':AVROBJDUMPAPP}
-    # ret += subprocess.call(command, shell=True)
+    ret += subprocess.call([AVRSIZEAPP, f"--mcu={DEVICE}", "--format=avr", "main.elf"])
 
     if ret != 0:
         return "Error: failed to build"

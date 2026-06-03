@@ -61,6 +61,7 @@
 - Rename master branch to main, drop the develop branch
 - Bump firmware VERSION to 2606
 - Refactored job_laser raster handling into smaller functions (image, path, pixel load, segment finder)
+- Hardened the firmware build script with argv lists instead of shell=True (no injection, handles paths with spaces)
 
 ## v25.12 (December 2025)
 
