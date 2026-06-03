@@ -209,7 +209,7 @@ class SerialLoopClass(threading.Thread):
         threading.Thread.__init__(self)
 
         self.device = None
-        self.tx_buffer = []
+        self.tx_buffer = bytearray()
         self.tx_pos = 0
 
         # TX_CHUNK_SIZE - this is the number of bytes to be
@@ -453,7 +453,7 @@ class SerialLoopClass(threading.Thread):
                             print("\t(invalid)")
                     print("----------------")
                 # stop mode housekeeping
-                self.tx_buffer = []
+                self.tx_buffer = bytearray()
                 self.tx_pos = 0
                 self.job_size = 0
                 self._paused = False
@@ -607,7 +607,7 @@ class SerialLoopClass(threading.Thread):
         else:
             if self.tx_buffer:  # job finished sending
                 self.job_size = 0
-                self.tx_buffer = []
+                self.tx_buffer = bytearray()
                 self.tx_pos = 0
 
     def _send_char(self, char):
@@ -1057,7 +1057,7 @@ def stop():
     """Force stop condition."""
     global SerialLoop
     with SerialLoop.lock:
-        SerialLoop.tx_buffer = []
+        SerialLoop.tx_buffer = bytearray()
         SerialLoop.tx_pos = 0
         SerialLoop.job_size = 0
         SerialLoop.request_stop = True

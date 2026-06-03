@@ -216,8 +216,7 @@ def remove_waypoints(path):
 
 
 def reverse_path(path):
-    # group fill segments by their start-point y in one pass, preserving
-    # original order within each level (avoids an O(levels*segments) rescan)
+    # group fill segments by start-point y, keeping original order per level
     by_y = {}
     for seg in path.copy():
         by_y.setdefault(seg[0][1], []).append(seg)
@@ -229,8 +228,7 @@ def reverse_path(path):
 
 
 def bidirectionalize_fill(path):
-    # group fill segments by their start-point y in one pass, preserving
-    # original order within each level (avoids an O(levels*segments) rescan)
+    # group fill segments by start-point y, keeping original order per level
     by_y = {}
     for seg in path.copy():
         by_y.setdefault(seg[0][1], []).append(seg)
