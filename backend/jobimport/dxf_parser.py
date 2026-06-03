@@ -44,23 +44,17 @@ class DXFParser:
         # 7 black
         # TODO: support up to 255 colors
 
-        self.colorLayers = {
-            "#FF0000": [],
-            "#FFFF00": [],
-            "#00FF00": [],
-            "#00FFFF": [],
-            "#0000FF": [],
-            "#CC33CC": [],
-            "#000000": [],
+        # AutoCAD color index (1 red ... 7 black) -> hex
+        self.color_hex = {
+            1: "#FF0000",
+            2: "#FFFF00",
+            3: "#00FF00",
+            4: "#00FFFF",
+            5: "#0000FF",
+            6: "#CC33CC",
+            7: "#000000",
         }
-
-        self.red_colorLayer = self.colorLayers["#FF0000"]
-        self.yellow_colorLayer = self.colorLayers["#FFFF00"]
-        self.green_colorLayer = self.colorLayers["#00FF00"]
-        self.cyan_colorLayer = self.colorLayers["#00FFFF"]
-        self.blue_colorLayer = self.colorLayers["#0000FF"]
-        self.magenta_colorLayer = self.colorLayers["#CC33CC"]
-        self.black_colorLayer = self.colorLayers["#000000"]
+        self.colorLayers = {hexcol: [] for hexcol in self.color_hex.values()}
 
         # assume we're reading metric files and that
         # we round to four decimal places.  There is no Lasersaur
@@ -292,26 +286,13 @@ class DXFParser:
         if self.debug:
             if flippedPath == path:
                 print(f"caution: flippedPath {flippedPath} == path {path}")
-        if color == 1:
-            self.red_colorLayer.append(flippedPath)
-        elif color == 2:
-            self.yellow_colorLayer.append(flippedPath)
-        elif color == 3:
-            self.green_colorLayer.append(flippedPath)
-        elif color == 4:
-            self.cyan_colorLayer.append(flippedPath)
-        elif color == 5:
-            self.blue_colorLayer.append(flippedPath)
-        elif color == 6:
-            self.magenta_colorLayer.append(flippedPath)
-        elif color == 7:
-            self.black_colorLayer.append(flippedPath)
-        else:
+        hexcolor = self.color_hex.get(color)
+        if hexcolor is None:
             if self.verbose:
                 print(f"unrecognized color {color:d}, setting to cyan")
             # TODO: we need a better way to handle this
-            # don't know what to do with this color, assigning to red/cut
-            self.cyan_colorLayer.append(flippedPath)
+            hexcolor = "#00FFFF"  # cyan
+        self.colorLayers[hexcolor].append(flippedPath)
 
     def flipPathAxis(self, path, axis):
         flippedPath = []
