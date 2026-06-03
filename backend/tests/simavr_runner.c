@@ -47,12 +47,22 @@ static uint8_t cap[CAP_MAX];
 static int cap_len = 0;
 static int got_hello = 0;
 
+static long step_edges = 0; /* rising edges on the watched step pin */
+static int step_last = 0;
+
 static void uart_tx_hook(struct avr_irq_t *irq, uint32_t value, void *param) {
     uint8_t byte = value & 0xff;
     if (byte == INFO_HELLO)
         got_hello = 1;
     if (cap_len < CAP_MAX)
         cap[cap_len++] = byte;
+}
+
+static void step_pin_hook(struct avr_irq_t *irq, uint32_t value, void *param) {
+    int lvl = value & 1;
+    if (lvl && !step_last)
+        step_edges++;
+    step_last = lvl;
 }
 
 struct pinset {
@@ -92,6 +102,8 @@ int main(int argc, char **argv) {
     long idle_cycles = 0;
     long run_cycles = 40000000L; /* ~2.5s at 16 MHz */
     const char *watch_name = NULL;
+    int count_portb_bit = -1; /* count rising edges on this PORTB pin (step pin) */
+    long portc_delay = 0;     /* apply PORTC pins this many cycles after hello */
 
     for (int i = 2; i < argc; i++) {
         const char *v;
@@ -107,6 +119,10 @@ int main(int argc, char **argv) {
             run_cycles = strtol(v, NULL, 10);
         else if ((v = opt_val(argv[i], "--watch-symbol=")))
             watch_name = v;
+        else if ((v = opt_val(argv[i], "--count-portb=")))
+            count_portb_bit = (int)strtol(v, NULL, 10);
+        else if ((v = opt_val(argv[i], "--portc-delay=")))
+            portc_delay = strtol(v, NULL, 10);
         else
             fprintf(stderr, "WARN: ignoring unknown arg %s\n", argv[i]);
     }
@@ -137,6 +153,11 @@ int main(int argc, char **argv) {
     }
     avr_irq_register_notify(uart_tx, uart_tx_hook, NULL);
 
+    if (count_portb_bit >= 0)
+        avr_irq_register_notify(
+            avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('B'), count_portb_bit),
+            step_pin_hook, NULL);
+
     /* Resolve a watched SRAM symbol (e.g. pwm_duty) to its data-space address. */
     int watch_addr = -1;
     int watch_max = 0, watch_final = 0;
@@ -153,7 +174,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    int pins_applied = 0;
+    int portd_applied = 0;
+    int portc_applied = 0;
     int send_idx = 0;
     long next_send_cycle = -1;
     long hello_cycle = -1;
@@ -176,15 +198,20 @@ int main(int argc, char **argv) {
             hello_cycle = i;
             next_send_cycle = i + idle_cycles;
         }
-        /* Apply input pins once, right after boot. */
-        if (!pins_applied) {
-            for (int p = 0; p < n_portc; p++)
-                avr_raise_irq(
-                    avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('C'), portc_bits[p]), 1);
+        /* PORTD (door/chiller) pins applied right after boot. */
+        if (!portd_applied) {
             for (int p = 0; p < n_portd; p++)
                 avr_raise_irq(
                     avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('D'), portd_bits[p]), 1);
-            pins_applied = 1;
+            portd_applied = 1;
+        }
+        /* PORTC (limit) pins applied after the optional delay, so a limit can
+         * be tripped mid-move rather than only at boot. */
+        if (!portc_applied && i >= hello_cycle + portc_delay) {
+            for (int p = 0; p < n_portc; p++)
+                avr_raise_irq(
+                    avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('C'), portc_bits[p]), 1);
+            portc_applied = 1;
         }
         /* Feed the raw byte stream, one byte per RX_GAP window. */
         if (send_idx < n_send && i >= next_send_cycle) {
@@ -201,5 +228,7 @@ int main(int argc, char **argv) {
     printf("HELLO=%d\n", got_hello);
     if (watch_name)
         printf("SYM %s max=%d final=%d\n", watch_name, watch_max, watch_final);
+    if (count_portb_bit >= 0)
+        printf("STEPS=%ld\n", step_edges);
     return 0;
 }

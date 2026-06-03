@@ -250,17 +250,31 @@ def test_beam_forced_off_on_interlock(portd):
 
 
 # ---------------------------------------------------------------------------
-# Documented limitation (explicit skip, not a silent gap).
+# A limit hit must halt an IN-PROGRESS move in the stepper ISR (not merely be
+# reported). We run a long line move and count step pulses on the X step pin:
+# the control move completes; tripping the limit partway through stops stepping
+# early, so far fewer pulses are emitted.
 #
-# A limit hit *halting an in-progress line move* in the stepper ISR is not
-# directly asserted: it needs a running line block plus observing that stepping
-# stops (position freeze). The limit *sensing+reporting* is proven by
-# test_xy/z_limit_switch_reported, and the ISR stop uses the same SENSE_*_LIMIT
-# macros. Raster-mode beam safety and the homing delimit cycle are likewise
-# motion-execution dependent and remain out of scope for this harness.
+# (Raster-mode beam safety and the homing delimit cycle remain out of scope:
+# they need more elaborate in-sim motion choreography.)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="needs in-sim line-motion execution; limit SENSE+report proven separately")
 def test_limit_halts_active_move():
-    raise NotImplementedError
+    far = fw.line_program(600, feedrate=3000)
+    bit = fw.X_STEP_PORTB_BIT
+
+    # Control: the move runs to completion and emits its full pulse train.
+    _, _, ctl = fw.run(send=far, run_cycles=12_000_000, count_portb=bit)
+    assert ctl["steps"] > 0, "control move produced no step pulses"
+
+    # Trip the X1 limit ~1.5M cycles in, after stepping has started.
+    _, _, mid = fw.run(
+        send=far,
+        portc=[fw.LIMIT_PORTC_BIT["x1"]],
+        portc_delay=1_500_000,
+        run_cycles=12_000_000,
+        count_portb=bit,
+    )
+    assert mid["steps"] > 0, "move never started before the limit was tripped"
+    assert mid["steps"] < ctl["steps"], "limit did not halt the in-progress move"

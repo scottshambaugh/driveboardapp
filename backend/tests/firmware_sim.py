@@ -50,10 +50,15 @@ STOPERROR_INVALID_DATA = ord(":")
 STOPERROR_INVALID_COMMAND = ord("<")
 STOPERROR_INVALID_PARAMETER = ord(">")
 STOPERROR_SERIAL_WATCHDOG = ord(";")
-# Buffered commands ([A-Z]) and parameters ([a-z]) for driving a dwell.
+# Buffered commands ([A-Z]) and parameters ([a-z]) for driving motion.
 CMD_DWELL = ord("C")
+CMD_LINE = ord("B")
 PARAM_INTENSITY = "s"
 PARAM_DURATION = "d"
+PARAM_FEEDRATE = "f"
+PARAM_TARGET_X = "x"
+# config.driveboardusb.h: X step pulse is PORTB bit 0.
+X_STEP_PORTB_BIT = 0
 STOPERROR_LIMIT_HIT = {
     "x1": ord("$"),
     "x2": ord("%"),
@@ -174,12 +179,15 @@ def run(
     idle_cycles=0,
     run_cycles=None,
     watch_symbol=None,
+    count_portb=None,
+    portc_delay=0,
     variant="config.driveboardusb.h",
 ):
     """Run a scenario.
 
-    Returns (output_bytes, hello_seen). If watch_symbol is given, returns
-    (output_bytes, hello_seen, {"max": m, "final": f}) for that SRAM symbol.
+    Returns (output_bytes, hello_seen). If watch_symbol and/or count_portb is
+    given, returns (output_bytes, hello_seen, info) where info may hold the
+    watched symbol's "max"/"final" and the step-pin "steps" edge count.
     """
     elf = firmware_elf(variant)
     hbin = harness()
@@ -196,6 +204,10 @@ def run(
         args.append(f"--run-cycles={run_cycles}")
     if watch_symbol:
         args.append(f"--watch-symbol={watch_symbol}")
+    if count_portb is not None:
+        args.append(f"--count-portb={count_portb}")
+    if portc_delay:
+        args.append(f"--portc-delay={portc_delay}")
     r = subprocess.run(args, capture_output=True, text=True, timeout=180)
     assert r.returncode == 0, f"harness failed: {r.stdout}\n{r.stderr}"
     lines = r.stdout.splitlines()
@@ -203,13 +215,16 @@ def run(
     hello_line = next((ln for ln in lines if ln.startswith("HELLO=")), "HELLO=0")
     out_bytes = [int(x) for x in out_line[4:].split()]
     hello = hello_line.strip() == "HELLO=1"
-    if watch_symbol:
-        sym_line = next((ln for ln in lines if ln.startswith("SYM ")), "")
+    if watch_symbol or count_portb is not None:
         info = {}
+        sym_line = next((ln for ln in lines if ln.startswith("SYM ")), "")
         for tok in sym_line.split():
             if "=" in tok:
                 k, v = tok.split("=")
                 info[k] = int(v)
+        steps_line = next((ln for ln in lines if ln.startswith("STEPS=")), "")
+        if steps_line:
+            info["steps"] = int(steps_line.split("=")[1])
         return out_bytes, hello, info
     return out_bytes, hello
 
@@ -237,5 +252,15 @@ def dwell_program(intensity, duration):
         encode_value_param(PARAM_INTENSITY, intensity)
         + encode_value_param(PARAM_DURATION, duration)
         + [CMD_DWELL]
+    )
+    return double(logical)
+
+
+def line_program(x, feedrate=1000):
+    """Wire bytes for an absolute X line move (queues a stepper block)."""
+    logical = (
+        encode_value_param(PARAM_FEEDRATE, feedrate)
+        + encode_value_param(PARAM_TARGET_X, x)
+        + [CMD_LINE]
     )
     return double(logical)
