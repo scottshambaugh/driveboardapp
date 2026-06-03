@@ -9,12 +9,12 @@ The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboa
 * The UI has new modals for saving and loading material preset laser settings, editing the configuration, jogging in smaller 1mm increments, and many tweaks for showing the head coordinates and setting offsets
 * Option for the head to auto-home when the machine is booted
 * Many small bugfixes
+* Added an automated test suite (Python behavior, firmware compilation + behavior in a simulator, and a frontend smoke check) that runs in GitHub Actions
 * Tested on Windows and Linux
 
 Outstanding issues:
 * Building a Windows executable isn’t currently working
 * Documentation needs to be updated
-* Not tested on Mac
 
 Many thanks to scottshambaugh, FREILab, Johann150, makermusings, vanillasoap, and martinxyz for keeping this project alive. Below is the original documentation.
 
@@ -41,6 +41,7 @@ This software is written in Javascript (frontend), Python (backend) and C (firmw
 - jobs
   - [dba file format](docs/dba.md)
 - [configuration](docs/configure.md)
+- [testing](docs/testing.md)
 
 
 Installation

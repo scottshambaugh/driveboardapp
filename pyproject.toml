@@ -27,6 +27,16 @@ dev = [
     "pyinstaller>=3.5",
     "pre-commit>=4.0.0",
     "ruff>=0.8.0",
+    "pytest>=8.0.0",
+    "webtest>=3.0.0",
+    "coverage>=7.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+python_files = ["test_*.py"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
 ]
 
 [tool.hatch.build.targets.wheel]

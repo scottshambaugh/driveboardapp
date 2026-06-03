@@ -71,6 +71,8 @@
 - Refactored job_laser raster handling into smaller functions (image, path, pixel load, segment finder)
 - Hardened the firmware build script with argv lists instead of shell=True (no injection, handles paths with spaces)
 - Consolidated the AVR toolchain constants (device, programmer, bitrate, clock) into config, shared by build and flash
+- Added an automated test suite (Python, firmware, and frontend) that runs in
+  GitHub Actions
 
 ## v25.12 (December 2025)
 
