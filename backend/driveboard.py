@@ -590,10 +590,15 @@ class SerialLoopClass(threading.Thread):
                     # error propagates to run() which stops processing
                     self.tx_pos += assumedSent
                 elif time.time() - self.last_tx_progress > self.FIRMBUF_STALL_TIMEOUT:
-                    # gated with no send/ack too long: tally desynced, drained -> resync
-                    print("WARN: firmbuf tally desync, resyncing to resume send")
-                    self.firmbuf_used = 0
-                    self.last_tx_progress = time.time()
+                    if self._status["info"].get("door") or self._status["info"].get("chiller"):
+                        # firmware paused on an interlock: the buffer is genuinely
+                        # full, not desynced. Don't resync (it would overflow it).
+                        self.last_tx_progress = time.time()
+                    else:
+                        # gated with no send/ack too long: tally desynced, drained -> resync
+                        print("WARN: firmbuf tally desync, resyncing to resume send")
+                        self.firmbuf_used = 0
+                        self.last_tx_progress = time.time()
         else:
             if self.tx_buffer:  # job finished sending
                 self.job_size = 0

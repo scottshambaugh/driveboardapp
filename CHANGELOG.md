@@ -41,6 +41,7 @@
 - Fixed running or exporting a job failing when it contained an empty field.
 - Fixed the python client's run_file ignoring the local flag and any non-default host.
 - Fixed a serial write error being swallowed mid-job instead of stopping the laser; the job no longer skips past the un-sent commands.
+- Fixed a possible firmware buffer overflow when a job was paused for an open door or chiller fault.
 - Fixed import crash for circles/ellipses missing a radius.
 - Fixed import crash for SVGs with non-numeric width/height.
 - Fixed raster dithering artifacts when error diffusion pushed pixels out of range.
