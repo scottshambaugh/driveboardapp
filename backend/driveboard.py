@@ -243,7 +243,7 @@ class SerialLoopClass(threading.Thread):
         threading.Thread.__init__(self)
         self.stop_processing = False
 
-        self.deamon = True  # kill thread when main thread exits
+        self.daemon = True  # kill thread when main thread exits
 
         # lock mechanism for chared data
         # see: http://effbot.org/zone/thread-synchronization.htm
@@ -1118,7 +1118,8 @@ def absoffset(x=None, y=None, z=None):
 
 
 def jobfile(filepath):
-    jobdict = json.load(open(filepath))
+    with open(filepath) as fp:
+        jobdict = json.load(fp)
     job(jobdict)
 
 

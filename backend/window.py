@@ -75,14 +75,16 @@ def init():
             return
 
     def update(q):
-        if scrolly.get()[1] == 1.0:
-            for line in itertools.islice(iterex(q.get_nowait, queue.Empty), 10000):
-                if line is None:
-                    return  # stop updating
-                else:
-                    text.insert(tk.END, line)
-                    text.see(tk.END)
-                    root.focus()
+        # always drain the queue (so it can't grow unbounded when scrolled up);
+        # only follow the tail when the view is pinned to the bottom
+        at_bottom = scrolly.get()[1] == 1.0
+        for line in itertools.islice(iterex(q.get_nowait, queue.Empty), 10000):
+            if line is None:
+                return  # stop updating
+            text.insert(tk.END, line)
+            if at_bottom:
+                text.see(tk.END)
+                root.focus()
         global update_callback_id
         update_callback_id = root.after(40, update, q)  # schedule next update
 

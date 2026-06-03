@@ -48,6 +48,7 @@
 - Add CHANGELOG.md
 - Rename master branch to main, drop the develop branch
 - Bump firmware VERSION to 2606
+- Refactored job_laser raster handling into smaller functions (image, path, pixel load, segment finder)
 
 ## v25.12 (December 2025)
 

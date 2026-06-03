@@ -146,7 +146,7 @@ conf["confdir"] = directory
 ### auto-check hardware
 #
 conf["hardware"] = "standard"
-if sys.platform == "linux2":
+if sys.platform.startswith("linux"):
     try:
         if importlib.util.find_spec("RPi.GPIO") is not None:
             conf["hardware"] = "raspberrypi"

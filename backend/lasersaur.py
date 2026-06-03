@@ -262,7 +262,7 @@ class Lasersaur:
 
         with open(image, "rb") as fp:
             img = fp.read()
-        img_b64 = base64.encodestring(img).decode("utf8")
+        img_b64 = base64.encodebytes(img).decode("utf8")
         job = {
             "raster": {
                 "passes": [
@@ -397,16 +397,16 @@ class Lasersaur:
     def build(self, firmware_name=None):
         """Build firmware from firmware/src files."""
         if firmware_name:
-            self._request("/build")
-        else:
             self._request("/build/" + firmware_name)
+        else:
+            self._request("/build")
 
     def flash(self, firmware_name=None):
         """Flash firmware to MCU."""
         if firmware_name:
-            self._request("/flash")
-        else:
             self._request("/flash/" + firmware_name)
+        else:
+            self._request("/flash")
 
     def reset(self):
         """Reset MCU"""
@@ -473,10 +473,10 @@ def local():
 
 if __name__ == "__main__":
     jobname = lasersaur.load_library("lasersaur")
-    if lasersaur.ready():
+    if lasersaur.status()["ready"]:
         lasersaur.run(jobname)
 
-    while not lasersaur.ready():
+    while not lasersaur.status()["ready"]:
         print("{} done!".format(lasersaur.status()["progress"]))
         time.sleep(1)
 

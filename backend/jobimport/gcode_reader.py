@@ -299,8 +299,6 @@ class GcodeReader:
                     print("ERROR: M0,M1 pause not supported")
                 elif code[0] == "M" and code[1] in (4,):
                     print("ERROR: M4 reverse spindle not supported")
-                elif code[0] == "M" and code[1] == (20,):
-                    print("ERROR: inch units not supported")
 
             ### commit actions in right order
             # commit coolant

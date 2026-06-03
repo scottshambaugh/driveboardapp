@@ -137,17 +137,17 @@ def read_svg(svg_string, tolerance, forced_dpi=None, optimize=True):
         #     elif a[0] > b[0]: return 1
         #     else: return 0
         res["lasertags"].sort()
-        # add tags ass passes
+        # index item ids by color so each tag maps to its items in one lookup
+        color_to_idxs = {}
+        for i, item in enumerate(job["items"]):
+            if "color" in item:
+                color_to_idxs.setdefault(item["color"], []).append(i)
+        # add tags as passes
         for tag in res["lasertags"]:
             if len(tag) == 11:
                 idxs = []
                 for colidx in range(5, 10):
-                    color = tag[colidx]
-                    i = 0
-                    for item in job["items"]:
-                        if "color" in item and item["color"] == color:
-                            idxs.append(i)
-                        i += 1
+                    idxs.extend(color_to_idxs.get(tag[colidx], []))
                 if "passes" not in job:
                     job["passes"] = []
                 job["passes"].append({"items": idxs, "feedrate": tag[1], "intensity": tag[3]})
