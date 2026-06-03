@@ -551,6 +551,7 @@ class SerialLoopClass(threading.Thread):
             if not self._paused:
                 if (self.FIRMBUF_SIZE - self.firmbuf_used) > self.TX_CHUNK_SIZE:
                     self.last_tx_progress = time.time()
+                    assumedSent = 0  # bytes that made it out; stays 0 on failure
                     try:
                         # to_send = ''.join(islice(self.tx_buffer, 0, self.TX_CHUNK_SIZE))
                         to_send = self.tx_buffer[self.tx_pos : self.tx_pos + self.TX_CHUNK_SIZE]
@@ -574,7 +575,6 @@ class SerialLoopClass(threading.Thread):
                         actuallySent = self.device.write(to_send)
                         if actuallySent != expectedSent * 2:
                             print("ERROR: write did not complete")
-                            assumedSent = 0
                         else:
                             assumedSent = expectedSent
                             self.firmbuf_used += assumedSent
@@ -583,12 +583,11 @@ class SerialLoopClass(threading.Thread):
                         if time.time() - t_prewrite > 0.1:
                             print("WARN: write delay 1")
                     except serial.SerialTimeoutException:
-                        assumedSent = 0
+                        # transient: don't advance, the chunk is retried next loop
                         print("ERROR: writeTimeoutError 2")
-                    except BaseException as e:
-                        print("ERROR: unknown error")
-                        print(str(e))
 
+                    # only advance past bytes the device accepted; a genuine write
+                    # error propagates to run() which stops processing
                     self.tx_pos += assumedSent
                 elif time.time() - self.last_tx_progress > self.FIRMBUF_STALL_TIMEOUT:
                     # gated with no send/ack too long: tally desynced, drained -> resync
