@@ -142,6 +142,31 @@ def test_serial_write_resume_resets_status(loop):
     assert loop.request_resume is False
 
 
+def test_stop_overrides_pause(loop):
+    # A stop while paused must win: it clears the pause, purges the queued job,
+    # and requests the stop. (stop() is the host side of "stop overrides pause".)
+    loop.tx_buffer = bytearray(b"data")
+    driveboard.pause()
+    assert loop._paused is True
+    driveboard.stop()
+    assert loop._paused is False
+    assert loop.request_stop is True
+    assert loop.tx_buffer == bytearray()
+
+
+def test_serial_write_sends_stop_char_while_paused(loop):
+    # The CMD_STOP char is emitted ahead of the buffer-send gate, so the e-stop
+    # reaches the controller even while paused (queued data is NOT sent).
+    loop.device = FakeDevice()
+    loop.request_status = 0  # suppress the periodic status request prefix
+    loop._paused = True
+    loop.request_stop = True
+    loop.tx_buffer = bytearray(b"queued")
+    loop._serial_write()
+    assert ord(driveboard.CMD_STOP) in loop.device.written
+    assert loop.tx_pos == 0, "queued data must not be sent while paused"
+
+
 # ---------------------------------------------------------------------------
 # Pause / unpause (freeze motion in place, beam off)
 # ---------------------------------------------------------------------------

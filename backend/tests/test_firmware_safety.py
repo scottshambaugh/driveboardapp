@@ -125,6 +125,25 @@ def test_unpause_clears_paused():
 
 
 # ---------------------------------------------------------------------------
+# Stop override: an e-stop must win over a pause and reach the controller even
+# with data queued ahead of it (control chars act in the RX ISR immediately).
+# ---------------------------------------------------------------------------
+
+
+def test_stop_overrides_pause():
+    out, _ = fw.run(send=fw.double([fw.CMD_PAUSE, fw.CMD_STOP, fw.CMD_SUPERSTATUS]))
+    assert fw.STOPERROR_SERIAL_STOP_REQUEST in out, "stop not reported after a pause"
+    assert fw.INFO_PAUSED not in fw.frames(out)[-1], "stop did not override the pause"
+
+
+def test_stop_bypasses_queued_data():
+    # Queue several buffered parameter frames, THEN issue the stop + status.
+    queued = fw.double(fw.encode_value_param(fw.PARAM_INTENSITY, 100)) * 3
+    out, _ = fw.run(send=queued + fw.double([fw.CMD_STOP, fw.CMD_SUPERSTATUS]))
+    assert fw.STOPERROR_SERIAL_STOP_REQUEST in out, "stop did not bypass the queued data"
+
+
+# ---------------------------------------------------------------------------
 # Malformed serial input is rejected safely
 # ---------------------------------------------------------------------------
 
