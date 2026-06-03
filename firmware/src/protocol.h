@@ -81,6 +81,7 @@
 #define STOPERROR_INVALID_COMMAND '<'
 #define STOPERROR_INVALID_PARAMETER '>'
 #define STOPERROR_TRANSMISSION_ERROR '='
+#define STOPERROR_SERIAL_WATCHDOG ';'
 
 
 // status: info markers

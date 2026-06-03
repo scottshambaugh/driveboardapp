@@ -24,10 +24,12 @@
 #include <util/atomic.h>
 #include <avr/sleep.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 #include <math.h>
 #include "serial.h"
 #include "config.h"
 #include "stepper.h"
+#include "sense_control.h"
 #include "protocol.h"
 
 
@@ -92,6 +94,22 @@ void serial_init() {
 	// defaults to 8-bit, no parity, 1 stop bit
 
   serial_write(INFO_HELLO);
+
+  // Serial watchdog. If the host stops talking mid-job (process died, USB
+  // unplugged, host serial thread hung) the firmware would otherwise keep
+  // executing buffered motion with the beam firing. The watchdog timer is
+  // reset on every received byte (USART_RX_vect); the host polls status at
+  // least every 0.4s, so a 1s timeout leaves margin without false trips. On
+  // timeout ISR(WDT_vect) forces a safe stop. We use INTERRUPT mode (not
+  // system-reset mode) so position is kept and the host can resume cleanly on
+  // reconnect.
+  cli();
+  wdt_reset();
+  MCUSR &= ~(1 << WDRF);              // clear any stale watchdog-reset flag
+  WDTCSR |= (1 << WDCE) | (1 << WDE); // open the timed configuration window
+  WDTCSR = (1 << WDIE)               // interrupt mode (WDE=0 -> no MCU reset)
+         | (1 << WDP2) | (1 << WDP1); // 1s timeout (WDP[3:0]=0b0110)
+  sei();
 }
 
 void serial_stop() {
@@ -170,8 +188,21 @@ inline uint8_t serial_read() {
 }
 
 
+// serial watchdog timeout: the host has gone silent. Force a safe state.
+// Zero the beam directly (in static-PWM mode an idle machine can hold the beam
+// on and the stepper ISR may not be running to act on the stop), then latch a
+// stop so motion halts and an explicit resume is required. Re-arm WDIE to stay
+// in interrupt mode rather than falling through to a system reset.
+ISR(WDT_vect) {
+  control_laser_intensity(0);
+  stepper_request_stop(STOPERROR_SERIAL_WATCHDOG);
+  WDTCSR |= (1 << WDIE);
+}
+
+
 // rx interrupt, called whenever a new byte is in UDR0
 SIGNAL(USART_RX_vect) {
+  wdt_reset();  // a byte arrived: host is alive, reset the watchdog timer
   uint8_t data = UDR0;
   // transmission error check
   if (first_transmission) {  // ignore data

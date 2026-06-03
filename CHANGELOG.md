@@ -13,6 +13,7 @@
 - Fixed the job name not resetting when clearing a job.
 - Improved raster streaming performance by reducing serial lock contention.
 - Fixed move commands firing the laser with leftover intensity from a prior job.
+- Added a firmware serial watchdog that stops the laser if the host connection is lost.
 
 ### Development
 - 

@@ -83,6 +83,7 @@ ERROR_INVALID_DATA = ":"
 ERROR_INVALID_COMMAND = "<"
 ERROR_INVALID_PARAMETER = ">"
 ERROR_TRANSMISSION_ERROR = "="
+ERROR_SERIAL_WATCHDOG = ";"
 
 # status: info flags
 INFO_IDLE_YES = "A"
@@ -173,6 +174,7 @@ markers_rx = {
     "<": "ERROR_INVALID_COMMAND",
     ">": "ERROR_INVALID_PARAMETER",
     "=": "ERROR_TRANSMISSION_ERROR",
+    ";": "ERROR_SERIAL_WATCHDOG",
     # status: info flags
     "A": "INFO_IDLE_YES",
     "B": "INFO_DOOR_OPEN",
@@ -263,7 +265,8 @@ class SerialLoopClass(threading.Thread):
             "stops": {},
             # possible keys:
             # x1, x2, y1, y2, z1, z2,
-            # requested, buffer, marker, data, command, parameter, transmission
+            # requested, buffer, marker, data, command, parameter, transmission,
+            # watchdog
             "info": {},
             # possible keys: door, chiller
             ### super
@@ -344,7 +347,9 @@ class SerialLoopClass(threading.Thread):
                     self._status["ready"] = False
                     print("ERROR: serial got disconnected 3.")
                 # status request
-                if time.time() - last_status_request > 0.5:
+                # Note: this also feeds the firmware serial watchdog (1s); at
+                # 0.4s even a paused/idle host keeps it fed with 2.5x margin.
+                if time.time() - last_status_request > 0.4:
                     if self._status["ready"]:
                         self.request_status = 2  # ready -> super request
                     else:
@@ -416,6 +421,9 @@ class SerialLoopClass(threading.Thread):
                 elif data_char == ERROR_TRANSMISSION_ERROR:
                     self._s["stops"]["transmission"] = True
                     print("ERROR firmware: transmission")
+                elif data_char == ERROR_SERIAL_WATCHDOG:
+                    self._s["stops"]["watchdog"] = True
+                    print("ERROR firmware: serial watchdog (host comms lost)")
                 else:
                     print("ERROR: invalid stop error marker")
                 # in stop mode, print recent transmission, unless stop request, or limit
