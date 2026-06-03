@@ -3,6 +3,12 @@ var app_config_editable = undefined;
 var app_config_defaults = undefined;
 var app_config_path = undefined;
 var app_run_btn = undefined;
+
+// config keys that have a fixed set of choices -> rendered as a dropdown
+var config_enum_options = {
+  raster_mode: ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"],
+  fill_mode: ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"],
+};
 var app_fill_btn = undefined;
 var app_visibility = true;
 
@@ -213,8 +219,8 @@ function config_build_form() {
 
   // bind input change events to update reset button state
   $("#config_content")
-    .off("change input", "input")
-    .on("change input", "input", function () {
+    .off("change input", "input, select")
+    .on("change input", "input, select", function () {
       var $input = $(this);
       var key = $input.attr("data-key");
       if (!key) return;
@@ -252,7 +258,30 @@ function config_render_input(key, value) {
   var inputId = "config_input_" + key;
   var valueType = typeof value;
 
-  if (valueType === "boolean") {
+  if (config_enum_options[key]) {
+    var options = config_enum_options[key]
+      .map(function (opt) {
+        return (
+          '<option value="' +
+          opt +
+          '"' +
+          (opt === value ? " selected" : "") +
+          ">" +
+          opt +
+          "</option>"
+        );
+      })
+      .join("");
+    return (
+      '<select class="form-control input-sm" id="' +
+      inputId +
+      '" data-key="' +
+      key +
+      '" style="width:200px">' +
+      options +
+      "</select>"
+    );
+  } else if (valueType === "boolean") {
     return (
       '<input type="checkbox" id="' +
       inputId +

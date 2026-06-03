@@ -59,6 +59,8 @@
 - Hardened firmware against rare data races in position reporting and underrun counting.
 - Reduced UI overhead from the live head-position marker.
 - Fixed firmware flashing using a stale/empty serial port instead of the connected one.
+- Raster and fill mode settings are now dropdowns in the config UI instead of free text.
+- Quieted noisy systemctl errors when the app can't disable system sleep (e.g. on Crostini).
 
 ### Development
 - Add CHANGELOG.md
