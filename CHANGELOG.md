@@ -14,6 +14,7 @@
 - Improved raster streaming performance by reducing serial lock contention.
 - Fixed move commands firing the laser with leftover intensity from a prior job.
 - Added a firmware serial watchdog that stops the laser if the host connection is lost.
+- Sped up path optimization for large vector jobs.
 
 ### Development
 - 

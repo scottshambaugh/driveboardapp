@@ -22,16 +22,16 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-from copy import deepcopy
-
 
 class Hyperrectangle:
     """an axis aligned bounding box of arbitrary dimension"""
 
     def __init__(self, dim, min, max):
         self.dim = dim
-        self.min = deepcopy(min)  # min and max should never point to the same instance
-        self.max = deepcopy(max)
+        # min and max must be independent lists (extend() mutates them); a
+        # shallow copy suffices since coordinates are immutable floats.
+        self.min = list(min)
+        self.max = list(max)
 
     def extend(self, pos):
         """adapt the hyperectangle if necessary so it will contain pos."""
@@ -59,7 +59,7 @@ class Node:
     """implements a node in a kd-tree"""
 
     def __init__(self, pos, data=None):
-        self.pos = deepcopy(pos)
+        self.pos = list(pos)
         self.data = data
         self.left = None
         self.right = None
