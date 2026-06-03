@@ -22,6 +22,12 @@ import os
 import sys
 import tempfile
 
+# AVR toolchain constants for the Driveboard's atmega328 (build + flash)
+AVR_DEVICE = "atmega328p"
+AVR_PROGRAMMER = "arduino"  # bootloader
+AVR_BITRATE = "115200"
+AVR_CLOCK = "16000000"
+
 conf = {
     "appname": "driveboardapp",
     "version": "26.06",

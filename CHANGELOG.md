@@ -49,6 +49,7 @@
 - Fixed a corrupted serial byte still being acted on after failing the transmission-error check (could undo the resulting stop).
 - Fixed reordering passes scrambling color assignments on jobs with ten or more colors.
 - Fixed raster engraving firing slightly low at high power, caused by a 16-bit overflow in the firmware intensity calculation.
+- Fixed DXF import bounds and placement using a fixed bed size instead of the configured workspace.
 - Fixed import crash for circles/ellipses missing a radius.
 - Fixed import crash for SVGs with non-numeric width/height.
 - Fixed raster dithering artifacts when error diffusion pushed pixels out of range.
@@ -63,6 +64,7 @@
 - Bump firmware VERSION to 2606
 - Refactored job_laser raster handling into smaller functions (image, path, pixel load, segment finder)
 - Hardened the firmware build script with argv lists instead of shell=True (no injection, handles paths with spaces)
+- Consolidated the AVR toolchain constants (device, programmer, bitrate, clock) into config, shared by build and flash
 
 ## v25.12 (December 2025)
 

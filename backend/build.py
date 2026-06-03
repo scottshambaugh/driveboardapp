@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 
-from config import conf
+from config import AVR_CLOCK, AVR_DEVICE, conf
 
 # Make sure you have the Arduino IDE installed (we've tested this on 022 and newer).
 # While build.py does not use the IDE directly it makes use of its tool chain.
@@ -95,8 +95,8 @@ def build_firmware(firmware_name="DriveboardFirmware"):
     cwd_temp = os.getcwd()
     os.chdir(source_dir)
 
-    DEVICE = "atmega328p"
-    CLOCK = "16000000"
+    DEVICE = AVR_DEVICE
+    CLOCK = AVR_CLOCK
     BUILDNAME = firmware_name
     OBJECTS = ["main", "serial", "protocol", "planner", "sense_control", "stepper"]
 

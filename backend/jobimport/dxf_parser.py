@@ -15,18 +15,18 @@ class DXFParser:
     """Parse DXF using dxfgrabber >=0.7.4 <=0.8.1
 
     Usage:
-    reader = DXFParser(tolerance)
+    reader = DXFParser(tolerance, bedwidth)
     returns dictionary of layers using found colors
     """
 
-    def __init__(self, tolerance):
+    def __init__(self, tolerance, bedwidth):
         self.debug = False
         self.verbose = True
         # tolerance settings, used in tessalation, path simplification, etc
         self.tolerance = tolerance
         self.tolerance2 = tolerance**2
 
-        self.bedwidth = [1220, 610]
+        self.bedwidth = bedwidth
 
         self.dxfgrabber_version = dxfgrabber.version
 

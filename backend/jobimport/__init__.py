@@ -161,7 +161,7 @@ def read_svg(svg_string, tolerance, forced_dpi=None, optimize=True):
 
 def read_dxf(dxf_string, tolerance, optimize=True):
     """Read a dxf file string and optimize returned value."""
-    dxfParser = DXFParser(tolerance)
+    dxfParser = DXFParser(tolerance, conf["workspace"])
     # second argument is the forced unit, TBI in Driverboard
     job = dxfParser.parse(dxf_string, None)
     if optimize:

@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-from config import conf
+from config import AVR_BITRATE, AVR_DEVICE, AVR_PROGRAMMER, conf
 
 
 def flash_upload(
@@ -27,9 +27,9 @@ def flash_upload(
         return
 
     if not (conf["hardware"] == "beaglebone" or conf["hardware"] == "raspberrypi"):
-        DEVICE = "atmega328p"
-        PROGRAMMER = "arduino"
-        BITRATE = "115200"
+        DEVICE = AVR_DEVICE
+        PROGRAMMER = AVR_PROGRAMMER
+        BITRATE = AVR_BITRATE
 
         if sys.platform == "darwin":  # OSX
             AVRDUDEAPP = os.path.join(resources_dir, "firmware/tools_osx/avrdude")
@@ -91,9 +91,9 @@ def flash_upload(
         AVRDUDEAPP = "avrdude"
         AVRDUDECONFIG = "/etc/avrdude.conf"
         SERIAL_PORT = serial_port
-        DEVICE = "atmega328p"
-        PROGRAMMER = "arduino"  # use this for bootloader
-        BITRATE = "115200"
+        DEVICE = AVR_DEVICE
+        PROGRAMMER = AVR_PROGRAMMER  # use this for bootloader
+        BITRATE = AVR_BITRATE
 
         command = [
             AVRDUDEAPP,
@@ -231,11 +231,11 @@ def usb_reset_hack():
     command = [
         "avrdude",
         "-p",
-        "atmega328p",
+        AVR_DEVICE,
         "-P",
         conf["serial_port"],
         "-c",
-        "arduino",
+        AVR_PROGRAMMER,
         "-U",
         "flash:r:flash.bin:r",
         "-q",
