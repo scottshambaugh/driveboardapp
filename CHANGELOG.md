@@ -15,6 +15,7 @@
 
 ### New Features
 - Added a NearestNeighbor raster mode that reorders engraved segments to minimize seek travel, speeding up sparse/large-whitespace images.
+- Engrave only the visible part of a cropped (rectangular clip-path) image from an SVG, including clips on a wrapping group.
 
 ### Bug Fixes
 - Fixed raster engraving freezing mid-job. A firmware data race on the serial

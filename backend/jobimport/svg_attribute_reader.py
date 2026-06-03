@@ -45,6 +45,7 @@ class SVGAttributeReader:
             "cx": self.dimensionAttrib,
             "cy": self.dimensionAttrib,
             "href": self.stringAttrib,
+            "clip-path": self.clipPathAttrib,
         }
 
         self.re_findall_transforms = re.compile(r"(([a-z]+)\s*\(([^)]*)\))", re.IGNORECASE).findall
@@ -69,6 +70,16 @@ class SVGAttributeReader:
         """Read a string attribute."""
         if value != "inherit":
             node[attr] = value
+
+    def clipPathAttrib(self, node, attr, value):
+        """Read a clip-path; store the referenced clipPath id from url(#id)."""
+        v = value.strip()
+        if v == "none":
+            node["clip-path"] = None
+            return
+        m = re.search(r"url\(\s*['\"]?#([^)'\"\s]+)['\"]?\s*\)", v)
+        if m:
+            node["clip-path"] = m.group(1)
 
     def opacityAttrib(self, node, attr, value):
         """Read a opacity attribute."""

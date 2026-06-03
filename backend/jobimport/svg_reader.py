@@ -102,6 +102,10 @@ class SVGReader:
 
         self.rasters = []
 
+        # rectangular clipPaths, by id: {"corners": [[x,y],[x2,y2]], "local": xform}
+        # (clipPath elements are not otherwise traversed; collected up front)
+        self._clip_rects = {}
+
     def _flip_image_data(self, data_uri, flip_h, flip_v):
         """Flip image data horizontally and/or vertically.
 
@@ -149,6 +153,114 @@ class SVGReader:
         except Exception as e:
             log.warning(f"Failed to flip image: {e}")
             return data_uri
+
+    def _crop_image_data(self, data_uri, fx0, fy0, fx1, fy1):
+        """Crop image to the fractional box (fx0,fy0)-(fx1,fy1) of its extent.
+
+        Returns a new data URI, or the original if processing fails.
+        """
+        try:
+            if "," not in data_uri:
+                return data_uri
+            header, b64data = data_uri.split(",", 1)
+            img = Image.open(io.BytesIO(base64.b64decode(b64data)))
+            if img.mode in ("P", "1", "L", "LA", "PA"):
+                img = img.convert("RGBA")
+            w, h = img.size
+            box = (
+                max(0, min(w, round(fx0 * w))),
+                max(0, min(h, round(fy0 * h))),
+                max(0, min(w, round(fx1 * w))),
+                max(0, min(h, round(fy1 * h))),
+            )
+            if box[2] <= box[0] or box[3] <= box[1]:
+                return data_uri
+            img = img.crop(box)
+            buffer = io.BytesIO()
+            img_format = "PNG" if "png" in header.lower() else "JPEG"
+            if img_format == "JPEG" and img.mode == "RGBA":
+                img = img.convert("RGB")
+            img.save(buffer, format=img_format)
+            new_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            return header + "," + new_b64
+        except Exception as e:
+            log.warning(f"Failed to crop image: {e}")
+            return data_uri
+
+    def _prescan_clip_rects(self, root):
+        """Collect rectangular clipPaths (a single child <rect>) keyed by id.
+
+        clipPath elements have no tag handler, so they are never visited during
+        the normal traversal; gather the supported (rect) ones up front.
+        """
+        ar = self._tagReader._attribReader
+        for el in root.iter():
+            if self._tagReader._get_tag(el) != "clipPath":
+                continue
+            cid = el.get("id")
+            if not cid:
+                continue
+            rects = [c for c in el if self._tagReader._get_tag(c) == "rect"]
+            if len(rects) != 1:
+                continue  # only single-rect clips are supported for now
+            r = rects[0]
+            x = ar._parseUnit(r.get("x") or "0") or 0.0
+            y = ar._parseUnit(r.get("y") or "0") or 0.0
+            w = ar._parseUnit(r.get("width") or "0") or 0.0
+            h = ar._parseUnit(r.get("height") or "0") or 0.0
+            if w <= 0 or h <= 0:
+                continue
+            tmp = {"xform": [1, 0, 0, 1, 0, 0]}
+            tx = r.get("transform")
+            if tx:
+                ar.transformAttrib(tmp, "transform", tx)
+            self._clip_rects[cid] = {
+                "corners": [[x, y], [x + w, y + h]],
+                "local": tmp["xform"],
+            }
+
+    def _clip_box_mm(self, clip):
+        """Axis-aligned mm bounding box of a clip context's rect, after applying
+        the rect's own transform, the referencing element's frame, and px2mm."""
+        corners_xy = clip["rect"]["corners"]
+        local = clip["rect"]["local"]
+        frame = clip["frame"]
+        (x0, y0), (x1, y1) = corners_xy
+        xs, ys = [], []
+        for px, py in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)):
+            p = [px, py]
+            matrixApply(local, p)  # rect's own transform
+            matrixApply(frame, p)  # clipping element's frame
+            vertexScale(p, self.px2mm)  # to mm
+            xs.append(p[0])
+            ys.append(p[1])
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def _apply_clips(self, raster, clips):
+        """Crop raster in-place to the intersection of its clip boxes and image
+        box. Returns False if the clip removes the image entirely (drop it)."""
+        px0, py0 = raster["pos"][0], raster["pos"][1]
+        pw, ph = raster["size"][0], raster["size"][1]
+        ix0, iy0, ix1, iy1 = px0, py0, px0 + pw, py0 + ph
+        for clip in clips:
+            cx0, cy0, cx1, cy1 = self._clip_box_mm(clip)
+            ix0, iy0 = max(ix0, cx0), max(iy0, cy0)
+            ix1, iy1 = min(ix1, cx1), min(iy1, cy1)
+        if ix1 <= ix0 or iy1 <= iy0:
+            return False  # nothing left
+        if ix0 <= px0 and iy0 <= py0 and ix1 >= px0 + pw and iy1 >= py0 + ph:
+            return True  # clip contains the image; no crop
+        if Image is not None and raster["data"]:
+            raster["data"] = self._crop_image_data(
+                raster["data"],
+                (ix0 - px0) / pw,
+                (iy0 - py0) / ph,
+                (ix1 - px0) / pw,
+                (iy1 - py0) / ph,
+            )
+        raster["pos"] = [ix0, iy0]
+        raster["size"] = [ix1 - ix0, iy1 - iy0]
+        return True
 
     def parse(self, svgstring, force_dpi=None, require_unit=False):
         """Parse a SVG document.
@@ -335,6 +447,7 @@ class SVGReader:
             "stroke-opacity": 1.0,
             "opacity": 1.0,
         }
+        self._prescan_clip_rects(svgRootElement)
         self.parse_children(svgRootElement, node)
 
         # build result dictionary
@@ -375,11 +488,32 @@ class SVGReader:
                     "fill-opacity": parentNode.get("fill-opacity"),
                     "stroke-opacity": parentNode.get("stroke-opacity"),
                     "opacity": parentNode.get("opacity"),
+                    # active rectangular clip contexts inherited from ancestors
+                    # (clip-path is not an inherited property, but the clipped
+                    # region still constrains descendants)
+                    "clips": list(parentNode.get("clips", [])),
                 }
 
                 # 2. parse child
                 # with current attributes and transformation
                 self._tagReader.read_tag(child, node)
+
+                # 2b. if this element carries its own clip-path that resolves to
+                # a supported rect, add it as a clip context in this element's
+                # own frame (xformToWorld now includes the element's transform)
+                own_clip = node.get("clip-path")
+                if own_clip:
+                    if own_clip in self._clip_rects:
+                        node["clips"].append(
+                            {
+                                "rect": self._clip_rects[own_clip],
+                                "frame": list(node["xformToWorld"]),
+                            }
+                        )
+                    else:
+                        log.info(
+                            f"clip-path #{own_clip} is not a supported rectangular clip; ignored"
+                        )
 
                 # 3. compile boundarys + conversions
                 for path_entry in node["paths"]:
@@ -432,6 +566,11 @@ class SVGReader:
                     # Apply flip to image data if needed
                     if (flip_h or flip_v) and Image is not None and raster["data"]:
                         raster["data"] = self._flip_image_data(raster["data"], flip_h, flip_v)
+
+                    # Crop to any active rectangular clip-path (pos/size are now
+                    # the normalized top-left + positive extent in mm)
+                    if node["clips"] and not self._apply_clips(raster, node["clips"]):
+                        continue  # fully clipped away -> drop the image
 
                     self.rasters.append(raster)
 
