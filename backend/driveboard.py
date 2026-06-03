@@ -1844,9 +1844,14 @@ def disable_computer_sleep():
             "hybrid-sleep.target",
         ]
         try:
-            subprocess.run(["systemctl", "mask", *args])
+            # masking units needs root/polkit; on unprivileged hosts (e.g.
+            # Crostini) systemctl prints "Interactive authentication required".
+            # Swallow its stderr and continue with a single friendly note.
+            result = subprocess.run(["systemctl", "mask", *args], stderr=subprocess.DEVNULL)
+            if result.returncode != 0:
+                print("INFO: couldn't disable system sleep (needs root); continuing")
         except Exception:
-            print("Failed to disable hibernation")
+            print("INFO: couldn't disable system sleep; continuing")
     else:  # if system == 'Darwin':
         print(f"Display disabling not implemented in {system}")
 
@@ -1867,9 +1872,11 @@ def enable_computer_sleep():
             "hybrid-sleep.target",
         ]
         try:
-            subprocess.run(["systemctl", "unmask", *args])
+            result = subprocess.run(["systemctl", "unmask", *args], stderr=subprocess.DEVNULL)
+            if result.returncode != 0:
+                print("INFO: couldn't re-enable system sleep (needs root); continuing")
         except Exception:
-            print("Failed to reenable hibernation")
+            print("INFO: couldn't re-enable system sleep; continuing")
     else:  # if system == 'Darwin':
         print(f"Display disabling not implemented in {system}")
 
