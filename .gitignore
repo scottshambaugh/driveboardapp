@@ -2,3 +2,21 @@
 *.pyo
 *.DS_Store
 .vscode
+
+# Python / test / lint artifacts
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Build artifacts
+deploy/build/
+deploy/dist/
+node_modules/
+
+# Local tooling / machine-specific
+.claude/
+driveboardapp.bat
