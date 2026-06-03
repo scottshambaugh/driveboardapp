@@ -22,7 +22,7 @@ __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 DEBUG = False
 bottle.BaseRequest.MEMFILE_MAX = 1024 * 1024 * 100  # max 100Mb files
-time_status_last = 0
+time_reconnect_last = 0
 
 if conf["mill_mode"]:
     frontend_path = "frontend_mill"
@@ -164,10 +164,12 @@ def confserial(port=None):
 @bottle.route("/status")
 @bottle.auth_basic(checkuser)
 def status():
-    global time_status_last
-    if not driveboard.connected() and (time.time() - time_status_last) > 6.0:
+    global time_reconnect_last
+    # while disconnected, retry the reconnect at most every 5s so the frequent
+    # status polls don't hammer it
+    if not driveboard.connected() and (time.time() - time_reconnect_last) > 5.0:
+        time_reconnect_last = time.time()
         driveboard.reconnect()
-    time_status_last = time.time()
     return json.dumps(driveboard.status())
 
 

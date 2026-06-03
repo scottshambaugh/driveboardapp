@@ -966,6 +966,7 @@ def reconnect():
             SerialLoop.join()
         SerialLoop = None
 
+    print(f"INFO: serial disconnected, attempting reconnect on {conf['serial_port']}")
     if saved is not None:
         # resume path: reconnect to the known port without resetting the
         # controller, then carry the held job over (still paused)
@@ -978,11 +979,15 @@ def reconnect():
                 SerialLoop.firmbuf_used = saved["firmbuf_used"]
                 SerialLoop._paused = True  # stay paused until the user resumes
                 SerialLoop._disconnected = True  # gate resume on firmware-paused
-            print("INFO: reconnected with a held job; paused — resume to continue")
+            print("INFO: reconnected with a held job, paused. resume to continue")
         else:
             print("WARN: could not reconnect to resume the held job")
     else:
         connect_withfind(verbose=False)
+        if connected():
+            print("INFO: serial reconnected")
+        else:
+            print("WARN: serial reconnect attempt failed")
 
 
 def close():
