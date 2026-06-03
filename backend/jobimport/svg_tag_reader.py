@@ -139,7 +139,7 @@ class SVGTagReader:
             if rx > w / 2.0:
                 rx = w / 2.0
             if ry > h / 2.0:
-                rx = h / 2.0
+                ry = h / 2.0
             if rx < 0.0:
                 rx *= -1
             if ry < 0.0:
