@@ -39,6 +39,7 @@
 - Fixed import crash for SVGs with physical dimension units (mm, cm, pt, pc, in).
 - Fixed distorted corners on rounded rectangles with a large ry.
 - Fixed running or exporting a job failing when it contained an empty field.
+- Fixed the python client's run_file ignoring the local flag and any non-default host.
 - Fixed import crash for circles/ellipses missing a radius.
 - Fixed import crash for SVGs with non-numeric width/height.
 - Fixed raster dithering artifacts when error diffusion pushed pixels out of range.

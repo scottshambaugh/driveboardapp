@@ -346,7 +346,7 @@ class Lasersaur:
         """A quick way to run a job"""
         base, name = os.path.split(jobfile)
         name, ext = os.path.splitext(name)
-        job = lasersaur.open_file(jobfile, optimize=True)
+        job = self.open_file(jobfile, optimize=True)
         if "vector" in job and "paths" in job["vector"] and type(job["vector"]["paths"]) is list:
             if "passes" not in job["vector"] or feedrate is not None:
                 # file has no pass info | feedrate is specified
@@ -362,8 +362,8 @@ class Lasersaur:
         if local:
             self.host = "127.0.0.1"
             self.port = 4444
-        jobname = lasersaur.load(job, name=name, optimize=False)
-        lasersaur.run(jobname, progress=progress)
+        jobname = self.load(job, name=name, optimize=False)
+        self.run(jobname, progress=progress)
         return jobname
 
     def pause(self):
