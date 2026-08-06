@@ -13,13 +13,17 @@ function save_preset() {
   var feedrate = parseInt($("#preset_feedrate").val());
   var intensity = parseInt($("#preset_intensity").val());
   var pxsize = parseFloat($("#preset_pxsize").val());
+  var pierce_time = parseFloat($("#preset_pierce_time").val());
+  if (isNaN(pierce_time)) {
+    pierce_time = 0;
+  }
   if (
     !isNaN(feedrate) &&
     !isNaN(intensity) & !isNaN(pxsize) & (name.length > 0) &&
     feedrate + intensity > 0
   ) {
     request_get({
-      url: `/save_preset/${name}/${feedrate}/${intensity}/${pxsize}`,
+      url: `/save_preset/${name}/${feedrate}/${intensity}/${pxsize}/${pierce_time}`,
     });
     $("#presets_modal").modal("toggle");
     presets_update();
@@ -43,6 +47,7 @@ function presets_update() {
       <td style="text-align:right;">Feedrate</td>
       <td style="text-align:right;">Intensity</td>
       <td style="text-align:right;">Pxsize</td>
+      <td style="text-align:right;">Pierce</td>
       <td></td>
     </tr>
     </thead>
@@ -60,6 +65,9 @@ function presets_update() {
       <td>
         <input id="preset_pxsize" type="text" class="form-control input-sm" style="width:44px; margin-left:auto;" value="" title="pixel size">
       </td>
+      <td>
+        <input id="preset_pierce_time" type="text" class="form-control input-sm" style="width:44px; margin-left:auto;" value="" title="pierce dwell in seconds">
+      </td>
       <td style="text-align:right;">
         <a id="preset_ok" class="btn" role="button">
           <span class="glyphicon glyphicon-ok" style="color:#00A000"></span>
@@ -74,6 +82,7 @@ function presets_update() {
       <td style="text-align:right;">${presets[i].feedrate}</td>
       <td style="text-align:right;">${presets[i].intensity}%</td>
       <td style="text-align:right;">${presets[i].pxsize}mm</td>
+      <td style="text-align:right;">${presets[i].pierce_time || 0}s</td>
       <td style="text-align:right;">
         <a id="del_preset_btn_${i}" class="btn btn-del-preset" style="margin-left:8px; position:relative; top:1px" role="button">
           <span class="glyphicon glyphicon-trash" style="color:#888888"></span>
@@ -99,7 +108,7 @@ function presets_update() {
       $(".btn-del-preset").click(function (e) {
         var name = $(this).parent().parent().find("td.preset-name").text();
         request_get({
-          url: `/save_preset/${name}/0/0/0`,
+          url: `/save_preset/${name}/0/0/0/0`,
           success: function () {
             presets_update();
           },

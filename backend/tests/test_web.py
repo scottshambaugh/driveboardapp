@@ -249,3 +249,43 @@ def test_status_triggers_reconnect_when_disconnected(auth_app, monkeypatch):
     resp = auth_app.get("/status")
     assert resp.status_int == 200
     assert reconnects, "status poll should attempt a reconnect while disconnected"
+
+
+# ---------------------------------------------------------------------------
+# Presets carry pierce_time, and files written before it existed still load
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def presets_dir(tmp_path, monkeypatch):
+    monkeypatch.setitem(conf, "confdir", str(tmp_path))
+    return tmp_path
+
+
+def _presets_on_disk(presets_dir):
+    with open(presets_dir / "presets.json") as fp:
+        return {p["name"]: p for p in json.load(fp)}
+
+
+def test_save_preset_stores_pierce_time(auth_app, presets_dir):
+    auth_app.get("/save_preset/cut/2000/80/0.2/0.4")
+    assert _presets_on_disk(presets_dir)["cut"]["pierce_time"] == 0.4
+
+
+def test_save_preset_without_pierce_time_still_works(auth_app, presets_dir):
+    # the older four argument url, kept for clients that predate pierce_time
+    auth_app.get("/save_preset/cut/2000/80/0.2")
+    assert _presets_on_disk(presets_dir)["cut"]["pierce_time"] == 0.0
+
+
+def test_listing_presets_migrates_files_without_pierce_time(auth_app, presets_dir):
+    with open(presets_dir / "presets.json", "w") as fp:
+        json.dump([{"name": "old", "feedrate": 2000, "intensity": 80, "pxsize": 0.2}], fp)
+    listed = json.loads(auth_app.get("/listing_presets").body)["presets"]
+    assert listed[0]["pierce_time"] == 0.0
+
+
+def test_delete_preset_still_works(auth_app, presets_dir):
+    auth_app.get("/save_preset/cut/2000/80/0.2/0.4")
+    auth_app.get("/save_preset/cut/0/0/0/0")
+    assert _presets_on_disk(presets_dir) == {}

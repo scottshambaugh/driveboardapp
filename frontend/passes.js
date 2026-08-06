@@ -354,6 +354,7 @@ function presets_select_html() {
         <span class="feedmem" style="display:none;">${presets[i].feedrate}</span>
         <span class="intensitymem" style="display:none;">${presets[i].intensity}</span>
         <span class="pxsizemem" style="display:none;">${presets[i].pxsize}</span>
+        <span class="piercemem" style="display:none;">${presets[i].pierce_time || 0}</span>
       </a>
     </li>
     `;
@@ -440,9 +441,13 @@ function passes_update_presets() {
     var pxsize = $("#pass_" + passnum)
       .find("input.pxsize")
       .val();
+    var pierce_time = $("#pass_" + passnum)
+      .find("input.pierce_time")
+      .val();
     $("#preset_feedrate").val(feedrate);
     $("#preset_intensity").val(intensity);
     $("#preset_pxsize").val(pxsize);
+    $("#preset_pierce_time").val(pierce_time);
     $("#presetdp_" + passnum).dropdown("toggle");
     $("#presets_modal").modal("show");
     $("#preset_name").focus();
@@ -455,6 +460,7 @@ function passes_update_presets() {
     var feedrate = $(this).children("span.feedmem").text();
     var intensity = $(this).children("span.intensitymem").text();
     var pxsize = $(this).children("span.pxsizemem").text();
+    var pierce_time = $(this).children("span.piercemem").text();
     $("#pass_" + passnum)
       .find("input.feedrate")
       .val(feedrate);
@@ -464,6 +470,9 @@ function passes_update_presets() {
     $("#pass_" + passnum)
       .find("input.pxsize")
       .val(pxsize);
+    $("#pass_" + passnum)
+      .find("input.pierce_time")
+      .val(pierce_time);
     $("#presetdp_" + passnum).dropdown("toggle");
     $("#passform_" + passnum).hide();
     $("#passform_" + passnum).show(300);

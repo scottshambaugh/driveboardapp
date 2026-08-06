@@ -676,6 +676,9 @@ def _read_presets():
         with open(path) as fp:
             try:
                 presets = json.load(fp)
+                for one_preset in presets:
+                    # presets saved before pierce_time existed have no pierce
+                    one_preset.setdefault("pierce_time", 0.0)
                 presets.sort(key=lambda x: x["name"].lower())
             except Exception:
                 print("ERROR: failed to read presets file")
@@ -691,9 +694,13 @@ def listing_presets():
     return json.dumps({"presets": presets, "path": _get_presets_path()})
 
 
+# the pierce_time-less form is kept so an older client or a saved link still saves
 @bottle.route("/save_preset/<name>/<feedrate:float>/<intensity:float>/<pxsize:float>")
+@bottle.route(
+    "/save_preset/<name>/<feedrate:float>/<intensity:float>/<pxsize:float>/<pierce_time:float>"
+)
 @bottle.auth_basic(checkuser)
-def save_preset(name, feedrate, intensity, pxsize):
+def save_preset(name, feedrate, intensity, pxsize, pierce_time=0.0):
     """Save a preset setting to presets.json. Delete if feedrate==0 && intensity==0"""
     presets = _read_presets()
     try:
@@ -706,6 +713,7 @@ def save_preset(name, feedrate, intensity, pxsize):
                 "feedrate": feedrate,
                 "intensity": intensity,
                 "pxsize": pxsize,
+                "pierce_time": pierce_time,
             }
         presets = list(presets_dict.values())
         presets.sort(key=lambda x: x["name"].lower())
