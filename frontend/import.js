@@ -187,7 +187,7 @@ function import_open(jobname, from_library) {
         jobhandler.draw();
       }
 
-      jobhandler.set(job, jobname, true, jobhandler_done);
+      jobhandler.set(job, jobname, jobhandler_done);
 
       // debug, show image, stats
       // if ('defs' in job) {

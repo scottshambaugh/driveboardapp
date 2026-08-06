@@ -59,7 +59,6 @@ conf = {
     "raster_leadin": 10,
     "fill_mode": "Bidirectional",  # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
     "fill_leadin": 10,
-    "max_segment_length": 5.0,
     "users": {
         "laser": "laser",
     },
