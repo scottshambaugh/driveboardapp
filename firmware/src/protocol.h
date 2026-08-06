@@ -68,7 +68,7 @@
 // at or below zero reaches the planner as a zero or wrapped step rate, and a
 // dwell holds the beam on in one spot for its whole duration.
 #define MINIMUM_FEEDRATE 0.1              // mm/min
-#define MAXIMUM_DWELL_SECONDS 60.0
+#define MAXIMUM_DWELL_SECONDS 10.0
 
 
 // status: error markers
