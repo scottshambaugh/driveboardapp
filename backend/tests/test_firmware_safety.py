@@ -414,3 +414,24 @@ def test_limit_halts_active_move():
     )
     assert mid["steps"] > 0, "move never started before the limit was tripped"
     assert mid["steps"] < ctl["steps"], "limit did not halt the in-progress move"
+
+
+# ---------------------------------------------------------------------------
+# A dwell clears its own progress only when it runs to completion, so every
+# path that abandons the current block has to clear it too. Otherwise the
+# leftover count carries into the next dwell, which then burns for the wrong
+# time at whatever tick rate the preceding move left behind.
+# ---------------------------------------------------------------------------
+
+
+def test_dwell_progress_cleared_when_a_stop_abandons_it():
+    # trip a limit part way through a long pierce, the way a real stop lands
+    _, _, info = fw.run(
+        send=fw.dwell_program(200, 0.6),
+        run_cycles=8_000_000,
+        watch_symbol="dwell_counter",
+        portc=[fw.LIMIT_PORTC_BIT["x1"]],
+        portc_delay=1_000_000,
+    )
+    assert info["max"] > 0, "the dwell never ran, so the stop proves nothing"
+    assert info["final"] == 0, "abandoned dwell left its count for the next pierce"

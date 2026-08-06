@@ -725,6 +725,29 @@ def test_pierce_falls_back_to_the_config_default(loop, monkeypatch):
     assert params[driveboard.PARAM_DURATION] == pytest.approx(0.25, abs=1e-3)
 
 
+@pytest.mark.parametrize(
+    "key,bad",
+    [
+        ("pierce_time", 999.0),
+        ("pierce_time", "abc"),
+        ("feedrate", 0.0),
+        ("feedrate", -5.0),
+    ],
+)
+def test_bad_config_default_is_rejected_not_clamped(loop, monkeypatch, key, bad):
+    """A config value has to clear the same bounds a pass value does.
+
+    Defaults used to be filled in after validation, so an out of range config
+    only met the sender's silent clamp on its way to the machine.
+    """
+    from config import conf
+
+    monkeypatch.setitem(conf, key, bad)
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match=f"config {key}"):
+        driveboard.job(_param_job(intensity=80.0))
+
+
 def test_pass_pierce_time_overrides_the_config_default(loop, monkeypatch):
     from config import conf
 

@@ -167,6 +167,10 @@ void stepper_start_processing() {
 void stepper_stop_processing() {
   processing_flag = false;
   current_block = NULL;
+  // A dwell only clears its own progress when it runs to completion, so
+  // abandoning one part way would carry the remaining count into the next
+  // dwell, which would then burn for the wrong time at the wrong tick rate.
+  dwell_counter = 0;
   // Disable stepper driver interrupt
   TIMSK1 &= ~(1<<OCIE1A);
   control_laser_intensity(0);

@@ -1325,6 +1325,10 @@ def job_pass_params_validate(jobdict):
     and a long dwell holds the beam on in one spot, so both are rejected here
     rather than silently clamped on the way to the wire.
 
+    Each pass takes its config default here rather than later, so a bad config
+    value is reported the same way a bad pass value is instead of reaching the
+    machine through the sender's silent clamp.
+
     Raises a ValueError naming the offending pass and parameter.
     """
     bounds = {
@@ -1334,23 +1338,28 @@ def job_pass_params_validate(jobdict):
         "pxsize": (0.0, MAX_PARAM_VALUE),
         "pierce_time": (0.0, MAX_DWELL_SECONDS),
     }
+    defaults = {
+        "feedrate": conf["feedrate"],
+        "seekrate": conf["seekrate"],
+        "intensity": 0.0,
+        "pxsize": conf["pxsize"],
+        "pierce_time": conf["pierce_time"],
+    }
     for passidx, pass_ in enumerate(jobdict["passes"]):
         for key, (lo, hi) in bounds.items():
-            if key not in pass_:
-                continue
-            if pass_[key] is None or pass_[key] == "":
-                # an svg cut setting tag leaves unset fields empty, which means
-                # take the default rather than take zero
-                del pass_[key]
-                continue
+            from_config = pass_.get(key) is None or pass_.get(key) == ""
+            if from_config:
+                # unset, or an svg cut setting tag that left the field empty,
+                # so take the default and hold it to the same bounds
+                pass_[key] = defaults[key]
+            # name the knob that actually holds the bad value
+            where = f"pass {passidx + 1}: {'config ' if from_config else ''}{key}"
             try:
                 val = float(pass_[key])
             except (TypeError, ValueError):
-                raise ValueError(
-                    f"pass {passidx + 1}: {key} of {pass_[key]!r} is not a number"
-                ) from None
+                raise ValueError(f"{where} of {pass_[key]!r} is not a number") from None
             if not lo <= val <= hi:
-                raise ValueError(f"pass {passidx + 1}: {key} of {val} outside [{lo}, {hi}]")
+                raise ValueError(f"{where} of {val} outside [{lo}, {hi}]")
             # store the coerced number, svg tags arrive as strings
             pass_[key] = val
         for key in ("air_assist", "aux_assist"):
