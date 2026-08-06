@@ -121,18 +121,14 @@ def test_firmware_variant_compiles(config_file, tmp_path):
 
 
 @pytest.mark.skipif(AVR_OBJCOPY is None, reason="avr-objcopy not installed")
-@pytest.mark.skipif(
-    AVR_GCC_VERSION != HEX_BUILD_AVR_GCC,
-    reason=f"committed hexes reproduce only with avr-gcc {HEX_BUILD_AVR_GCC} (have {AVR_GCC_VERSION})",
-)
 @pytest.mark.parametrize("config_file", _config_variants())
 def test_firmware_variant_matches_committed_hex(config_file, tmp_path):
     """A fresh build of the source must reproduce the committed .hex.
 
     Catches committed firmware binaries drifting out of sync with the source
-    (e.g. source edited but the .hex not rebuilt + committed). Gated to the
-    avr-gcc version the committed hexes were built with, since other versions
-    emit different machine code.
+    (e.g. source edited but the .hex not rebuilt + committed). Also fails on a
+    toolchain mismatch, since another avr-gcc emits different machine code -
+    see test_avr_gcc_toolchain_alignment for the fail-fast diagnostic.
     """
     committed = os.path.join(FIRMWARE_DIR, f"firmware.{_designator(config_file)}.hex")
     assert os.path.exists(committed), f"no committed hex for {config_file}: {committed}"
@@ -151,7 +147,8 @@ def test_firmware_variant_matches_committed_hex(config_file, tmp_path):
     with open(committed, "rb") as f:
         committed_bytes = f.read()
     assert fresh_bytes == committed_bytes, (
-        f"firmware.{_designator(config_file)}.hex is out of sync with the source. "
-        f"Rebuild the firmware (backend/build.py) and commit the .hex files. "
-        f"(If the avr-gcc toolchain changed, the committed hexes must be regenerated.)"
+        f"firmware.{_designator(config_file)}.hex is out of sync with the source "
+        f"(built here with avr-gcc {AVR_GCC_VERSION}; committed hexes expect "
+        f"{HEX_BUILD_AVR_GCC}). Rebuild the firmware (backend/build.py) and commit "
+        f"the .hex files; if the toolchain changed, also update HEX_BUILD_AVR_GCC."
     )
