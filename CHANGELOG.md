@@ -7,6 +7,7 @@
 
 ### Bug Fixes
 - Fix errors in loading a scaled / transformed raster image
+- Limit image extent validation to the bbox that will actually be engraved (skipping eg overhanging whitespace)
 
 ### Development
 - 

@@ -1513,8 +1513,9 @@ def _raster_engraved_box_mm(def_, pass_):
 def _raster_load_pixels(data, px_w, px_h, n_raster_levels):
     """Decode the base64 image to a flat grayscale pixel list (0=black/full
     power, 255=white/no power), applying invert and dithering. Returns
-    (pxarray, pxarray_reversed, px_n)."""
+    (pxarray, pxarray_reversed, px_n, engraved_box)."""
     imgobj = _raster_grayscale(data, px_w, px_h)
+    engraved_box = _raster_engraved_box(imgobj, px_w, px_h)
 
     pxarray = list(imgobj.getdata())
     pxarray[:] = (value for value in pxarray if type(value) is not str)
@@ -1522,7 +1523,7 @@ def _raster_load_pixels(data, px_w, px_h, n_raster_levels):
         pxarray = raster_dither(px_w, px_h, pxarray, n_raster_levels)
     pxarray_reversed = pxarray[::-1]
 
-    return pxarray, pxarray_reversed, len(pxarray)
+    return pxarray, pxarray_reversed, len(pxarray), engraved_box
 
 
 def _raster_line_segments(line, line_start, line_end, direction, pxsize_x, raster_leadin):
@@ -1608,11 +1609,15 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
     line_count = int(size[1] / pxsize_y)
     line_start = line_end = 0
 
-    # warn if there isn't room for the lead-in / lead-out moves
-    if posx - conf["raster_leadin"] < 0:
-        print("WARN: not enough leadin space")
-    if posx + size[0] + conf["raster_leadin"] > conf["workspace"][0]:
-        print("WARN: not enough leadout space")
+    # warn if there isn't room for the lead-in / lead-out moves. Only the
+    # engraved columns matter, as the head never enters an all-white margin.
+    if engraved_box is not None:
+        engraved_left = posx + engraved_box[0] * pxsize_x
+        engraved_right = posx + engraved_box[2] * pxsize_x
+        if engraved_left - conf["raster_leadin"] < 0:
+            print("WARN: not enough leadin space")
+        if engraved_right + conf["raster_leadin"] > conf["workspace"][0]:
+            print("WARN: not enough leadout space")
 
     # set direction
     if raster_mode == "Reverse":
