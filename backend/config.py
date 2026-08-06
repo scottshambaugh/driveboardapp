@@ -30,7 +30,7 @@ AVR_CLOCK = "16000000"
 
 conf = {
     "appname": "driveboardapp",
-    "version": "26.06",
+    "version": "26.08",
     "company_name": "com.nortd.labs",
     "network_host": "",  # '' for all nics
     "network_port": 4444,

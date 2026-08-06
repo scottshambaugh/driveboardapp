@@ -1,6 +1,16 @@
 # DriveboardApp Changelog
 
 ## Unreleased
+### New Features
+- 
+
+### Bug Fixes
+-
+
+### Development
+- 
+
+## v26.08 (August 2026)
 
 ### New Features
 - `pierce_time` now works, to dwell at the beginning of cut paths to ensure the material is fully pierced before moving. Per-pass, selectable in the UI and savable in presets
@@ -16,9 +26,6 @@
 - Fix raster images dropping their last pixel (correctness, and also cause a freeze on one-pixel rasters)
 - Fix raster segments shorter than the acceleration ramp not engraving at all
 - Scale raster intensity with head speed, keeping exposure even through the acceleration ramps
-
-### Development
-- 
 
 ## v26.06 (June 2026)
 
