@@ -332,10 +332,8 @@ class SVGTagReader:
             return
 
         if not data.startswith("data:image/"):
-            # A link cannot be resolved here: the backend is handed the svg
-            # content, never the file it came from, so there is no base path to
-            # resolve it against. Emitting a raster with no data would leave a
-            # def that cannot be drawn or engraved, so skip it entirely.
+            # only the svg content reaches here, never the file it came from,
+            # so a href has no base path to resolve against
             log.error("image tag skipped: only embedded images are supported, not linked ones")
             return
 

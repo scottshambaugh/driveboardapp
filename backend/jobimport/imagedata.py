@@ -12,9 +12,7 @@ except ImportError:
 log = logging.getLogger("svg_reader")
 
 # What a browser will accept in an <img>, which is how the frontend previews a
-# raster. Pillow reads far more than this, so anything else is re-encoded to
-# PNG on import. Without that the preview silently never loads, even though the
-# backend would have engraved the image just fine.
+# raster. Pillow reads far more than this, so anything else is re-encoded.
 WEB_FORMATS = frozenset({"PNG", "JPEG", "GIF", "BMP", "WEBP", "ICO"})
 
 # modes PNG cannot store, so they need flattening to RGB first
@@ -24,9 +22,8 @@ UNSAVEABLE_MODES = frozenset({"CMYK", "YCbCr", "LAB", "HSV", "F", "I"})
 def normalize_image_data(data_uri):
     """Re-encode a raster to PNG unless it is already in a displayable format.
 
-    Returns the data URI unchanged when it needs no conversion, and also when
-    it cannot be read at all, so that an unreadable image fails later in the
-    pipeline where it is reported rather than here.
+    Returns the data URI unchanged when it needs no conversion, and when it
+    cannot be read at all, leaving that to be reported downstream.
     """
     if Image is None or not data_uri:
         return data_uri

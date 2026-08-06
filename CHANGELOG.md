@@ -9,6 +9,7 @@
 - Fix errors in loading a scaled / transformed raster image
 - Limit image extent validation to the bbox that will actually be engraved (skipping eg overhanging whitespace)
 - Fix transparency in jpegs going black
+- Fix buffer overflow for rasters
 
 ### Development
 - 

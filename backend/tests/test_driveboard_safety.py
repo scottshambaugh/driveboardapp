@@ -837,29 +837,60 @@ def test_serial_write_paused_sends_nothing(loop):
     assert loop.tx_pos == 0
 
 
-def test_serial_write_no_resync_during_interlock(loop):
-    # Firmware paused on a door interlock: buffer is genuinely full, NOT desynced.
+def _stalled_sender(loop, **kwargs):
+    """A loop gated on a full firmware buffer, stalled past the timeout."""
     loop.device = FakeDevice()
+    loop.request_status = 0  # suppress the periodic status request prefix
     loop.tx_buffer = bytearray(b"ABCD")
     loop.tx_pos = 0
     loop._paused = False
     loop.firmbuf_used = loop.FIRMBUF_SIZE  # no room -> stall branch
-    loop.last_tx_progress = 0.0  # long ago -> stall timeout elapsed
+    loop.last_tx_progress = 1000.0  # long ago -> stall timeout elapsed
+    loop.last_firmware_idle = 0.0  # no idle report
+    for key, value in kwargs.items():
+        setattr(loop, key, value)
+    return loop
+
+
+def test_serial_write_no_resync_during_interlock(loop):
+    # firmware held on a door interlock: the buffer is full, not desynced
+    _stalled_sender(loop)
     loop._status["info"]["door"] = True
     loop._serial_write()
-    assert loop.firmbuf_used == loop.FIRMBUF_SIZE  # must NOT resync (would overflow)
+    assert loop.firmbuf_used == loop.FIRMBUF_SIZE  # resyncing would overflow it
+    assert bytes(loop.device.written) == b""
 
 
-def test_serial_write_resyncs_when_desynced(loop):
-    loop.device = FakeDevice()
-    loop.tx_buffer = bytearray(b"ABCD")
-    loop.tx_pos = 0
-    loop._paused = False
-    loop.firmbuf_used = loop.FIRMBUF_SIZE
-    loop.last_tx_progress = 0.0
-    loop._status["info"] = {}  # no interlock -> genuine desync
+def test_serial_write_no_resync_while_firmware_is_busy(loop):
+    """A stall with no idle report is backpressure, so the tally has to stand.
+
+    The controller consumes a raster line one pixel at a time, holding its rx
+    buffer for seconds at a stretch. Clearing the tally there would push a
+    second bufferful into a full buffer and overflow it.
+    """
+    _stalled_sender(loop)
+    loop._status["info"] = {}
+    loop._serial_write()
+    assert loop.firmbuf_used == loop.FIRMBUF_SIZE, "must not resync without proof of drain"
+    assert bytes(loop.device.written) == b"", "must not send into a full buffer"
+
+
+def test_serial_write_resyncs_once_firmware_reports_idle(loop):
+    # idle is only reported with an empty rx buffer, so an idle since the last
+    # send means the acks were lost rather than the buffer being full
+    _stalled_sender(loop, last_firmware_idle=2000.0)
+    loop._status["info"] = {}
     loop._serial_write()
     assert loop.firmbuf_used == 0  # resynced so streaming can resume
+
+
+def test_idle_report_records_drain_proof(loop):
+    # the timestamp gating the resync comes off the real status frame
+    loop.tx_buffer = bytearray(b"ABCD")  # mid-job, so 'ready' stays False
+    loop.last_firmware_idle = 0.0
+    feed(loop, driveboard.INFO_IDLE_YES.encode())
+    assert loop.last_firmware_idle > 0.0
+    assert loop._s["ready"] is False, "a queued job still means not ready"
 
 
 # ---------------------------------------------------------------------------

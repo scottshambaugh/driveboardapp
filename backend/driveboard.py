@@ -226,11 +226,13 @@ class SerialLoopClass(threading.Thread):
         self.RX_CHUNK_SIZE = 32
         self.FIRMBUF_SIZE = 256  # needs to match device firmware
         self.firmbuf_used = 0
-        # Resync firmbuf_used if the sender is gated this long with no send/ack
-        # (lost-ack desync). Far longer than a chunk round-trip (~ms), but the
-        # firmware buffer drains in <0.2s, so resyncing to 0 afterwards is safe.
+        # How long the sender may sit gated with no send or ack before looking
+        # for a lost-ack desync. Far longer than a chunk round-trip (~ms).
         self.FIRMBUF_STALL_TIMEOUT = 2.0  # seconds
         self.last_tx_progress = 0.0
+        # Idle is reported only with an empty rx buffer, the one proof the
+        # tally has drained.
+        self.last_firmware_idle = 0.0
 
         # used for calculating percentage done
         self.job_size = 0
@@ -473,6 +475,9 @@ class SerialLoopClass(threading.Thread):
             elif 64 < data_num < 91:  # info flags
                 # data_char is in [A-Z], info flag
                 if data_char == INFO_IDLE_YES:
+                    # only claimed with an empty rx buffer, so this proves the
+                    # firmware consumed everything sent
+                    self.last_firmware_idle = time.time()
                     if not self.tx_buffer:
                         self._s["ready"] = True
                 elif data_char == INFO_DOOR_OPEN:
@@ -621,15 +626,15 @@ class SerialLoopClass(threading.Thread):
                     # error propagates to run() which stops processing
                     self.tx_pos += assumedSent
                 elif time.time() - self.last_tx_progress > self.FIRMBUF_STALL_TIMEOUT:
-                    if self._status["info"].get("door") or self._status["info"].get("chiller"):
-                        # firmware paused on an interlock: the buffer is genuinely
-                        # full, not desynced. Don't resync (it would overflow it).
-                        self.last_tx_progress = time.time()
-                    else:
-                        # gated with no send/ack too long: tally desynced, drained -> resync
+                    # Either an ack was lost and the tally is stale, or the
+                    # firmware is still chewing through what it has: a raster
+                    # line is consumed a pixel at a time. Only an idle report
+                    # tells the two apart, and resyncing on a guess overflows
+                    # the controller's rx buffer.
+                    if self.last_firmware_idle > self.last_tx_progress:
                         print("WARN: firmbuf tally desync, resyncing to resume send")
                         self.firmbuf_used = 0
-                        self.last_tx_progress = time.time()
+                    self.last_tx_progress = time.time()
         else:
             if self.tx_buffer:  # job finished sending
                 self.job_size = 0

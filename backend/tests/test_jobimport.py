@@ -181,12 +181,8 @@ def _pixels(img):
 )
 def test_raster_axis_aligned_placement(transform, pos, size, pixels):
     """Upright, quarter-turned and mirrored images keep their exact pixels and
-    come back as an upright mm box.
-
-    Regression: reading the scale off a rotation matrix as (m[0], m[3]) gave a
-    quarter-turned image a zero size, which hid it from the preview and
-    collapsed both work-area bounds checks onto a single point.
-    """
+    come back as an upright mm box. A zero size here hides the image from the
+    preview and collapses both work-area bounds checks onto one point."""
     def_, img = _import_raster(transform)
     assert def_["pos"] == pytest.approx(pos)
     assert def_["size"] == pytest.approx(size)
@@ -221,12 +217,9 @@ def test_raster_arbitrary_transform_resampled(transform, pos, size, blank_corner
 
 
 def test_raster_transparency_survives_a_non_png_source():
-    """Reorienting a gif must not re-encode it as JPEG.
-
-    JPEG carries no alpha channel, so flattening a transparent image into one
-    turns every clear pixel black, which the engraver burns at full power. It
-    also left the data URI claiming a mime type its bytes no longer were.
-    """
+    """Reorienting a gif must not re-encode it as JPEG. JPEG carries no alpha
+    channel, so flattening a transparent image into one turns every clear pixel
+    black, which the engraver burns at full power."""
     # a 2x2 gif, left column transparent and right column opaque black
     src = Image.new("P", (2, 2), 0)
     src.putpalette([255, 255, 255, 0, 0, 0])
@@ -251,8 +244,7 @@ def test_raster_transparency_survives_a_non_png_source():
         ("BMP", "bmp", True),
         ("WEBP", "webp", True),
         ("ICO", "x-icon", True),
-        # Pillow reads these but no browser renders them, so the preview would
-        # never load and the job would sit there waiting for it
+        # Pillow reads these but no browser renders them
         ("TIFF", "tiff", False),
         ("PPM", "x-portable-pixmap", False),
         ("PCX", "x-pcx", False),
@@ -274,12 +266,9 @@ def test_raster_normalized_to_a_displayable_format(fmt, mime, stays):
 
 
 def test_linked_image_is_skipped():
-    """A linked image cannot be resolved, so it must not leave a phantom def.
-
-    The backend only ever receives the svg content, never the path it was read
-    from, so a relative href has nothing to resolve against. A def carrying no
-    data would still claim its pos and size during work-area validation.
-    """
+    """The backend receives the svg content, never the path it came from, so a
+    href has nothing to resolve against. A def with no data would still claim
+    its pos and size during work-area validation."""
     job = jobimport.convert(_raster_svg(uri="linked.png"), optimize=False)
     assert [d for d in job["defs"] if d["kind"] == "image"] == []
 
