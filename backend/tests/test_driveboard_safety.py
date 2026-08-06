@@ -656,6 +656,36 @@ def test_supermove_clears_offset_and_moves(loop):
     assert cmds[-1] == ord(driveboard.CMD_LINE)
 
 
+def test_supermove_forces_the_beam_off(loop):
+    """A positioning move zeroes intensity itself. Intensity persists in the
+    controller between commands, so a stopped job leaves it at its cutting
+    value and the next rapid would cross the bed with the beam on."""
+    loop.tx_buffer = bytearray()
+    driveboard.supermove(x=5.0)
+    param, val = decode_param(loop.tx_buffer, 0)
+    assert param == driveboard.PARAM_INTENSITY
+    assert val == pytest.approx(0.0, abs=1e-3)
+    # and it lands ahead of the move that it has to cover
+    assert bytes(loop.tx_buffer).index(ord(driveboard.PARAM_INTENSITY)) < bytes(
+        loop.tx_buffer
+    ).index(ord(driveboard.PARAM_TARGET_X))
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+def test_supermove_forces_the_beam_off_on_every_axis(loop, axis):
+    driveboard.supermove(**{axis: 1.0})
+    param, val = decode_param(loop.tx_buffer, 0)
+    assert param == driveboard.PARAM_INTENSITY
+    assert val == pytest.approx(0.0, abs=1e-3)
+
+
+def test_move_leaves_intensity_alone(loop):
+    # move() is the cutting primitive, so it carries whatever intensity the
+    # pass set. Manual jogs zero the beam at their route instead.
+    driveboard.move(x=5.0)
+    assert ord(driveboard.PARAM_INTENSITY) not in bytes(loop.tx_buffer)
+
+
 def test_move_with_z(loop):
     driveboard.move(z=3.0)
     p, v = decode_param(loop.tx_buffer, 0)

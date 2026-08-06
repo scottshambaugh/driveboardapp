@@ -1116,9 +1116,15 @@ def move(x=None, y=None, z=None):
 
 
 def supermove(x=None, y=None, z=None):
-    """Moves in machine coordinates bypassing any offsets."""
+    """Moves in machine coordinates bypassing any offsets.
+
+    A positioning move, never a cut, so the beam goes off in the same locked
+    sequence. Intensity persists in the controller between commands. Sent
+    inline because intensity() would deadlock on the lock held here.
+    """
     global SerialLoop
     with SerialLoop.lock:
+        SerialLoop.send_param(PARAM_INTENSITY, 0)
         # clear offset
         SerialLoop.send_command(CMD_OFFSET_STORE)
         SerialLoop.send_command(CMD_REF_STORE)
