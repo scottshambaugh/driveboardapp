@@ -109,14 +109,24 @@ class SVGReader:
 
     @staticmethod
     def _encode_image_data(img, header):
-        """Re-encode a PIL image into a base64 data URI, keeping `header`'s format."""
+        """Re-encode a PIL image into a base64 data URI.
+
+        JPEG is kept only for a JPEG source that is fully opaque. Everything
+        else goes out as PNG, for two reasons: JPEG cannot carry an alpha
+        channel and flattens transparency to black, which the engraver then
+        burns at full power, and re-encoding a gif or webp as JPEG under its
+        original mime type leaves the data URI lying about its own format.
+        """
+        opaque = img.mode not in ("RGBA", "LA", "PA") or img.getchannel("A").getextrema()[0] == 255
+        if opaque and ("jpeg" in header.lower() or "jpg" in header.lower()):
+            img_format = "JPEG"
+            if img.mode not in ("RGB", "L", "CMYK"):
+                img = img.convert("RGB")
+        else:
+            img_format = "PNG"
+            header = "data:image/png;base64"
+
         buffer = io.BytesIO()
-        img_format = "PNG" if "png" in header.lower() else "JPEG"
-
-        # For JPEG, convert RGBA to RGB (JPEG doesn't support alpha)
-        if img_format == "JPEG" and img.mode == "RGBA":
-            img = img.convert("RGB")
-
         img.save(buffer, format=img_format)
         return header + "," + base64.b64encode(buffer.getvalue()).decode("utf-8")
 

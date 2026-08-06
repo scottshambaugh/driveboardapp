@@ -1455,7 +1455,9 @@ def _raster_grayscale(data, px_w, px_h):
     """Decode the base64 image to a px_w x px_h grayscale PIL image, with
     transparency composited onto white and invert applied.
     0=black/full power, 255=white/no power."""
-    imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
+    # everything after the comma is the payload, so this works whatever the
+    # mime type is, and a bare base64 string with no data URI prefix works too
+    imgobj = Image.open(io.BytesIO(base64.b64decode(data.split(",", 1)[-1])))
     imgobj = imgobj.resize((px_w, px_h), resample=Image.BICUBIC)
     if imgobj.mode in ["PA", "LA", "RGBA", "La", "RBGa"]:
         imgobj = imgobj.convert("RGBA")

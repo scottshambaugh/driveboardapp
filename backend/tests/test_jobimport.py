@@ -119,16 +119,21 @@ K = (0, 0, 0, 255)
 MARKER = ((R, G), (B, K))  # a 2x2 image whose every corner is distinguishable
 
 
+def _data_uri(img, fmt="PNG", mime="png"):
+    """Base64 data URI holding `img` encoded as `fmt` and labelled `mime`."""
+    buf = io.BytesIO()
+    img.save(buf, format=fmt)
+    return f"data:image/{mime};base64," + base64.b64encode(buf.getvalue()).decode()
+
+
 def _png_data_uri(rows):
     """Base64 PNG data URI for `rows`, given as rows of RGBA tuples."""
     img = Image.new("RGBA", (len(rows[0]), len(rows)))
     img.putdata([px for row in rows for px in row])
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    return _data_uri(img)
 
 
-def _raster_svg(transform="", rows=MARKER):
+def _raster_svg(transform="", rows=MARKER, uri=None):
     """A 100x100mm svg holding one 40x20 image at (10, 20). The viewBox matches
     the page size, so one svg user unit is exactly one mm."""
     return (
@@ -137,14 +142,14 @@ def _raster_svg(transform="", rows=MARKER):
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
         f'<image x="10" y="20" width="40" height="20" transform="{transform}" '
-        f'xlink:href="{_png_data_uri(rows)}"/>'
+        f'xlink:href="{uri or _png_data_uri(rows)}"/>'
         "</svg>"
     )
 
 
-def _import_raster(transform="", rows=MARKER):
+def _import_raster(transform="", rows=MARKER, uri=None):
     """Convert the fixture svg, returning (image def, decoded PIL image)."""
-    job = jobimport.convert(_raster_svg(transform, rows), optimize=False)
+    job = jobimport.convert(_raster_svg(transform, rows, uri), optimize=False)
     defs = [d for d in job["defs"] if d["kind"] == "image"]
     assert len(defs) == 1, "expected exactly one image def"
     _, b64 = defs[0]["data"].split(",", 1)
@@ -213,6 +218,45 @@ def test_raster_arbitrary_transform_resampled(transform, pos, size, blank_corner
     px = _pixels(img)
     assert px[blank_corner[0]][blank_corner[1]][3] == 0, "uncovered corner should be blank"
     assert px[len(px) // 2][len(px[0]) // 2][3] == 255, "the centre should be covered"
+
+
+def test_raster_transparency_survives_a_non_png_source():
+    """Reorienting a gif must not re-encode it as JPEG.
+
+    JPEG carries no alpha channel, so flattening a transparent image into one
+    turns every clear pixel black, which the engraver burns at full power. It
+    also left the data URI claiming a mime type its bytes no longer were.
+    """
+    # a 2x2 gif, left column transparent and right column opaque black
+    src = Image.new("P", (2, 2), 0)
+    src.putpalette([255, 255, 255, 0, 0, 0])
+    src.putpixel((1, 0), 1)
+    src.putpixel((1, 1), 1)
+    src.info["transparency"] = 0
+    uri = _data_uri(src, fmt="GIF", mime="gif")
+
+    def_, img = _import_raster("translate(100,0) scale(-1,1)", uri=uri)
+    assert def_["data"].startswith("data:image/png;base64,")
+    assert img.format == "PNG"
+    # the mirror swapped the columns and the clear one is still clear
+    assert [[px[3] for px in row] for row in _pixels(img)] == [[255, 0], [255, 0]]
+
+
+def test_raster_opaque_jpeg_stays_jpeg():
+    # no alpha to lose here, so a photo is not inflated into a PNG
+    src = Image.new("RGB", (8, 8), (255, 255, 255))
+    for y in range(8):
+        for x in range(4):
+            src.putpixel((x, y), (0, 0, 0))  # black left half
+    def_, img = _import_raster(
+        "translate(100,0) scale(-1,1)", uri=_data_uri(src, fmt="JPEG", mime="jpeg")
+    )
+    assert def_["data"].startswith("data:image/jpeg;base64,")
+    assert img.format == "JPEG"
+    # the mirror moved the black half over to the right
+    px = _pixels(img)
+    assert px[0][0][0] > 128, "left column should now be white"
+    assert px[0][-1][0] < 128, "right column should now be black"
 
 
 # ---------------------------------------------------------------------------

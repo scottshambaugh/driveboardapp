@@ -37,7 +37,6 @@ class SVGTagReader:
         self.re_findall_lasertags = re.compile(
             r"=pass([0-9]+):([0-9]*)(mm/min)?:([0-9]*)(%)?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?(:#[a-fA-F0-9]{6})?="
         ).findall
-        self.re_match_imagemime = re.compile("data:image/(png);base64,", re.IGNORECASE).match
 
     def read_tag(self, tag, node):
         """Read a tag.

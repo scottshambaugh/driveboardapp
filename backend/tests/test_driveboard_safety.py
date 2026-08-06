@@ -462,6 +462,27 @@ def test_raster_engraved_box(ink, expected):
     assert driveboard._raster_engraved_box(gray, 100, 50) == expected
 
 
+@pytest.mark.parametrize(
+    "prefix,fmt",
+    [
+        ("data:image/png;base64,", "PNG"),
+        ("data:image/jpeg;base64,", "JPEG"),  # a character longer than the png one
+        ("", "PNG"),  # the job dict documents data as plain base64
+    ],
+    ids=["png-uri", "jpeg-uri", "bare-base64"],
+)
+def test_raster_grayscale_reads_any_data_uri(prefix, fmt):
+    # the payload starts after the comma, wherever that falls, so nothing may
+    # be sliced off the front at a fixed offset
+    img = Image.new("RGB", (10, 10), (255, 255, 255))
+    img.putpixel((0, 0), (0, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format=fmt)
+    gray = driveboard._raster_grayscale(prefix + base64.b64encode(buf.getvalue()).decode(), 10, 10)
+    assert gray.size == (10, 10)
+    assert gray.getextrema()[0] < 255, "the black pixel should have survived"
+
+
 def test_job_dispatch_validates_before_lasing(loop):
     # The public job() entry must run the work-area gate before queueing output.
     loop._status["offset"] = [0.0, 0.0, 0.0]
