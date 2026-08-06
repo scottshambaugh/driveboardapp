@@ -1248,6 +1248,7 @@ def jobfile(filepath):
 
 
 def job(jobdict):
+    job_stop_guard()
     if "head" in jobdict:
         if "kind" in jobdict["head"] and jobdict["head"]["kind"] == "mill":
             job_mill(jobdict)
@@ -1255,6 +1256,25 @@ def job(jobdict):
             job_laser(jobdict)
     else:
         print("INFO: not a valid job, 'head' entry missing")
+
+
+def job_stop_guard():
+    """Refuse to queue a job while the controller is in a stop condition.
+
+    A stop leaves the controller holding an rx buffer it only clears on resume,
+    so a job queued now would sit unsent behind a stale tally. Clearing the
+    stop is also where someone acknowledges why it happened.
+
+    Raises ValueError naming the active stops.
+    """
+    global SerialLoop
+
+    if SerialLoop is None:
+        return
+    with SerialLoop.lock:
+        stops = sorted(SerialLoop._status["stops"])
+    if stops:
+        raise ValueError(f"cannot start a job while stopped ({', '.join(stops)}), clear it first")
 
 
 def job_laser_validate(jobdict):

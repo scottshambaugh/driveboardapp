@@ -496,6 +496,41 @@ def test_job_dispatch_validates_before_lasing(loop):
         driveboard.job(bad)
 
 
+def _good_job():
+    return {
+        "head": {},
+        "passes": [{"items": [0]}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[10.0, 10.0]]]}],
+    }
+
+
+def test_job_refused_while_stopped(loop):
+    """A stop has to be cleared before a job can be queued on top of it. The
+    controller holds its unconsumed rx buffer until a resume, and reports
+    neither idle nor drained meanwhile."""
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    loop._status["stops"] = {"buffer": True}
+    with pytest.raises(ValueError, match="stopped"):
+        driveboard.job(_good_job())
+    assert loop.tx_buffer == bytearray(), "nothing may be queued behind the stop"
+
+
+def test_job_refused_while_stopped_names_the_stop(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    loop._status["stops"] = {"x1": True, "door": True}
+    with pytest.raises(ValueError, match="door, x1"):
+        driveboard.job(_good_job())
+
+
+def test_job_allowed_once_stop_cleared(loop):
+    # stop flags are rebuilt from every status frame, so the guard lifts itself
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    loop._status["stops"] = {}
+    driveboard.job(_good_job())  # must not raise
+    assert loop.tx_buffer, "the job should have been queued"
+
+
 def test_jobfile_reads_and_validates(loop, tmp_path):
     import json
 
