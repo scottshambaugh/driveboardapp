@@ -1431,6 +1431,11 @@ def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_):
     pixel data, ramp out. `orientation` describes one engraving direction of a
     segment: absolute mm positions (leadin/start/end/leadout, line_y) and the
     pixel slice (data/lo/hi).
+
+    start and end are the outer edges of the first and last pixel, so a run of
+    n pixels travels n pixel widths. The controller latches a pixel every pixel
+    width from the start of the move, so each pixel burns over its own extent,
+    and even a lone pixel gets a move long enough for the planner to keep.
     """
     line_y = orientation["line_y"]
     intensity(0.0)  # intensity for seek and lead-in
@@ -1459,17 +1464,18 @@ def _raster_orientations(
     px_n,
 ):
     """Build the two engraving orientations (left-to-right and right-to-left)
-    for a canonical raster run spanning pixel indices [lo, hi)."""
+    for a canonical raster run spanning pixel indices [lo, hi).
+
+    start and end are pixel edges, see _emit_raster_segment.
+    """
     left_x = posx + (lo - line_start) * pxsize_x
     right_x = posx + (hi - line_start) * pxsize_x
-    pos_start_fwd = posx + (lo - line_start + 0.5) * pxsize_x
-    pos_end_fwd = posx + (hi - line_start - 0.5) * pxsize_x
     leadin_left = max(left_x - leadin, 0)
     leadout_right = min(right_x + leadin, workspace_x)
     fwd = {
         "leadin": leadin_left,
-        "start": pos_start_fwd,
-        "end": pos_end_fwd,
+        "start": left_x,
+        "end": right_x,
         "leadout": leadout_right,
         "line_y": line_y,
         "data": pxarray,
@@ -1478,8 +1484,8 @@ def _raster_orientations(
     }
     rev = {
         "leadin": leadout_right,
-        "start": pos_end_fwd,
-        "end": pos_start_fwd,
+        "start": right_x,
+        "end": left_x,
         "leadout": leadin_left,
         "line_y": line_y,
         "data": pxarray_reversed,
@@ -1740,17 +1746,14 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
             for segment_start, segment_end in _raster_line_segments(
                 line, line_start, line_end, direction, pxsize_x, conf["raster_leadin"]
             ):
-                # limits for engraving and leading in/out for this segment
+                # limits for engraving and leading in/out for this segment.
+                # Both ends are pixel edges, and reverse indices count down, so
+                # one expression gives the leading edge in either direction.
+                pos_start = posx + (segment_start - line_start) * pxsize_x
+                pos_end = posx + (segment_end - line_start) * pxsize_x
                 if direction == 1:  # fwd
-                    pos_start = posx + (segment_start - line_start + 0.5) * pxsize_x
-                    pos_end = posx + (segment_end - line_start - 0.5) * pxsize_x
-                    pos_leadin = max(
-                        posx + (segment_start - line_start) * pxsize_x - conf["raster_leadin"], 0
-                    )
-                    pos_leadout = min(
-                        posx + (segment_end - line_start) * pxsize_x + conf["raster_leadin"],
-                        conf["workspace"][0],
-                    )
+                    pos_leadin = max(pos_start - conf["raster_leadin"], 0)
+                    pos_leadout = min(pos_end + conf["raster_leadin"], conf["workspace"][0])
                     orientation = {
                         "leadin": pos_leadin,
                         "start": pos_start,
@@ -1762,15 +1765,8 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
                         "hi": segment_end,
                     }
                 else:  # rev
-                    pos_start = posx + (segment_start - line_start - 0.5) * pxsize_x
-                    pos_end = posx + (segment_end - line_start + 0.5) * pxsize_x
-                    pos_leadin = min(
-                        posx + (segment_start - line_start) * pxsize_x + conf["raster_leadin"],
-                        conf["workspace"][0],
-                    )
-                    pos_leadout = max(
-                        posx + (segment_end - line_start) * pxsize_x - conf["raster_leadin"], 0
-                    )
+                    pos_leadin = min(pos_start + conf["raster_leadin"], conf["workspace"][0])
+                    pos_leadout = max(pos_end - conf["raster_leadin"], 0)
                     orientation = {
                         "leadin": pos_leadin,
                         "start": pos_start,

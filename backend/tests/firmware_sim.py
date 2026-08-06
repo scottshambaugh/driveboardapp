@@ -35,6 +35,7 @@ CC = shutil.which("cc") or shutil.which("gcc")
 # Firmware protocol/sense constants (mirrors firmware/src/protocol.h + config).
 INFO_HELLO = 0x7E
 STATUS_END = 0x06
+INFO_IDLE_YES = ord("A")
 INFO_DOOR_OPEN = ord("B")
 INFO_CHILLER_OFF = ord("C")
 INFO_PAUSED = ord("D")
@@ -53,10 +54,14 @@ STOPERROR_SERIAL_WATCHDOG = ord(";")
 # Buffered commands ([A-Z]) and parameters ([a-z]) for driving motion.
 CMD_DWELL = ord("C")
 CMD_LINE = ord("B")
+CMD_RASTER = ord("D")
+CMD_RASTER_DATA_START = 16
+CMD_RASTER_DATA_END = 17
 PARAM_INTENSITY = "s"
 PARAM_DURATION = "d"
 PARAM_FEEDRATE = "f"
 PARAM_TARGET_X = "x"
+PARAM_PIXEL_WIDTH = "p"
 # config.driveboardusb.h: X step pulse is PORTB bit 0.
 X_STEP_PORTB_BIT = 0
 STOPERROR_LIMIT_HIT = {
@@ -262,5 +267,23 @@ def line_program(x, feedrate=1000):
         encode_value_param(PARAM_FEEDRATE, feedrate)
         + encode_value_param(PARAM_TARGET_X, x)
         + [CMD_LINE]
+    )
+    return double(logical)
+
+
+def raster_program(x, pixels, pixel_width=0.1, intensity=100, feedrate=1000):
+    """Wire bytes for a raster move to absolute X, streaming the given pixels.
+
+    Pixel values are wire bytes in [128, 255], 128 being no power. Passing the
+    X the head is already at makes the move zero length.
+    """
+    logical = (
+        encode_value_param(PARAM_FEEDRATE, feedrate)
+        + encode_value_param(PARAM_INTENSITY, intensity)
+        + encode_value_param(PARAM_PIXEL_WIDTH, pixel_width)
+        + encode_value_param(PARAM_TARGET_X, x)
+        + [CMD_RASTER, CMD_RASTER_DATA_START]
+        + list(pixels)
+        + [CMD_RASTER_DATA_END]
     )
     return double(logical)

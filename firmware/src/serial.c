@@ -31,6 +31,7 @@
 #include "stepper.h"
 #include "sense_control.h"
 #include "protocol.h"
+#include "planner.h"
 
 
 
@@ -265,6 +266,13 @@ inline uint8_t serial_protocol_read() {
     // in the rx_buffer which get directly consumed
     // by the stepper interrupt.
     // sleep_mode();  // sleep a tiny bit
+    if (!consume_data && !stepper_processing() && !planner_blocks_available()) {
+      // No block will read this line. The planner drops any raster move
+      // shorter than a step, so the one that should have consumed it was
+      // never queued. Draining here keeps the rx buffer moving, which is
+      // what paces the host.
+      serial_consume_data();
+    }
     if (consume_data) {
       // If the stepper reaches the end of a block, we consume/ignore all following raster data in the line
       // wait, buffer empty

@@ -285,6 +285,52 @@ def test_intensity_below_range_clamped_to_off(intensity):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Raster data must never outlive the block that reads it. The planner drops any
+# move shorter than a step, so a raster move that rounds to zero length leaves
+# its pixels with no consumer. The protocol loop blocks in raster mode without
+# reading a byte, so the rx buffer stops draining and the host, which only sends
+# as far ahead as the buffer reports room for, gates forever.
+# ---------------------------------------------------------------------------
+
+
+def _raster_then_move(target_x, pixels=(200, 200, 200, 200)):
+    """Run a raster move to target_x followed by a line move, and report
+    whether raster mode cleared and how far the line move got.
+
+    Stays inside the 1s serial watchdog window (16M cycles at 16MHz). Past it
+    the watchdog stops the machine, which clears raster mode on its way out and
+    would hide a stall behind a rescue.
+    """
+    send = fw.raster_program(target_x, pixels, pixel_width=0.5, feedrate=3000) + fw.line_program(
+        20, feedrate=3000
+    )
+    _out, _hello, info = fw.run(
+        send=send,
+        run_cycles=8_000_000,
+        watch_symbol="raster_mode",
+        count_portb=fw.X_STEP_PORTB_BIT,
+    )
+    return info
+
+
+def test_raster_move_consumes_its_data():
+    # control: a raster move long enough to queue a block reads its own pixels
+    info = _raster_then_move(2.0)
+    assert info["max"] == 1, "the firmware never entered raster mode"
+    assert info["final"] == 0, "raster mode never cleared"
+    assert info["steps"] > 0
+
+
+def test_zero_length_raster_move_does_not_stall_the_protocol_loop():
+    # the head starts at the origin, so targeting it makes the move zero length
+    # and the planner drops it
+    info = _raster_then_move(0.0)
+    assert info["max"] == 1, "the firmware never entered raster mode"
+    assert info["final"] == 0, "raster mode never cleared, the protocol loop is stuck"
+    assert info["steps"] > 0, "the move queued behind the raster data never ran"
+
+
 def test_limit_halts_active_move():
     far = fw.line_program(600, feedrate=3000)
     bit = fw.X_STEP_PORTB_BIT

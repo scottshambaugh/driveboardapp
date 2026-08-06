@@ -508,6 +508,114 @@ def test_raster_grayscale_reads_any_data_uri(prefix, fmt):
     assert gray.getextrema()[0] < 255, "the black pixel should have survived"
 
 
+# ---------------------------------------------------------------------------
+# Raster pixel registration
+#
+# A raster move must travel one pixel width per pixel of data it streams. The
+# controller latches a pixel every pixel width from the start of the move, so a
+# shorter move leaves trailing pixels unburnt, and a zero length move is one the
+# controller's planner drops while the host still streams data for it, stalling
+# the protocol loop on a block that never runs.
+# ---------------------------------------------------------------------------
+
+
+def _dots_png(dark, width=40, height=3):
+    """An opaque white png with the given (x, y) pixels blacked out."""
+    img = Image.new("RGB", (width, height), (255, 255, 255))
+    for x, y in dark:
+        img.putpixel((x, y), (0, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _raster_runs(buf):
+    """(leadin_mm, span_mm, pixel_count) for every raster move in a tx_buffer.
+
+    Each segment is emitted as a seek to the lead-in, a ramp up to the first
+    pixel, then the raster move itself, so leadin_mm is the distance between the
+    last two line targets and span_mm the distance from there to the raster
+    target. Both are unsigned, and comparable to a multiple of pxsize_x.
+    """
+    runs = []
+    lines = []  # x target of each line move so far
+    target_x = span = None
+    i = 0
+    while i < len(buf):
+        byte = buf[i]
+        if byte == ord(driveboard.CMD_RASTER_DATA_START):
+            end = buf.index(ord(driveboard.CMD_RASTER_DATA_END), i)
+            runs.append((abs(lines[-1] - lines[-2]), span, end - i - 1))
+            i = end + 1
+        elif byte >= 128:  # a 4-byte number followed by its parameter marker
+            param, value = decode_param(buf, i)
+            if param == driveboard.PARAM_TARGET_X:
+                target_x = value
+            i += 5
+        else:
+            if chr(byte) == driveboard.CMD_LINE:
+                lines.append(target_x)
+            elif chr(byte) == driveboard.CMD_RASTER:
+                span = abs(target_x - lines[-1])
+            i += 1
+    return runs
+
+
+def _emit_image(loop, monkeypatch, dark, raster_mode, width=40, height=3, pxsize=0.4):
+    """Engrave a one-image job, returning (_raster_runs(...), pxsize_x).
+
+    The image is sized so it maps one-to-one onto the raster grid, leaving the
+    pixels exactly where they were put.
+    """
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_mode", raster_mode)
+    pxsize_x, pxsize_y = pxsize / 2.0, pxsize
+    def_ = {
+        "kind": "image",
+        "pos": [100.0, 100.0],
+        "size": [width * pxsize_x, height * pxsize_y],
+        "data": _dots_png(dark, width, height),
+    }
+    pass_ = {"air_assist": "off", "pxsize": pxsize}
+    driveboard._job_laser_image(def_, pass_, pxsize_x, pxsize_y, 6000.0, 2000.0, 25.5)
+    return _raster_runs(loop.tx_buffer), pxsize_x
+
+
+RASTER_MODES = ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"]
+
+
+@pytest.mark.parametrize("raster_mode", RASTER_MODES)
+def test_raster_move_spans_one_pixel_width_per_pixel(loop, monkeypatch, raster_mode):
+    # two runs per line, separated by more than 2 * raster_leadin of whitespace
+    # so they are emitted as separate segments rather than one merged run
+    dark = [(x, y) for y in range(3) for x in (2, 3, 4, 150, 151)]
+    runs, pxsize_x = _emit_image(loop, monkeypatch, dark, raster_mode, width=200)
+    assert len(runs) == 6, "three lines of two runs each"
+    for _leadin, span, pixels in runs:
+        assert span == pytest.approx(pixels * pxsize_x, abs=1e-6)
+
+
+@pytest.mark.parametrize("raster_mode", RASTER_MODES)
+def test_single_pixel_raster_move_is_not_zero_length(loop, monkeypatch, raster_mode):
+    # the degenerate case: an isolated pixel still travels its own width, or the
+    # controller's planner drops the move and the byte is never read
+    runs, pxsize_x = _emit_image(loop, monkeypatch, [(20, 1)], raster_mode)
+    assert len(runs) == 1
+    _leadin, span, pixels = runs[0]
+    assert (span, pixels) == (pytest.approx(pxsize_x, abs=1e-6), 1)
+
+
+@pytest.mark.parametrize("raster_mode", RASTER_MODES)
+def test_raster_lead_in_is_the_configured_length(loop, monkeypatch, raster_mode):
+    from config import conf
+
+    dark = [(x, 1) for x in range(20, 25)]
+    runs, _pxsize_x = _emit_image(loop, monkeypatch, dark, raster_mode)
+    assert len(runs) == 1
+    assert runs[0][0] == pytest.approx(conf["raster_leadin"], abs=1e-6)
+
+
 def test_job_dispatch_validates_before_lasing(loop):
     # The public job() entry must run the work-area gate before queueing output.
     loop._status["offset"] = [0.0, 0.0, 0.0]
