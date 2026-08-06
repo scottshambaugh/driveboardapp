@@ -828,8 +828,22 @@ def test_feed_assist_holds_across_contiguous_contours(loop):
     driveboard.job(_two_contour_job(air_assist="feed"))
     buf = bytes(loop.tx_buffer)
     assert buf.count(ord(driveboard.CMD_AIR_ENABLE)) == 1, "cycled per contour"
-    # and it starts at the first burn, not at the pass' opening seek
-    assert buf.index(ord(driveboard.CMD_AIR_ENABLE)) > buf.index(ord(driveboard.CMD_LINE))
+    # it comes on ahead of the contour's seek, so the gas is already flowing
+    # when the head arrives and no command block splits the seek from the burn
+    assert buf.index(ord(driveboard.CMD_AIR_ENABLE)) < buf.index(ord(driveboard.CMD_LINE))
+
+
+def test_feed_assist_skipped_for_a_pass_with_nothing_to_burn(loop):
+    # a lone vertex and no pierce only seeks, so the relay stays shut
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "intensity": 80, "air_assist": "feed"}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[10.0, 10.0]]]}],
+    }
+    driveboard.job(job)
+    assert ord(driveboard.CMD_AIR_ENABLE) not in bytes(loop.tx_buffer)
 
 
 def test_assist_off_is_the_aux_default(loop):

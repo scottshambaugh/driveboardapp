@@ -115,6 +115,7 @@ int main(int argc, char **argv) {
     int count_portb_bit = -1; /* count rising edges on this PORTB pin (step pin) */
     long portc_delay = 0;     /* apply PORTC pins this many cycles after hello */
     char watch_pin_port = 0;  /* watch the level of this output pin, e.g. D,4 */
+    int watch_size_opt = 0;   /* byte width of the watched symbol, default 1 */
     int watch_pin_bit = -1;
 
     for (int i = 2; i < argc; i++) {
@@ -131,6 +132,8 @@ int main(int argc, char **argv) {
             run_cycles = strtol(v, NULL, 10);
         else if ((v = opt_val(argv[i], "--watch-symbol=")))
             watch_name = v;
+        else if ((v = opt_val(argv[i], "--watch-size=")))
+            watch_size_opt = (int)strtol(v, NULL, 10);
         else if ((v = opt_val(argv[i], "--count-portb=")))
             count_portb_bit = (int)strtol(v, NULL, 10);
         else if ((v = opt_val(argv[i], "--portc-delay=")))
@@ -182,11 +185,16 @@ int main(int argc, char **argv) {
 
     /* Resolve a watched SRAM symbol (e.g. pwm_duty) to its data-space address. */
     int watch_addr = -1;
-    int watch_max = 0, watch_final = 0;
+    long watch_max = 0, watch_final = 0;
+    /* Width of the watched variable. A uint8_t reads as one byte, but a
+     * uint32_t like adjusted_rate needs all four or only its low byte shows. */
+    int watch_width = 1;
     if (watch_name) {
         for (uint32_t s = 0; s < f.symbolcount; s++) {
             if (strcmp(f.symbol[s]->symbol, watch_name) == 0) {
                 watch_addr = f.symbol[s]->addr & 0xffff; /* strip 0x800000 data offset */
+                if (watch_size_opt > 0)
+                    watch_width = watch_size_opt;
                 break;
             }
         }
@@ -209,7 +217,9 @@ int main(int argc, char **argv) {
             break;
         }
         if (watch_addr >= 0) {
-            int v = avr->data[watch_addr];
+            long v = 0;
+            for (int b = 0; b < watch_width; b++)
+                v |= (long)avr->data[watch_addr + b] << (8 * b);
             if (v > watch_max)
                 watch_max = v;
             watch_final = v;
@@ -249,7 +259,7 @@ int main(int argc, char **argv) {
     printf("\n");
     printf("HELLO=%d\n", got_hello);
     if (watch_name)
-        printf("SYM %s max=%d final=%d\n", watch_name, watch_max, watch_final);
+        printf("SYM %s max=%ld final=%ld\n", watch_name, watch_max, watch_final);
     if (count_portb_bit >= 0)
         printf("STEPS=%ld\n", step_edges);
     if (watch_pin_bit >= 0)

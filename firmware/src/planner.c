@@ -192,6 +192,24 @@ inline void planner_line(double x, double y, double z, double feed_rate, uint8_t
 
 
 // Execute dwell for dwell_time seconds. Maximum time delay is > 18 hours, more than enough for any application.
+// Give a block that holds position the standstill fields the planner reads on
+// every block. Without them a dwell inherits speed and distance from whatever
+// line last occupied its buffer slot, and the passes plan the neighbouring
+// moves against that stale junction. nominal_speed and rate_delta are only
+// ever divided by here, so they stay non-zero.
+inline static void prime_stationary_block(block_t *block) {
+  block->step_event_count = 0;
+  block->millimeters = 0.0;
+  block->nominal_speed = CONFIG_FEEDRATE;
+  block->nominal_rate = 0;
+  block->rate_delta = 1;
+  block->entry_speed = ZERO_SPEED;
+  block->vmax_junction = ZERO_SPEED;
+  block->nominal_length_flag = true;
+  block->recalculate_flag = true;
+}
+
+
 inline void planner_dwell(double dwell_time, uint8_t nominal_laser_intensity) {
   // idles until there is room in the block buffer
   int next_buffer_head = protocol_get_next_free_buffer( block_buffer_head );
@@ -204,8 +222,17 @@ inline void planner_dwell(double dwell_time, uint8_t nominal_laser_intensity) {
   block->nominal_laser_intensity = nominal_laser_intensity;
   block->dwell_time = dwell_time;
 
+  // The head is stationary for the whole dwell, so it is a full stop in the
+  // speed profile: the move before decelerates into it and the move after
+  // accelerates out of it.
+  prime_stationary_block(block);
+  previous_nominal_speed = 0.0;
+  clear_vector(previous_unit_vec);
+
   // Move buffer head
   block_buffer_head = next_buffer_head;
+
+  planner_recalculate();
 
   // make sure the stepper interrupt is processing
   stepper_start_processing();
@@ -223,8 +250,18 @@ inline void planner_command(uint8_t type) {
   // set block type command
   block->type = type;
 
+  // Switching an assist moves nothing, but the planner still reads this block
+  // when planning its neighbours, so it needs defined fields rather than a
+  // previous line's. Planned as a stop, which costs a decel and accel at a
+  // point the head is generally standing still anyway.
+  prime_stationary_block(block);
+  previous_nominal_speed = 0.0;
+  clear_vector(previous_unit_vec);
+
   // Move buffer head
   block_buffer_head = next_buffer_head;
+
+  planner_recalculate();
 
   // make sure the stepper interrupt is processing
   stepper_start_processing();

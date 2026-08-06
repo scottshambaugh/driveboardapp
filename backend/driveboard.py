@@ -1890,6 +1890,14 @@ def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
     pierce_time = pass_["pierce_time"]
     for polyline in path:
         if len(polyline) > 0:
+            # a lone vertex with no pierce only seeks, so it needs no assist
+            burns = pierce_time > 0 or len(polyline) > 1
+            # turn on assists if set to 'feed', before the seek so the gas is
+            # already flowing when the head arrives, and so the switch does not
+            # land between the seek and the pierce where it would break the
+            # deceleration the planner works out across that pair
+            if burns:
+                _feed_assists(pass_, True)
             # first vertex -> seek
             feedrate(seekrate)
             if not pass_["seekzero"]:
@@ -1901,12 +1909,6 @@ def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
                 move(polyline[0][0], polyline[0][1])
             else:
                 move(polyline[0][0], polyline[0][1], polyline[0][2])
-            # a lone vertex with no pierce only seeks, so it needs no assist
-            burns = pierce_time > 0 or len(polyline) > 1
-            # turn on assists if set to 'feed', ahead of the pierce where the
-            # gas clears the melt
-            if burns:
-                _feed_assists(pass_, True)
             # burn through in place first, otherwise a thick material is still
             # being penetrated as the head sets off
             if pierce_time > 0:

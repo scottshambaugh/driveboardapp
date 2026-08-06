@@ -191,6 +191,7 @@ def run(
     idle_cycles=0,
     run_cycles=None,
     watch_symbol=None,
+    watch_size=None,
     count_portb=None,
     portc_delay=0,
     watch_pin=None,
@@ -217,6 +218,8 @@ def run(
         args.append(f"--run-cycles={run_cycles}")
     if watch_symbol:
         args.append(f"--watch-symbol={watch_symbol}")
+    if watch_size:
+        args.append(f"--watch-size={watch_size}")
     if count_portb is not None:
         args.append(f"--count-portb={count_portb}")
     if portc_delay:
