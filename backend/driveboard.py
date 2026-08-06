@@ -1479,7 +1479,8 @@ def _raster_orientations(
     posx,
     pxsize_x,
     leadin,
-    workspace_x,
+    x_min,
+    x_max,
     pxarray,
     pxarray_reversed,
     px_n,
@@ -1491,8 +1492,8 @@ def _raster_orientations(
     """
     left_x = posx + (lo - line_start) * pxsize_x
     right_x = posx + (hi - line_start) * pxsize_x
-    leadin_left = max(left_x - leadin, 0)
-    leadout_right = min(right_x + leadin, workspace_x)
+    leadin_left = max(left_x - leadin, x_min)
+    leadout_right = min(right_x + leadin, x_max)
     fwd = {
         "leadin": leadin_left,
         "start": left_x,
@@ -1523,7 +1524,8 @@ def _emit_raster_nn(
     posx,
     pxsize_x,
     leadin,
-    workspace_x,
+    x_min,
+    x_max,
     pxarray,
     pxarray_reversed,
     px_n,
@@ -1549,7 +1551,8 @@ def _emit_raster_nn(
             posx,
             pxsize_x,
             leadin,
-            workspace_x,
+            x_min,
+            x_max,
             pxarray,
             pxarray_reversed,
             px_n,
@@ -1578,6 +1581,20 @@ def _pass_pxsize(pass_):
     resolution. Clamped to 0.01 mm so it can never divide by zero."""
     pxsize_y = max(float(pass_.get("pxsize", conf["pxsize"])), 0.01)
     return pxsize_y / 2.0, pxsize_y
+
+
+def _reachable_x_range():
+    """The x travel limits in offset coordinates, which is what move() sends.
+
+    The controller adds the table offset to every target, so clamping a raster
+    lead-in or lead-out against the raw machine width would let it run past the
+    end of travel by as much as the offset.
+    """
+    global SerialLoop
+
+    with SerialLoop.lock:
+        x_off = SerialLoop._status["offset"][0]
+    return -x_off, conf["workspace"][0] - x_off
 
 
 def _raster_grayscale(data, px_w, px_h):
@@ -1738,15 +1755,16 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
     line_y = posy + 0.5 * pxsize_y
     line_count = int(size[1] / pxsize_y)
     line_start = line_end = 0
+    x_min, x_max = _reachable_x_range()
 
     # warn if there isn't room for the lead-in / lead-out moves. Only the
     # engraved columns matter, as the head never enters an all-white margin.
     if engraved_box is not None:
         engraved_left = posx + engraved_box[0] * pxsize_x
         engraved_right = posx + engraved_box[2] * pxsize_x
-        if engraved_left - conf["raster_leadin"] < 0:
+        if engraved_left - conf["raster_leadin"] < x_min:
             print("WARN: not enough leadin space")
-        if engraved_right + conf["raster_leadin"] > conf["workspace"][0]:
+        if engraved_right + conf["raster_leadin"] > x_max:
             print("WARN: not enough leadout space")
 
     # set direction
@@ -1772,8 +1790,8 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
                 pos_start = posx + (segment_start - line_start) * pxsize_x
                 pos_end = posx + (segment_end - line_start) * pxsize_x
                 if direction == 1:  # fwd
-                    pos_leadin = max(pos_start - conf["raster_leadin"], 0)
-                    pos_leadout = min(pos_end + conf["raster_leadin"], conf["workspace"][0])
+                    pos_leadin = max(pos_start - conf["raster_leadin"], x_min)
+                    pos_leadout = min(pos_end + conf["raster_leadin"], x_max)
                     orientation = {
                         "leadin": pos_leadin,
                         "start": pos_start,
@@ -1785,8 +1803,8 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
                         "hi": segment_end,
                     }
                 else:  # rev
-                    pos_leadin = min(pos_start + conf["raster_leadin"], conf["workspace"][0])
-                    pos_leadout = max(pos_end - conf["raster_leadin"], 0)
+                    pos_leadin = min(pos_start + conf["raster_leadin"], x_max)
+                    pos_leadout = max(pos_end - conf["raster_leadin"], x_min)
                     orientation = {
                         "leadin": pos_leadin,
                         "start": pos_start,
@@ -1819,7 +1837,8 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
             posx,
             pxsize_x,
             conf["raster_leadin"],
-            conf["workspace"][0],
+            x_min,
+            x_max,
             pxarray,
             pxarray_reversed,
             px_n,
@@ -2001,6 +2020,11 @@ def job_laser(jobdict):
     intensity(0.0)
     if "head" in jobdict and "noreturn" in jobdict["head"] and jobdict["head"]["noreturn"]:
         pass
+    elif not target_in_workarea(0.0, 0.0):
+        # every other move is bounds checked, and a table offset outside the bed
+        # puts the job origin off the machine, so this one would drive into a
+        # hard stop on the way home
+        print("WARN: job origin is outside the work area, not returning to it")
     else:
         move(0, 0, 0)
 

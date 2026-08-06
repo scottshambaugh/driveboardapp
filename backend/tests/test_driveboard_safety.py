@@ -464,6 +464,76 @@ def test_job_validate_blank_margin_burns_when_inverted(loop, monkeypatch):
         driveboard.job_laser_validate(job)
 
 
+def _commanded_x(buf):
+    """Every PARAM_TARGET_X value in a command stream, in offset coordinates."""
+    buf = bytes(buf)
+    xs = []
+    for i in range(len(buf) - 4):
+        if buf[i] >= 128 and chr(buf[i + 4]) == driveboard.PARAM_TARGET_X:
+            xs.append(decode_param(buf, i)[1])
+    return xs
+
+
+@pytest.mark.parametrize("offset", [0.0, 100.0, -50.0], ids=["none", "positive", "negative"])
+def test_raster_leadout_stays_within_travel_under_an_offset(loop, offset):
+    """Raster lead-ins clamp against travel, not the raw machine width.
+
+    move() sends offset coordinates and the controller adds the offset back, so
+    clamping to the machine width drives the head past the end of travel by as
+    much as the lead-in.
+    """
+    loop._status["offset"] = [offset, 0.0, 0.0]
+    x_min, x_max = -offset, conf_workspace_x() - offset
+    width = 40.0
+    job = {
+        # noreturn keeps the trailing move to origin out of the measurement
+        "head": {"noreturn": True},
+        "passes": [{"items": [0], "feedrate": 2000, "intensity": 80, "air_assist": "off"}],
+        "items": [{"def": 0}],
+        # solid image butted right up against the far end of travel
+        "defs": [
+            {
+                "kind": "image",
+                "pos": [x_max - width, 10.0],
+                "size": [width, 10.0],
+                "data": _margin_png((0.0, 1.0)),
+            }
+        ],
+    }
+    driveboard.job(job)
+    xs = _commanded_x(loop.tx_buffer)
+    assert xs, "no moves were emitted"
+    assert max(xs) <= x_max + 1e-6, f"lead-out ran {max(xs) - x_max:.1f}mm past travel"
+    assert min(xs) >= x_min - 1e-6, f"lead-in ran {x_min - min(xs):.1f}mm past travel"
+
+
+@pytest.mark.parametrize(
+    "offset,returns",
+    [(0.0, True), (100.0, True), (-50.0, False)],
+    ids=["none", "positive", "origin-off-the-bed"],
+)
+def test_return_to_origin_respects_travel(loop, offset, returns):
+    """The move home is bounds checked like every other move.
+
+    A table offset outside the bed puts the job origin off the machine, and the
+    trip home would drive into a hard stop.
+    """
+    loop._status["offset"] = [offset, 0.0, 0.0]
+    x_min = -offset
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000, "intensity": 80, "air_assist": "off"}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[max(x_min, 10.0), 10.0], [max(x_min, 20.0), 20.0]]]}],
+    }
+    driveboard.job(job)
+    xs = _commanded_x(loop.tx_buffer)
+    went_home = xs[-1] == pytest.approx(0.0, abs=1e-3)
+    assert went_home is returns
+    if not returns:
+        assert min(xs) >= x_min - 1e-6, "a move ran past the near end of travel"
+
+
 def test_job_rejects_unreadable_image_data(loop):
     """An image the engraver cannot decode fails before anything is queued.
 
