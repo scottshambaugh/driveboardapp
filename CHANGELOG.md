@@ -14,6 +14,8 @@
 - Fix buffer overflow for rasters
 - Additional validation for move commands, and force zero laser intensity
 - Fix raster images dropping their last pixel (correctness, and also cause a freeze on one-pixel rasters)
+- Fix raster segments shorter than the acceleration ramp not engraving at all
+- Scale raster intensity with head speed, keeping exposure even through the acceleration ramps
 
 ### Development
 - 

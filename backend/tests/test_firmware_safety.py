@@ -331,6 +331,71 @@ def test_zero_length_raster_move_does_not_stall_the_protocol_loop():
     assert info["steps"] > 0, "the move queued behind the raster data never ran"
 
 
+# ---------------------------------------------------------------------------
+# Raster pixels are latched by distance travelled, one per pixel width, in
+# every part of the speed profile, with intensity scaled to the current speed
+# so energy per mm holds through the ramps. At 4000 mm/min the ramp covers
+# nominal^2/(4*accel) ~ 2.2mm at the configured 500 mm/s^2, so a short run
+# never cruises and must engrave anyway. Runs use the host's real segment
+# shape (seek, colinear lead-in, raster, lead-out): the lead-in gives the
+# raster block the entry speed the planner allows a short block.
+# ---------------------------------------------------------------------------
+
+RASTER_NOMINAL_DUTY = 199  # intensity 200 after the [128,255] pixel mapping
+
+
+def _segment_duty(pixels, span_px, portd=None):
+    start = 11.125
+    send = fw.raster_segment_program(start, start + span_px * 0.1, pixels)
+    _, _, info = fw.run(send=send, run_cycles=8_000_000, watch_symbol="pwm_duty", portd=portd)
+    return info
+
+
+def test_short_raster_run_fires_inside_the_speed_ramp():
+    # 0.4mm at 4000 mm/min lies entirely inside the acceleration ramp
+    info = _segment_duty([255] * 4, 4)
+    assert info["max"] > 0, "short raster run never fired the beam"
+
+
+@pytest.mark.parametrize("hot", [0, 8, 16], ids=["first", "middle", "last"])
+def test_raster_pixels_latch_across_the_whole_run(hot):
+    # a lone hot pixel anywhere in a ramp-bound run must fire at its position
+    px = [128] * 17
+    px[hot] = 255
+    info = _segment_duty(px, 17)
+    assert info["max"] > 0, f"pixel {hot} of 17 never fired"
+
+
+def test_raster_intensity_scales_down_on_the_ramp():
+    # a run entirely inside the ramp burns at the ramp's fraction of nominal
+    # (~30-40% of speed for 0.4mm), never anywhere near full duty
+    info = _segment_duty([255] * 4, 4)
+    assert 0 < info["max"] < 150, f"ramp run duty {info['max']} not speed-scaled"
+
+
+def test_raster_intensity_reaches_nominal_at_cruise():
+    # a run long enough to cruise must still burn at full commanded intensity
+    info = _segment_duty([255] * 60, 60)
+    assert info["max"] >= RASTER_NOMINAL_DUTY - 9, f"cruise duty only {info['max']}"
+
+
+def test_beam_dark_after_raster_line_ends():
+    # a hot trailing pixel must not bleed into the lead-out
+    info = _segment_duty([255] * 4, 4)
+    assert info["max"] > 0
+    assert info["final"] == 0, "beam left on after the raster line finished"
+
+
+@pytest.mark.parametrize(
+    "portd", [[fw.DOOR1_PORTD_BIT], [fw.CHILLER_PORTD_BIT]], ids=["door", "chiller"]
+)
+def test_raster_beam_stays_dark_on_interlock(portd):
+    # latched pixels go through the interlock-guarded setter like any other
+    # intensity write, so an open door keeps the beam dark mid-raster
+    info = _segment_duty([255] * 17, 17, portd=portd)
+    assert info["max"] == 0, "raster fired the beam with an interlock open"
+
+
 def test_limit_halts_active_move():
     far = fw.line_program(600, feedrate=3000)
     bit = fw.X_STEP_PORTB_BIT

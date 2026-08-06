@@ -77,6 +77,7 @@ static int32_t counter_x,       // Counter variables for the bresenham line trac
                counter_z;
 static uint32_t step_events_completed; // The number of step events executed in the current block
 static uint32_t next_pixel_at_steps;
+static uint8_t raster_pixel_intensity; // last latched pixel, at nominal speed
 static volatile bool busy;  // true when stepper ISR is in already running
 
 // Variables used by the trapezoid generation
@@ -399,10 +400,12 @@ ISR(TIMER1_COMPA_vect) {
       // starting on new line block
       adjusted_rate = current_block->initial_rate;
       acceleration_tick_counter = CYCLES_PER_ACCELERATION_TICK/2; // start halfway, midpoint rule.
-      adjust_laser_speed_beam_dynamics( adjusted_rate ); // initialize cycles_per_step_event
       if (current_block->type == TYPE_RASTER_LINE) {
+        // reset before the beam dynamics call below reads them
         next_pixel_at_steps = 0;
+        raster_pixel_intensity = 0;
       }
+      adjust_laser_speed_beam_dynamics( adjusted_rate ); // initialize cycles_per_step_event
       counter_x = -(current_block->step_event_count >> 1);
       counter_y = counter_x;
       counter_z = counter_x;
@@ -541,7 +544,9 @@ ISR(TIMER1_COMPA_vect) {
             // map [128,255] -> [0, nominal_laser_intensity]
             // Note: this goes from 0 - 254/255 = 0 - 99.6% of nominal_laser_intensity
             // unsigned: the product reaches 64770 and would overflow a signed 16-bit int
-            control_laser_intensity( (unsigned)(chr-128)*2*current_block->nominal_laser_intensity/255 );
+            raster_pixel_intensity = (unsigned)(chr-128)*2*current_block->nominal_laser_intensity/255;
+            // scaled with speed so energy per mm holds through the ramps
+            control_laser_intensity( (uint32_t)raster_pixel_intensity * adjusted_rate / current_block->nominal_rate );
           }
         }
       } else {  // block finished
@@ -661,11 +666,9 @@ inline uint32_t config_step_timer(uint32_t cycles) {
 static void adjust_laser_speed_beam_dynamics(uint32_t adjusted_rate) {
   adjust_speed( adjusted_rate );
   if (current_block->type == TYPE_RASTER_LINE) {
-    // dark until the line's first pixel is latched. After that the beam is
-    // set only by the latched pixels and held through speed changes.
-    if (next_pixel_at_steps == 0) {
-      control_laser_intensity(0);
-    }
+    // the latched pixel, rescaled to the new speed so energy per mm holds
+    // through the ramps. Zero until the line's first pixel is latched.
+    control_laser_intensity( (uint32_t)raster_pixel_intensity * adjusted_rate / current_block->nominal_rate );
   } else {
     adjust_beam_dynamics(adjusted_rate);
   }

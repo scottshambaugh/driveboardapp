@@ -271,6 +271,35 @@ def line_program(x, feedrate=1000):
     return double(logical)
 
 
+def raster_segment_program(
+    start, end, pixels, leadin=5.0, feedrate=4000, seekrate=6000, pixel_width=0.1, intensity=200
+):
+    """Wire bytes for a raster segment the way the host emits one: seek to the
+    lead-in, ramp to the start edge at the feedrate, raster move with data,
+    lead out. The colinear lead-in gives the raster block the entry speed the
+    planner allows a short block, as in a real job."""
+    sign = 1.0 if end >= start else -1.0
+    logical = (
+        encode_value_param(PARAM_INTENSITY, 0)
+        + encode_value_param(PARAM_FEEDRATE, seekrate)
+        + encode_value_param(PARAM_TARGET_X, start - sign * leadin)
+        + [CMD_LINE]
+        + encode_value_param(PARAM_FEEDRATE, feedrate)
+        + encode_value_param(PARAM_TARGET_X, start)
+        + [CMD_LINE]
+        + encode_value_param(PARAM_INTENSITY, intensity)
+        + encode_value_param(PARAM_PIXEL_WIDTH, pixel_width)
+        + encode_value_param(PARAM_TARGET_X, end)
+        + [CMD_RASTER, CMD_RASTER_DATA_START]
+        + list(pixels)
+        + [CMD_RASTER_DATA_END]
+        + encode_value_param(PARAM_INTENSITY, 0)
+        + encode_value_param(PARAM_TARGET_X, end + sign * leadin)
+        + [CMD_LINE]
+    )
+    return double(logical)
+
+
 def raster_program(x, pixels, pixel_width=0.1, intensity=100, feedrate=1000):
     """Wire bytes for a raster move to absolute X, streaming the given pixels.
 
