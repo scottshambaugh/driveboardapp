@@ -293,12 +293,12 @@ ISR(TIMER1_COMPA_vect) {
   }
 
   #ifdef ENABLE_INTERLOCKS
+    // honor interlocks
+    // (for rastering or unlikely edge case the protocol loop stops)
+    if (SENSE_DOOR_OPEN || SENSE_CHILLER_OFF) {
+      control_laser_intensity(0);
+    }
     if (!disable_limits) {
-      // honor interlocks
-      // (for rastering or unlikely edge case the protocol loop stops)
-      if (SENSE_DOOR_OPEN || SENSE_CHILLER_OFF) {
-        control_laser_intensity(0);
-      }
       // stop program when any limit is hit
       if (SENSE_X1_LIMIT) {
         stepper_request_stop(STOPERROR_LIMIT_HIT_X1);

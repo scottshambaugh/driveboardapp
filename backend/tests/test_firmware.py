@@ -99,6 +99,25 @@ def test_config_variants_discovered():
     assert variants, "expected config.*.h firmware variants in firmware/src"
 
 
+def test_beam_interlock_not_gated_by_disable_limits():
+    """The stepper ISR beam cutoff has to sit outside the disable_limits guard.
+
+    disable_limits only suppresses limit switch stops, so homing can drive off
+    a triggered switch. The beam has no such exception, and this ISR copy is
+    the backstop for when the protocol loop is not running.
+
+    Structural because homing plans its moves at intensity 0, so simavr cannot
+    tell the two arrangements apart. The arrangement is the invariant.
+    """
+    with open(os.path.join(SRC_DIR, "stepper.c")) as fp:
+        isr = fp.read().split("ISR(TIMER1_COMPA_vect)", 1)[1]
+    beam = isr.index("SENSE_DOOR_OPEN")
+    guard = isr.index("if (!disable_limits)")
+    limit = isr.index("SENSE_X1_LIMIT")
+    assert beam < guard, "door/chiller beam cutoff is gated by disable_limits"
+    assert guard < limit, "limit switch stops must stay under disable_limits"
+
+
 def test_avr_gcc_toolchain_alignment():
     """Fail fast when avr-gcc drifts a major version from the committed hexes.
 
