@@ -518,34 +518,35 @@ ISR(TIMER1_COMPA_vect) {
             adjusted_rate = current_block->nominal_rate;
             adjust_laser_speed_beam_dynamics( adjusted_rate );
           }
-          // Special case raster line.
-          // Adjust intensity according raster buffer.
-          if (current_block->type == TYPE_RASTER_LINE) {
-            if (next_pixel_at_steps == 0) {  // starting raster_cruise
-              next_pixel_at_steps += (step_events_completed << 10);  // * 1024
-            }
-            if ((step_events_completed << 10) >= next_pixel_at_steps) {
-              next_pixel_at_steps += current_block->pixel_steps_x1024;
-              // for every pixel width get the next raster value
-              // disable nested interrupts
-              // this is to prevent race conditions with the serial interrupt
-              // over the rx_buffer variables.
-              cli();
-              uint8_t chr = serial_raster_read();
-              sei();
-              // map [128,255] -> [0, nominal_laser_intensity]
-              // (chr-128)*2/255 * (current_block->nominal_laser_intensity)
-              // Note: this will go from 0 - 254/255 = 0 - 99.6% of nominal_laser_intensity
-              // unsigned: the product reaches 64770 and would overflow a signed 16-bit int
-              control_laser_intensity( (unsigned)(chr-128)*2*current_block->nominal_laser_intensity/255 );
-            }
-          // otherwise make sure intensity at nominal
-          } else {
+          if (current_block->type != TYPE_RASTER_LINE) {
             control_laser_intensity(current_block->nominal_laser_intensity);
+          }
+        }
+
+        // Latch raster pixels by distance: one per pixel width of travel,
+        // whatever part of the speed profile the block is in. Gating this on
+        // cruising would skip every run shorter than the acceleration
+        // distance, nominal_speed^2/(4*accel).
+        if (current_block->type == TYPE_RASTER_LINE) {
+          if (next_pixel_at_steps == 0) {  // first pixel of the line
+            next_pixel_at_steps += (step_events_completed << 10);  // * 1024
+          }
+          if ((step_events_completed << 10) >= next_pixel_at_steps) {
+            next_pixel_at_steps += current_block->pixel_steps_x1024;
+            // nested interrupts disabled to prevent races with the serial
+            // interrupt over the rx_buffer variables
+            cli();
+            uint8_t chr = serial_raster_read();
+            sei();
+            // map [128,255] -> [0, nominal_laser_intensity]
+            // Note: this goes from 0 - 254/255 = 0 - 99.6% of nominal_laser_intensity
+            // unsigned: the product reaches 64770 and would overflow a signed 16-bit int
+            control_laser_intensity( (unsigned)(chr-128)*2*current_block->nominal_laser_intensity/255 );
           }
         }
       } else {  // block finished
         if (current_block->type == TYPE_RASTER_LINE) {
+          control_laser_intensity(0);  // beam dark for the lead-out
           // make sure all raster data is consumed
           serial_consume_data();
         }
@@ -660,7 +661,11 @@ inline uint32_t config_step_timer(uint32_t cycles) {
 static void adjust_laser_speed_beam_dynamics(uint32_t adjusted_rate) {
   adjust_speed( adjusted_rate );
   if (current_block->type == TYPE_RASTER_LINE) {
-    control_laser_intensity(0);  // set only through raster data
+    // dark until the line's first pixel is latched. After that the beam is
+    // set only by the latched pixels and held through speed changes.
+    if (next_pixel_at_steps == 0) {
+      control_laser_intensity(0);
+    }
   } else {
     adjust_beam_dynamics(adjusted_rate);
   }

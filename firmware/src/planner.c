@@ -489,10 +489,9 @@ inline static void planner_recalculate() {
   }
 
   // Recalculate last (newest) block with zero exit speed, unless it is a raster line.
-  // Reading raster data is blocking of reading in the lead-out line, and we may hit the decelerate point before
-  // raster data has finished streaming. In that instance, we cease reading in raster data, and the trailing pixels
-  // are erroneously consumed. Not setting a decelerate for the raster line on the first pass compensates for this.  
-  // The decelerate point will be updated when the lead-out line is read in.
+  // The lead-out line is usually still streaming in while the raster line
+  // executes, so the raster line is first planned without a deceleration and
+  // picks one up when the lead-out line is read in and the buffer recalculated.
   if (next->type == TYPE_RASTER_LINE){
     calculate_trapezoid_for_block( next,
       next->entry_speed/next->nominal_speed, next->nominal_speed/next->nominal_speed );
