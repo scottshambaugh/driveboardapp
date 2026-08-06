@@ -20,11 +20,14 @@ Safety functions covered:
                          door interlock, chiller interlock, paused flag
 """
 
+import base64
 import copy
+import io
 
 import driveboard
 import pytest
 from helpers import FakeSerialDevice as FakeDevice
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Fakes + helpers
@@ -371,6 +374,92 @@ def test_job_validate_image_bounds(loop):
     }
     with pytest.raises(ValueError):
         driveboard.job_laser_validate(job)
+
+
+# ---------------------------------------------------------------------------
+# Raster validation - a blank margin is skipped by the engraver, so it must
+# not constrain the job. Images are often exported with transparent padding
+# around the artwork, which would otherwise fail an in-bounds job.
+# ---------------------------------------------------------------------------
+
+
+def _margin_png(ink=(0.6, 1.0), width=100, height=50):
+    """A transparent png with an opaque black band over the `ink` fraction of
+    its width, so the rest is margin the engraver will skip."""
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    for x in range(int(width * ink[0]), int(width * ink[1])):
+        for y in range(height):
+            img.putpixel((x, y), (0, 0, 0, 255))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _image_job(pos, size, data):
+    return {
+        "passes": [{"items": [0]}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "image", "pos": pos, "size": size, "data": data}],
+    }
+
+
+@pytest.mark.parametrize(
+    "pos,ink,rejected",
+    [
+        # hangs 20mm off the left edge, but only the transparent part does
+        ([-20.0, 10.0], (0.6, 1.0), None),
+        # same geometry, but now the artwork itself reaches past the edge
+        ([-20.0, 10.0], (0.0, 1.0), "left"),
+        ([conf_workspace_x() - 20.0, 10.0], (0.0, 0.4), None),
+        ([conf_workspace_x() - 20.0, 10.0], (0.0, 1.0), "right"),
+        # nothing engraves at all, so the placement cannot matter
+        ([-500.0, -500.0], (1.0, 1.0), None),
+    ],
+    ids=["blank-off-left", "ink-off-left", "blank-off-right", "ink-off-right", "all-blank"],
+)
+def test_job_validate_image_ignores_blank_margins(loop, pos, ink, rejected):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _image_job(pos, [40.0, 20.0], _margin_png(ink))
+    if rejected:
+        with pytest.raises(ValueError, match=rejected):
+            driveboard.job_laser_validate(job)
+    else:
+        driveboard.job_laser_validate(job)  # must not raise
+
+
+def test_job_validate_blank_margin_burns_when_inverted(loop, monkeypatch):
+    from config import conf
+
+    # under raster_invert the blank margin is what burns and the artwork is
+    # what gets skipped, so the very same job must now be rejected
+    monkeypatch.setitem(conf, "raster_invert", True)
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _image_job([-20.0, 10.0], [40.0, 20.0], _margin_png())
+    with pytest.raises(ValueError, match="left"):
+        driveboard.job_laser_validate(job)
+
+
+def test_job_validate_falls_back_when_pixels_unreadable(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    # undecodable data, so the full extent is checked instead of the artwork
+    driveboard.job_laser_validate(_image_job([10.0, 10.0], [40.0, 20.0], None))
+    with pytest.raises(ValueError, match="left"):
+        driveboard.job_laser_validate(_image_job([-20.0, 10.0], [40.0, 20.0], None))
+
+
+@pytest.mark.parametrize(
+    "ink,expected",
+    [
+        # ink starts at 60% of the width, grown by a pixel on each side to
+        # cover dithering error diffused into the margin
+        ((0.6, 1.0), (59, 0, 100, 50)),
+        ((1.0, 1.0), None),  # nothing to engrave at all
+    ],
+    ids=["padded", "blank"],
+)
+def test_raster_engraved_box(ink, expected):
+    gray = driveboard._raster_grayscale(_margin_png(ink), 100, 50)
+    assert driveboard._raster_engraved_box(gray, 100, 50) == expected
 
 
 def test_job_dispatch_validates_before_lasing(loop):

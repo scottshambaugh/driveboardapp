@@ -3,10 +3,11 @@ __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 import base64
 import io
 import logging
+import math
 
 from .svg_tag_reader import SVGTagReader
 from .svg_text_converter import convert_text_to_paths, get_conversion_warnings
-from .utilities import matrixApply, matrixApplyScale, parseFloats, parseScalar, vertexScale
+from .utilities import matrixApply, parseFloats, parseScalar, vertexScale
 
 try:
     from PIL import Image
@@ -106,53 +107,154 @@ class SVGReader:
         # (clipPath elements are not otherwise traversed; collected up front)
         self._clip_rects = {}
 
-    def _flip_image_data(self, data_uri, flip_h, flip_v):
-        """Flip image data horizontally and/or vertically.
+    @staticmethod
+    def _encode_image_data(img, header):
+        """Re-encode a PIL image into a base64 data URI, keeping `header`'s format."""
+        buffer = io.BytesIO()
+        img_format = "PNG" if "png" in header.lower() else "JPEG"
 
-        Args:
-            data_uri: Base64 data URI string (e.g., 'data:image/png;base64,...')
-            flip_h: Flip horizontally if True
-            flip_v: Flip vertically if True
+        # For JPEG, convert RGBA to RGB (JPEG doesn't support alpha)
+        if img_format == "JPEG" and img.mode == "RGBA":
+            img = img.convert("RGB")
 
-        Returns:
-            Modified data URI with flipped image, or original if processing fails
+        img.save(buffer, format=img_format)
+        return header + "," + base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+    def _reorient_image_data(self, data_uri, transpose=False, flip_h=False, flip_v=False):
+        """Reorient image data by an optional transpose (a reflection about the
+        main diagonal) and then optional horizontal and vertical flips.
+
+        Returns a new data URI, or the original if processing fails.
         """
         try:
-            # Parse the data URI
             if "," not in data_uri:
                 return data_uri
             header, b64data = data_uri.split(",", 1)
-
-            # Decode base64 to image
-            img_bytes = base64.b64decode(b64data)
-            img = Image.open(io.BytesIO(img_bytes))
-
-            # Convert palette or other modes to RGBA for consistent handling
+            img = Image.open(io.BytesIO(base64.b64decode(b64data)))
             if img.mode in ("P", "1", "L", "LA", "PA"):
                 img = img.convert("RGBA")
-
-            # Apply flips using Pillow's transpose method
+            if transpose:
+                img = img.transpose(Image.Transpose.TRANSPOSE)
             if flip_h:
                 img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
             if flip_v:
                 img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-
-            # Re-encode to base64
-            buffer = io.BytesIO()
-            img_format = "PNG" if "png" in header.lower() else "JPEG"
-
-            # For JPEG, convert RGBA to RGB (JPEG doesn't support alpha)
-            if img_format == "JPEG" and img.mode == "RGBA":
-                img = img.convert("RGB")
-
-            img.save(buffer, format=img_format)
-            new_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-            return header + "," + new_b64
-
+            return self._encode_image_data(img, header)
         except Exception as e:
-            log.warning(f"Failed to flip image: {e}")
+            log.warning(f"Failed to reorient image: {e}")
             return data_uri
+
+    # ceiling on the pixel count of a resampled image, so an extreme skew
+    # cannot blow up memory (24 megapixels is past any engravable detail)
+    _resample_px_max = 24000000
+
+    def _resample_image_data(self, data_uri, origin, u, v, pos, size):
+        """Resample a rotated or skewed image onto the axis-aligned mm box
+        (`pos`, `size`).
+
+        `origin`, `u` and `v` say where the image lands in mm. `origin` is its
+        (0,0) pixel corner, `u` the vector along a pixel row and `v` the vector
+        down a pixel column. The parts of the box the image does not cover come
+        out transparent, so they never engrave.
+
+        Returns a new data URI, always PNG so the alpha channel survives, or
+        the original if processing fails.
+        """
+        try:
+            if "," not in data_uri:
+                return data_uri
+            _, b64data = data_uri.split(",", 1)
+            img = Image.open(io.BytesIO(base64.b64decode(b64data))).convert("RGBA")
+            src_w, src_h = img.size
+            det = u[0] * v[1] - v[0] * u[1]
+            if not det or not src_w or not src_h:
+                return data_uri
+
+            # keep the finer of the two source pixel densities so rotating
+            # cannot soften the image, then clamp the resulting pixel count
+            density = max(src_w / math.hypot(*u), src_h / math.hypot(*v))
+            out_w = max(1, round(size[0] * density))
+            out_h = max(1, round(size[1] * density))
+            if out_w * out_h > self._resample_px_max:
+                shrink = math.sqrt(self._resample_px_max / (out_w * out_h))
+                out_w = max(1, int(out_w * shrink))
+                out_h = max(1, int(out_h * shrink))
+
+            # Image.transform wants the inverse map, output pixel to source pixel
+            sx = size[0] / out_w
+            sy = size[1] / out_h
+            ox = pos[0] - origin[0]
+            oy = pos[1] - origin[1]
+            affine = (
+                src_w * v[1] * sx / det,
+                -src_w * v[0] * sy / det,
+                src_w * (v[1] * ox - v[0] * oy) / det,
+                -src_h * u[1] * sx / det,
+                src_h * u[0] * sy / det,
+                src_h * (u[0] * oy - u[1] * ox) / det,
+            )
+            img = img.transform(
+                (out_w, out_h), Image.Transform.AFFINE, affine, resample=Image.BICUBIC
+            )
+            return self._encode_image_data(img, "data:image/png;base64")
+        except Exception as e:
+            log.warning(f"Failed to resample rotated image: {e}")
+            return data_uri
+
+    def _place_raster(self, raster, mat):
+        """Place a raster in mm space, given its element's transform to world.
+
+        The engraver only runs axis-aligned images, so any rotation or skew has
+        to be baked into the pixel data instead. Quarter turns are exact
+        transposes, anything else is resampled onto the transform's bounding
+        box. On return `raster['pos']` is the top-left mm corner and
+        `raster['size']` the positive mm extent.
+        """
+        # where the image's box lands in mm: its (0,0) pixel corner, plus the
+        # vectors along a pixel row (local +x) and down a pixel column (local +y)
+        origin = [raster["pos"][0], raster["pos"][1]]
+        matrixApply(mat, origin)
+        vertexScale(origin, self.px2mm)
+        w, h = raster["size"]
+        u = [mat[0] * w * self.px2mm, mat[1] * w * self.px2mm]
+        v = [mat[2] * h * self.px2mm, mat[3] * h * self.px2mm]
+
+        # axis-aligned bounding box of the placed parallelogram
+        xs = (origin[0], origin[0] + u[0], origin[0] + u[0] + v[0], origin[0] + v[0])
+        ys = (origin[1], origin[1] + u[1], origin[1] + u[1] + v[1], origin[1] + v[1])
+        raster["pos"] = [min(xs), min(ys)]
+        raster["size"] = [max(xs) - min(xs), max(ys) - min(ys)]
+
+        # the pixel grid has to come out with rows along x and columns down y
+        tol = 1e-9 * (math.hypot(*u) + math.hypot(*v))
+        upright = abs(u[1]) <= tol and abs(v[0]) <= tol
+        quarter_turn = abs(u[0]) <= tol and abs(v[1]) <= tol
+        if upright:
+            # already the right way round, so only mirroring can be left
+            transpose, flip_h, flip_v = False, u[0] < 0, v[1] < 0
+        elif quarter_turn:
+            # rows run along y and columns along x, so the grid transposes and
+            # the flips then point each axis the right way round
+            transpose, flip_h, flip_v = True, v[0] < 0, u[1] < 0
+        else:
+            transpose = flip_h = flip_v = False
+
+        if not raster["data"]:
+            return
+        if Image is None:
+            if not upright or flip_h or flip_v:
+                log.warning("rotated or mirrored image left as is, Pillow is missing")
+            return
+
+        if not (upright or quarter_turn):
+            # arbitrary rotation or skew, so resample onto the bounding box
+            raster["data"] = self._resample_image_data(
+                raster["data"], origin, u, v, raster["pos"], raster["size"]
+            )
+        elif transpose or flip_h or flip_v:
+            raster["data"] = self._reorient_image_data(
+                raster["data"], transpose=transpose, flip_h=flip_h, flip_v=flip_v
+            )
 
     def _crop_image_data(self, data_uri, fx0, fy0, fx1, fy1):
         """Crop image to the fractional box (fx0,fy0)-(fx1,fy1) of its extent.
@@ -176,13 +278,7 @@ class SVGReader:
             if box[2] <= box[0] or box[3] <= box[1]:
                 return data_uri
             img = img.crop(box)
-            buffer = io.BytesIO()
-            img_format = "PNG" if "png" in header.lower() else "JPEG"
-            if img_format == "JPEG" and img.mode == "RGBA":
-                img = img.convert("RGB")
-            img.save(buffer, format=img_format)
-            new_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            return header + "," + new_b64
+            return self._encode_image_data(img, header)
         except Exception as e:
             log.warning(f"Failed to crop image: {e}")
             return data_uri
@@ -538,34 +634,10 @@ class SVGReader:
 
                 # 5. Raster Data [(x, y, size, data)]
                 for raster in node["rasters"]:
-                    # pos to world coordinates and then to mm units
-                    matrixApply(node["xformToWorld"], raster["pos"])
-                    vertexScale(raster["pos"], self.px2mm)
-
-                    # size to world scale and then to mm units
-                    matrixApplyScale(node["xformToWorld"], raster["size"])
-                    vertexScale(raster["size"], self.px2mm)
-
-                    # Check for flips (negative scale in transform)
-                    # If size becomes negative, we need to flip the image data
-                    flip_h = raster["size"][0] < 0
-                    flip_v = raster["size"][1] < 0
-
-                    # When size is negative due to flip transform, the position we
-                    # computed is the far corner. We need to find the near corner
-                    # (top-left) for the final placement. Adding negative size moves
-                    # the position to the correct corner.
-                    # After that, make size positive and flip the image data.
-                    if flip_h:
-                        raster["pos"][0] += raster["size"][0]  # size is negative
-                        raster["size"][0] = -raster["size"][0]
-                    if flip_v:
-                        raster["pos"][1] += raster["size"][1]  # size is negative
-                        raster["size"][1] = -raster["size"][1]
-
-                    # Apply flip to image data if needed
-                    if (flip_h or flip_v) and Image is not None and raster["data"]:
-                        raster["data"] = self._flip_image_data(raster["data"], flip_h, flip_v)
+                    # to world coordinates and mm units, baking any rotation,
+                    # skew or mirroring into the pixel data (pos/size come back
+                    # as the top-left corner and a positive extent)
+                    self._place_raster(raster, node["xformToWorld"])
 
                     # Crop to any active rectangular clip-path (pos/size are now
                     # the normalized top-left + positive extent in mm)

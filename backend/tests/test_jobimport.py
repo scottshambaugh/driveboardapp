@@ -5,13 +5,16 @@ These exercise the real parsers against the repository's own fixture files
 is covered without any hardware.
 """
 
+import base64
 import glob
+import io
 import json
 import os
 
 import jobimport
 import pytest
 from jobimport.gcode_reader import GcodeReader
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # get_type detection
@@ -99,6 +102,117 @@ def test_convert_svg_has_geometry(testjobs_dir):
     path_defs = [d for d in job["defs"] if d["kind"] == "path"]
     assert path_defs
     assert any(d["data"] for d in path_defs)
+
+
+# ---------------------------------------------------------------------------
+# svg raster placement
+#
+# The engraver can only run axis-aligned images, so the importer has to bake
+# any rotation, skew or mirroring in the transform into the pixel data itself
+# and report the resulting upright mm box.
+# ---------------------------------------------------------------------------
+
+R = (255, 0, 0, 255)
+G = (0, 255, 0, 255)
+B = (0, 0, 255, 255)
+K = (0, 0, 0, 255)
+MARKER = ((R, G), (B, K))  # a 2x2 image whose every corner is distinguishable
+
+
+def _png_data_uri(rows):
+    """Base64 PNG data URI for `rows`, given as rows of RGBA tuples."""
+    img = Image.new("RGBA", (len(rows[0]), len(rows)))
+    img.putdata([px for row in rows for px in row])
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+def _raster_svg(transform="", rows=MARKER):
+    """A 100x100mm svg holding one 40x20 image at (10, 20). The viewBox matches
+    the page size, so one svg user unit is exactly one mm."""
+    return (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        f'<image x="10" y="20" width="40" height="20" transform="{transform}" '
+        f'xlink:href="{_png_data_uri(rows)}"/>'
+        "</svg>"
+    )
+
+
+def _import_raster(transform="", rows=MARKER):
+    """Convert the fixture svg, returning (image def, decoded PIL image)."""
+    job = jobimport.convert(_raster_svg(transform, rows), optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 1, "expected exactly one image def"
+    _, b64 = defs[0]["data"].split(",", 1)
+    return defs[0], Image.open(io.BytesIO(base64.b64decode(b64)))
+
+
+def _pixels(img):
+    """The image as a list of rows of RGBA tuples."""
+    img = img.convert("RGBA")
+    data = list(img.getdata())
+    return [tuple(data[y * img.width : (y + 1) * img.width]) for y in range(img.height)]
+
+
+@pytest.mark.parametrize(
+    "transform,pos,size,pixels",
+    [
+        ("", [10.0, 20.0], [40.0, 20.0], [(R, G), (B, K)]),
+        ("scale(2,3)", [20.0, 60.0], [80.0, 60.0], [(R, G), (B, K)]),
+        # a quarter turn lands the 40x20 image as a 20x40 one
+        ("translate(60,0) rotate(90)", [20.0, 10.0], [20.0, 40.0], [(B, R), (K, G)]),
+        ("translate(0,60) rotate(-90)", [20.0, 10.0], [20.0, 40.0], [(G, K), (R, B)]),
+        # a half turn is upright again, but only within floating point noise,
+        # so this also covers the tolerance on the axis-aligned test
+        ("translate(100,100) rotate(180)", [50.0, 60.0], [40.0, 20.0], [(K, B), (G, R)]),
+        ("translate(100,0) scale(-1,1)", [50.0, 20.0], [40.0, 20.0], [(G, R), (K, B)]),
+        ("translate(0,100) scale(1,-1)", [10.0, 60.0], [40.0, 20.0], [(B, K), (R, G)]),
+    ],
+    ids=["upright", "scaled", "cw", "ccw", "half-turn", "mirror-h", "mirror-v"],
+)
+def test_raster_axis_aligned_placement(transform, pos, size, pixels):
+    """Upright, quarter-turned and mirrored images keep their exact pixels and
+    come back as an upright mm box.
+
+    Regression: reading the scale off a rotation matrix as (m[0], m[3]) gave a
+    quarter-turned image a zero size, which hid it from the preview and
+    collapsed both work-area bounds checks onto a single point.
+    """
+    def_, img = _import_raster(transform)
+    assert def_["pos"] == pytest.approx(pos)
+    assert def_["size"] == pytest.approx(size)
+    assert _pixels(img) == pixels
+
+
+def test_raster_upright_data_passes_through():
+    # nothing to reorient, so the pixels must not be re-encoded
+    def_, _ = _import_raster()
+    assert def_["data"] == _png_data_uri(MARKER)
+
+
+@pytest.mark.parametrize(
+    "transform,pos,size,blank_corner",
+    [
+        # 45 degrees grows the box to the rotated diagonal on both axes
+        ("translate(30,0) rotate(45)", [8.7868, 21.2132], [42.4264, 42.4264], (0, 0)),
+        # a shear widens the box without moving its top edge
+        ("skewX(45)", [30.0, 20.0], [60.0, 20.0], (-1, 0)),
+    ],
+    ids=["rotate45", "skew"],
+)
+def test_raster_arbitrary_transform_resampled(transform, pos, size, blank_corner):
+    """Anything that is not a quarter turn gets resampled onto its bounding
+    box, leaving the corners it does not cover transparent."""
+    def_, img = _import_raster(transform)
+    assert def_["pos"] == pytest.approx(pos, abs=1e-3)
+    assert def_["size"] == pytest.approx(size, abs=1e-3)
+    px = _pixels(img)
+    assert px[blank_corner[0]][blank_corner[1]][3] == 0, "uncovered corner should be blank"
+    assert px[len(px) // 2][len(px[0]) // 2][3] == 255, "the centre should be covered"
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@
 - 
 
 ### Bug Fixes
--
+- Fix errors in loading a scaled / transformed raster image
 
 ### Development
 - 

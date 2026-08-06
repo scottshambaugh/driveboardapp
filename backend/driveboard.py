@@ -1295,20 +1295,21 @@ def job_laser_validate(jobdict):
             kind = def_["kind"]
 
             if kind == "image":
-                pos = def_["pos"]
+                # an all-white or transparent margin is skipped by the engraver,
+                # so only the part that actually burns has to fit
+                try:
+                    corners = _raster_engraved_box_mm(def_, pass_)
+                    if corners is None:
+                        continue  # nothing engraves, nothing to check
+                except Exception as e:
+                    print(f"WARN: could not read image pixels ({e}), checking full extent")
+                    pos, size = def_["pos"], def_["size"]
+                    corners = [pos, [pos[0] + size[0], pos[1] + size[1]]]
 
-                # the image must be aligned with the axes, so to determine
-                # whether the image fits in the work area, its enough to check
-                # two opposite corners
-                # first top left
-                check_point(pos, passidx, kind)
-
-                # add pos + size to get bottom right
-                pos = pos.copy()
-                size = def_["size"]
-                pos[0] += size[0]
-                pos[1] += size[1]
-                check_point(pos, passidx, kind)
+                # the image is aligned with the axes, so two opposite corners
+                # are enough to tell whether it fits in the work area
+                check_point(corners[0], passidx, kind)
+                check_point(corners[1], passidx, kind)
 
             elif kind == "fill" or kind == "path":
                 path = def_["data"]
@@ -1443,10 +1444,17 @@ def _emit_raster_nn(
         current = [orientation["leadout"], orientation["line_y"]]
 
 
-def _raster_load_pixels(data, px_w, px_h, n_raster_levels):
-    """Decode the base64 image to a flat grayscale pixel list (0=black/full
-    power, 255=white/no power), applying invert and dithering. Returns
-    (pxarray, pxarray_reversed, px_n)."""
+def _pass_pxsize(pass_):
+    """The (x, y) raster pixel size of a pass in mm, with 2x horizontal
+    resolution. Clamped to 0.01 mm so it can never divide by zero."""
+    pxsize_y = max(float(pass_.get("pxsize", conf["pxsize"])), 0.01)
+    return pxsize_y / 2.0, pxsize_y
+
+
+def _raster_grayscale(data, px_w, px_h):
+    """Decode the base64 image to a px_w x px_h grayscale PIL image, with
+    transparency composited onto white and invert applied.
+    0=black/full power, 255=white/no power."""
     imgobj = Image.open(io.BytesIO(base64.b64decode(data[22:])))
     imgobj = imgobj.resize((px_w, px_h), resample=Image.BICUBIC)
     if imgobj.mode in ["PA", "LA", "RGBA", "La", "RBGa"]:
@@ -1457,11 +1465,59 @@ def _raster_load_pixels(data, px_w, px_h, n_raster_levels):
     else:
         imgobj = imgobj.convert("L")
 
-    # 0 = black / full power, 255 = white / transparent / no power
+    if conf["raster_invert"]:
+        imgobj = imgobj.point(lambda px: 255 - px)
+    return imgobj
+
+
+def _raster_engraved_box(imgobj, px_w, px_h):
+    """Pixel box (x0, y0, x1, y1) of what a grayscale raster will actually burn.
+
+    The engraver skips pure white (255), both whole scanlines and the
+    whitespace at either end of a line, so an all-white margin never moves the
+    head and must not count towards the job's extent. The box is grown by a
+    pixel on each side to cover dithering error diffused into that margin.
+    Returns None if nothing will be engraved at all.
+    """
+    # getbbox() reports the extent of the non-zero pixels, so map white to zero
+    box = imgobj.point(lambda px: 0 if px == 255 else 255).getbbox()
+    if box is None:
+        return None
+    return (
+        max(box[0] - 1, 0),
+        max(box[1] - 1, 0),
+        min(box[2] + 1, px_w),
+        min(box[3] + 1, px_h),
+    )
+
+
+def _raster_engraved_box_mm(def_, pass_):
+    """Absolute mm corners [[x0,y0], [x1,y1]] of the part of an image def that
+    will actually be engraved in `pass_`, or None if nothing will be."""
+    pos = def_["pos"]
+    size = def_["size"]
+    pxsize_x, pxsize_y = _pass_pxsize(pass_)
+    px_w = int(size[0] / pxsize_x)
+    px_h = int(size[1] / pxsize_y)
+    if px_w <= 0 or px_h <= 0:
+        return None
+    box = _raster_engraved_box(_raster_grayscale(def_["data"], px_w, px_h), px_w, px_h)
+    if box is None:
+        return None
+    return [
+        [pos[0] + box[0] / px_w * size[0], pos[1] + box[1] / px_h * size[1]],
+        [pos[0] + box[2] / px_w * size[0], pos[1] + box[3] / px_h * size[1]],
+    ]
+
+
+def _raster_load_pixels(data, px_w, px_h, n_raster_levels):
+    """Decode the base64 image to a flat grayscale pixel list (0=black/full
+    power, 255=white/no power), applying invert and dithering. Returns
+    (pxarray, pxarray_reversed, px_n)."""
+    imgobj = _raster_grayscale(data, px_w, px_h)
+
     pxarray = list(imgobj.getdata())
     pxarray[:] = (value for value in pxarray if type(value) is not str)
-    if conf["raster_invert"]:
-        pxarray = [255 - px for px in pxarray]
     if n_raster_levels < 128:  # skip dithering if max resolution
         pxarray = raster_dither(px_w, px_h, pxarray, n_raster_levels)
     pxarray_reversed = pxarray[::-1]
@@ -1538,7 +1594,9 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
         raster_mode = "Bidirectional"
         print("WARN: raster_mode not recognized. Please check your config file.")
 
-    pxarray, pxarray_reversed, px_n = _raster_load_pixels(data, px_w, px_h, n_raster_levels)
+    pxarray, pxarray_reversed, px_n, engraved_box = _raster_load_pixels(
+        data, px_w, px_h, n_raster_levels
+    )
 
     # assists on, beginning of feed if set to 'feed'
     if pass_["air_assist"] == "feed":
@@ -1738,12 +1796,11 @@ def job_laser(jobdict):
 
     # loop passes
     for pass_ in jobdict["passes"]:
-        pxsize_y = float(pass_.setdefault("pxsize", conf["pxsize"]))
-        if pxsize_y < 0.01:
-            print(f"WARN: pxsize of {pxsize_y} mm/px is too small. Setting to 0.01 mm/px")
-            pxsize_y = 0.01  # prevent div by 0
+        requested_pxsize = float(pass_.setdefault("pxsize", conf["pxsize"]))
+        pxsize_x, pxsize_y = _pass_pxsize(pass_)  # x is 2x horiz resolution
+        if requested_pxsize != pxsize_y:
+            print(f"WARN: pxsize of {requested_pxsize} mm/px is too small. Setting to {pxsize_y}")
         intensity(0.0)
-        pxsize_x = pxsize_y / 2.0  # use 2x horiz resolution
         pixelwidth(pxsize_x)
         # assists on, beginning of pass if set to 'pass'
         if pass_.setdefault("air_assist", "pass") == "pass":

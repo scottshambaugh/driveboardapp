@@ -42,13 +42,6 @@ def matrixApply(mat, vec):
     vec[0] = vec0
 
 
-def matrixApplyScale(mat, vec):
-    # POSSIBLE BUG: not sure the scale can be extracted
-    # this easily for compound matices
-    vec[0] *= mat[0]
-    vec[1] *= mat[3]
-
-
 def vertexScale(v, f):
     v[0] *= f
     v[1] *= f
