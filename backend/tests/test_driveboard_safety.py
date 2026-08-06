@@ -265,10 +265,35 @@ def test_target_in_workarea_machine_coords_ignores_offset(loop):
     assert driveboard.target_in_workarea(x=-50, machine_coords=True) is False
 
 
-def test_target_in_workarea_none_and_z_unbounded(loop):
+def test_target_in_workarea_none_is_inside(loop):
     loop._status["offset"] = [0.0, 0.0, 0.0]
-    # No x/y given -> always inside; z is intentionally not bounded here.
     assert driveboard.target_in_workarea() is True
+
+
+def test_target_in_workarea_z_unbounded_without_a_z_workspace(loop, monkeypatch):
+    from config import conf
+
+    # workspace z of 0 means no z axis is configured, so focus jogging is free
+    monkeypatch.setitem(conf, "workspace", [1220, 610, 0])
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    assert driveboard.target_in_workarea(z=500.0) is True
+    assert driveboard.target_in_workarea(z=-500.0) is True
+
+
+def test_target_in_workarea_bounds_z_when_configured(loop, monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf, "workspace", [1220, 610, 100])
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    assert driveboard.target_in_workarea(z=50.0) is True
+    assert driveboard.target_in_workarea(z=150.0) is False
+    assert driveboard.target_in_workarea(z=-1.0) is False
+
+
+def conf_feedrate():
+    from config import conf
+
+    return conf["feedrate"]
 
 
 def conf_workspace_x():
@@ -496,6 +521,64 @@ def test_job_dispatch_validates_before_lasing(loop):
         driveboard.job(bad)
 
 
+def _param_job(**pass_kwargs):
+    pass_ = {"items": [0]}
+    pass_.update(pass_kwargs)
+    return {
+        "head": {},
+        "passes": [pass_],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[10.0, 10.0], [20.0, 20.0]]]}],
+    }
+
+
+@pytest.mark.parametrize(
+    "params,bad",
+    [
+        ({"feedrate": 0.0}, "feedrate"),
+        ({"feedrate": -1000.0}, "feedrate"),
+        ({"seekrate": -1.0}, "seekrate"),
+        ({"intensity": 150.0}, "intensity"),
+        ({"intensity": -1.0}, "intensity"),
+        ({"pierce_time": 3600.0}, "pierce_time"),
+        ({"pxsize": -0.2}, "pxsize"),
+    ],
+)
+def test_job_rejects_out_of_range_pass_params(loop, params, bad):
+    # rejected with a readable error rather than silently clamped on the wire
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match=bad):
+        driveboard.job(_param_job(**params))
+
+
+def test_job_accepts_in_range_pass_params(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(feedrate=2000.0, intensity=80.0, pierce_time=0.5))
+
+
+def test_job_coerces_numeric_strings(loop):
+    # svg cut setting tags carry their values as strings
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _param_job(feedrate="2550", intensity="100")
+    driveboard.job(job)
+    assert job["passes"][0]["feedrate"] == 2550.0
+    assert job["passes"][0]["intensity"] == 100.0
+
+
+def test_job_treats_empty_pass_params_as_unset(loop):
+    # an svg tag leaves unset fields empty, which must mean 'use the default'
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _param_job(feedrate="", intensity="80")
+    driveboard.job(job)
+    assert job["passes"][0]["feedrate"] == conf_feedrate()
+
+
+def test_job_rejects_non_numeric_pass_params(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match="not a number"):
+        driveboard.job(_param_job(feedrate="fast"))
+
+
 def _good_job():
     return {
         "head": {},
@@ -690,15 +773,46 @@ def test_dwell(loop):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    "fn,val,expected",
+    [
+        # a feed rate at or below zero reaches the planner as a zero or
+        # wrapped step rate, and divides into the beam dynamics intensity
+        (driveboard.feedrate, 0.0, driveboard.MIN_FEEDRATE),
+        (driveboard.feedrate, -1000.0, driveboard.MIN_FEEDRATE),
+        (driveboard.feedrate, 1e9, driveboard.MAX_FEEDRATE),
+        (driveboard.feedrate, 2000.0, 2000.0),
+        # a dwell holds the beam on in one spot for its whole duration
+        (driveboard.duration, -1.0, 0.0),
+        (driveboard.duration, 1e9, driveboard.MAX_DWELL_SECONDS),
+        (driveboard.duration, 0.1, 0.1),
+        (driveboard.pixelwidth, -0.5, 0.0),
+        (driveboard.pixelwidth, 0.2, 0.2),
+    ],
+)
+def test_motion_params_clamped_before_the_wire(loop, fn, val, expected):
+    fn(val)
+    _, sent = decode_param(loop.tx_buffer, 0)
+    assert sent == pytest.approx(expected, abs=1e-3)
+
+
+@pytest.mark.parametrize("val,expected", [(-50.0, 0.0), (150.0, 255.0), (50.0, 127.5)])
+def test_intensity_clamped_before_the_wire(loop, val, expected):
+    driveboard.intensity(val)
+    _, sent = decode_param(loop.tx_buffer, 0)
+    assert sent == pytest.approx(expected, abs=1e-2)
+
+
 def test_send_param_saturates_high(loop):
-    driveboard.feedrate(200000.0)  # beyond the 28-bit positive range
+    # a target is not range-clamped by its caller, so it reaches the encoder
+    loop.send_param(driveboard.PARAM_TARGET_X, 200000.0)  # beyond the 28-bit range
     _, val = decode_param(loop.tx_buffer, 0)
     max_val = ((1 << 28) - 1) / 1000.0 - 134217.728
     assert val == pytest.approx(max_val, abs=1e-3)
 
 
 def test_send_param_saturates_low(loop):
-    driveboard.feedrate(-200000.0)
+    loop.send_param(driveboard.PARAM_TARGET_X, -200000.0)
     _, val = decode_param(loop.tx_buffer, 0)
     assert val == pytest.approx(-134217.728, abs=1e-3)
 

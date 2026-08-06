@@ -250,6 +250,31 @@ def test_beam_forced_off_on_interlock(portd):
 
 
 # ---------------------------------------------------------------------------
+# Intensity is stored in a uint8_t but arrives as a double spanning the whole
+# 28bit wire range, where an out of range value is undefined behavior rather
+# than a wrap. The firmware bounds it to 0-255 before the narrowing, so an
+# absurd request cannot land on a duty higher than the one asked for.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("intensity", [1000.0, 100000.0], ids=["over", "way-over"])
+def test_intensity_above_range_clamped(intensity):
+    _, _, sym = fw.run(
+        send=fw.dwell_program(intensity, 0.2), run_cycles=8_000_000, watch_symbol="pwm_duty"
+    )
+    assert sym["max"] <= 255, "duty exceeded full scale"
+
+
+@pytest.mark.parametrize("intensity", [-1.0, -100000.0], ids=["under", "way-under"])
+def test_intensity_below_range_clamped_to_off(intensity):
+    # a negative narrowed to uint8_t commonly lands on 255, ie full power
+    _, _, sym = fw.run(
+        send=fw.dwell_program(intensity, 0.2), run_cycles=8_000_000, watch_symbol="pwm_duty"
+    )
+    assert sym["max"] == 0, "a negative intensity request fired the beam"
+
+
+# ---------------------------------------------------------------------------
 # A limit hit must halt an IN-PROGRESS move in the stepper ISR (not merely be
 # reported). We run a long line move and count step pulses on the X step pin:
 # the control move completes; tripping the limit partway through stops stepping

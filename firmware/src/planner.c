@@ -65,6 +65,10 @@ void planner_init() {
 // Add a new linear movement to the buffer. x, y and z is
 // the signed, absolute target position in millimeters. Feed rate specifies the speed of the motion.
 inline void planner_line(double x, double y, double z, double feed_rate, uint8_t nominal_laser_intensity, double pixel_width) {
+  // nominal_rate is unsigned and divided into further down, so a rate at or
+  // below zero would be undefined behavior rather than a slow move
+  if (feed_rate < MINIMUM_FEEDRATE) { feed_rate = MINIMUM_FEEDRATE; }
+
   // calculate target position in absolute steps
   int32_t target[3];
   target[X_AXIS] = lround(x*CONFIG_X_STEPS_PER_MM);

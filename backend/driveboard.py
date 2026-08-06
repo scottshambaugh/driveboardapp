@@ -64,6 +64,15 @@ PARAM_OFFSET_X = "h"
 PARAM_OFFSET_Y = "i"
 PARAM_OFFSET_Z = "j"
 
+# Bounds for the motion parameters. MAX_PARAM_VALUE is what the 28-bit wire
+# encoding can carry, so anything beyond it is already meaningless. The feed
+# rate floor keeps the planner off a zero step rate, and the dwell ceiling
+# bounds how long the beam can sit burning in one spot.
+MAX_PARAM_VALUE = 134217.727
+MIN_FEEDRATE = 0.1  # mm/min
+MAX_FEEDRATE = MAX_PARAM_VALUE  # mm/min
+MAX_DWELL_SECONDS = 10.0
+
 ################
 
 
@@ -1014,9 +1023,23 @@ def homing():
             print("WARN: ignoring homing command while job running")
 
 
+def _clamp_param(name, val, lo, hi):
+    """Bound a motion parameter, reporting anything that had to be moved.
+
+    These are the last gate before the wire. Jobs are checked earlier with a
+    readable error, so a clamp here means something bypassed that check.
+    """
+    clamped = max(lo, min(val, hi))
+    if clamped != val:
+        print(f"WARN: {name} of {val} out of range [{lo}, {hi}], clamping to {clamped}")
+    return clamped
+
+
 def feedrate(val):
     global SerialLoop
     with SerialLoop.lock:
+        # zero or negative reaches the planner as a zero or wrapped step rate
+        val = _clamp_param("feedrate", val, MIN_FEEDRATE, MAX_FEEDRATE)
         SerialLoop.send_param(PARAM_FEEDRATE, val)
 
 
@@ -1030,12 +1053,16 @@ def intensity(val):
 def duration(val):
     global SerialLoop
     with SerialLoop.lock:
+        # a dwell holds the beam on in one spot for its whole duration
+        val = _clamp_param("duration", val, 0.0, MAX_DWELL_SECONDS)
         SerialLoop.send_param(PARAM_DURATION, val)
 
 
 def pixelwidth(val):
     global SerialLoop
     with SerialLoop.lock:
+        # zero selects a plain line, negative walks the raster pixel index back
+        val = _clamp_param("pixelwidth", val, 0.0, MAX_PARAM_VALUE)
         SerialLoop.send_param(PARAM_PIXEL_WIDTH, val)
 
 
@@ -1051,22 +1078,27 @@ def absolute():
         SerialLoop.send_command(CMD_REF_ABSOLUTE)
 
 
-def target_in_workarea(x=None, y=None, machine_coords=False):
+def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
     """Whether an absolute move target stays within the work area.
 
-    x/y are in offset coordinates unless machine_coords is set (e.g. supermove).
-    z is not bounded (matches job validation). None coordinates are ignored.
+    Coordinates are in offset coordinates unless machine_coords is set (e.g.
+    supermove). None coordinates are ignored. Z is only bounded when the config
+    gives it a non-zero work area, since a machine with no Z axis configured
+    still has to be able to jog the focus.
     """
     global SerialLoop
     if machine_coords:
-        x_off = y_off = 0.0
+        x_off = y_off = z_off = 0.0
     else:
         with SerialLoop.lock:
             x_off = SerialLoop._status["offset"][0]
             y_off = SerialLoop._status["offset"][1]
+            z_off = SerialLoop._status["offset"][2]
     if x is not None and not (-x_off <= x <= conf["workspace"][0] - x_off):
         return False
     if y is not None and not (-y_off <= y <= conf["workspace"][1] - y_off):
+        return False
+    if z is not None and conf["workspace"][2] and not (-z_off <= z <= conf["workspace"][2] - z_off):
         return False
     return True
 
@@ -1277,6 +1309,43 @@ def job_stop_guard():
         raise ValueError(f"cannot start a job while stopped ({', '.join(stops)}), clear it first")
 
 
+def job_pass_params_validate(jobdict):
+    """Check each pass' motion parameters against the ranges the machine accepts.
+
+    A feed rate of zero or less gives the planner a zero or wrapped step rate,
+    and a long dwell holds the beam on in one spot, so both are rejected here
+    rather than silently clamped on the way to the wire.
+
+    Raises a ValueError naming the offending pass and parameter.
+    """
+    bounds = {
+        "feedrate": (MIN_FEEDRATE, MAX_FEEDRATE),
+        "seekrate": (MIN_FEEDRATE, MAX_FEEDRATE),
+        "intensity": (0.0, 100.0),
+        "pxsize": (0.0, MAX_PARAM_VALUE),
+        "pierce_time": (0.0, MAX_DWELL_SECONDS),
+    }
+    for passidx, pass_ in enumerate(jobdict["passes"]):
+        for key, (lo, hi) in bounds.items():
+            if key not in pass_:
+                continue
+            if pass_[key] is None or pass_[key] == "":
+                # an svg cut setting tag leaves unset fields empty, which means
+                # take the default rather than take zero
+                del pass_[key]
+                continue
+            try:
+                val = float(pass_[key])
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"pass {passidx + 1}: {key} of {pass_[key]!r} is not a number"
+                ) from None
+            if not lo <= val <= hi:
+                raise ValueError(f"pass {passidx + 1}: {key} of {val} outside [{lo}, {hi}]")
+            # store the coerced number, svg tags arrive as strings
+            pass_[key] = val
+
+
 def job_laser_validate(jobdict):
     """
     Validate that the defined passes stay within the work area.
@@ -1284,6 +1353,8 @@ def job_laser_validate(jobdict):
     Raises a ValueError with a descriptive message if the job is not valid.
     """
     global SerialLoop
+
+    job_pass_params_validate(jobdict)
 
     with SerialLoop.lock:
         x_off = SerialLoop._status["offset"][0]

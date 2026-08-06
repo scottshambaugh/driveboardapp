@@ -261,17 +261,28 @@ inline void on_param(uint8_t parameter) {
         }
         break;
       // def motion params
+      // Values arrive as a double spanning the whole 28bit wire range. Bound
+      // them before they reach the narrower types they are stored in, where
+      // an out of range value is undefined behavior rather than a wrap.
       case PARAM_FEEDRATE:
-        st.feedrate = get_curent_value();
+        val = get_curent_value();
+        if (val < MINIMUM_FEEDRATE) { val = MINIMUM_FEEDRATE; }
+        st.feedrate = val;
         break;
       case PARAM_INTENSITY:
-        st.intensity = get_curent_value();
+        val = get_curent_value();
+        if (val < 0.0) { val = 0.0; } else if (val > 255.0) { val = 255.0; }
+        st.intensity = (uint8_t)val;
         break;
       case PARAM_DURATION:
-        st.duration = get_curent_value();
+        val = get_curent_value();
+        if (val < 0.0) { val = 0.0; } else if (val > MAXIMUM_DWELL_SECONDS) { val = MAXIMUM_DWELL_SECONDS; }
+        st.duration = val;
         break;
       case PARAM_PIXEL_WIDTH:
-        st.pixel_width = get_curent_value();
+        val = get_curent_value();
+        if (val < 0.0) { val = 0.0; }
+        st.pixel_width = val;
         break;
       // def offset
       case PARAM_OFFSET_X:

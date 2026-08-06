@@ -64,6 +64,12 @@
 #define PARAM_OFFSET_Y 'i'
 #define PARAM_OFFSET_Z 'j'
 
+// Bounds applied to incoming motion params, matched by the host. A feed rate
+// at or below zero reaches the planner as a zero or wrapped step rate, and a
+// dwell holds the beam on in one spot for its whole duration.
+#define MINIMUM_FEEDRATE 0.1              // mm/min
+#define MAXIMUM_DWELL_SECONDS 60.0
+
 
 // status: error markers
 #define STOPERROR_OK ' '
