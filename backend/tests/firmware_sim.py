@@ -80,6 +80,13 @@ Z_LIMITS = ["z1", "z2"]
 DOOR1_PORTD_BIT = 2
 DOOR2_PORTD_BIT = 7
 CHILLER_PORTD_BIT = 3
+# assist relay outputs, config.driveboardusb.h AIR/AUX_ASSIST_BIT
+AIR_ASSIST_PORTD_BIT = 4
+AUX_ASSIST_PORTD_BIT = 6
+CMD_AIR_ENABLE = ord("L")
+CMD_AIR_DISABLE = ord("M")
+CMD_AUX_ENABLE = ord("N")
+CMD_AUX_DISABLE = ord("O")
 
 # config.driveboard1403mill.h is the only 3-axis build; it has SENSE_INVERT OFF,
 # so its limit switches are ACTIVE LOW (untriggered = pin high).
@@ -186,6 +193,7 @@ def run(
     watch_symbol=None,
     count_portb=None,
     portc_delay=0,
+    watch_pin=None,
     variant="config.driveboardusb.h",
 ):
     """Run a scenario.
@@ -213,6 +221,8 @@ def run(
         args.append(f"--count-portb={count_portb}")
     if portc_delay:
         args.append(f"--portc-delay={portc_delay}")
+    if watch_pin:
+        args.append(f"--watch-pin={watch_pin[0]},{watch_pin[1]}")
     r = subprocess.run(args, capture_output=True, text=True, timeout=180)
     assert r.returncode == 0, f"harness failed: {r.stdout}\n{r.stderr}"
     lines = r.stdout.splitlines()
@@ -220,13 +230,14 @@ def run(
     hello_line = next((ln for ln in lines if ln.startswith("HELLO=")), "HELLO=0")
     out_bytes = [int(x) for x in out_line[4:].split()]
     hello = hello_line.strip() == "HELLO=1"
-    if watch_symbol or count_portb is not None:
+    if watch_symbol or count_portb is not None or watch_pin:
         info = {}
-        sym_line = next((ln for ln in lines if ln.startswith("SYM ")), "")
-        for tok in sym_line.split():
-            if "=" in tok:
-                k, v = tok.split("=")
-                info[k] = int(v)
+        for prefix in ("SYM ", "PIN "):
+            line = next((ln for ln in lines if ln.startswith(prefix)), "")
+            for tok in line.split():
+                if "=" in tok:
+                    k, v = tok.split("=")
+                    info[k] = int(v)
         steps_line = next((ln for ln in lines if ln.startswith("STEPS=")), "")
         if steps_line:
             info["steps"] = int(steps_line.split("=")[1])

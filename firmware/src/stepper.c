@@ -187,6 +187,11 @@ void stepper_request_stop(uint8_t status) {
     stop_status = status;
     stop_requested = true;
     paused = false;  // a stop overrides a pause
+    // Assists are switched through the planner, so the queued disable block is
+    // thrown away with the rest of the buffer and they would stay energised
+    // for good. Drive them directly, the way the beam is.
+    control_air_assist(false);
+    control_aux_assist(false);
     serial_stop();
   }
 }

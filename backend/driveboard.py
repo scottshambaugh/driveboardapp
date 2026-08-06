@@ -1420,12 +1420,14 @@ def job_laser_validate(jobdict):
                 # so only the part that actually burns has to fit
                 try:
                     corners = _raster_engraved_box_mm(def_, pass_)
-                    if corners is None:
-                        continue  # nothing engraves, nothing to check
                 except Exception as e:
-                    print(f"WARN: could not read image pixels ({e}), checking full extent")
-                    pos, size = def_["pos"], def_["size"]
-                    corners = [pos, [pos[0] + size[0], pos[1] + size[1]]]
+                    # the engraver decodes the same bytes, so it would raise
+                    # part way through the job with the assists already on
+                    raise ValueError(
+                        f"pass {passidx + 1}: image data cannot be read ({e})"
+                    ) from None
+                if corners is None:
+                    continue  # nothing engraves, nothing to check
 
                 # the image is aligned with the axes, so two opposite corners
                 # are enough to tell whether it fits in the work area
@@ -1829,37 +1831,58 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
     # left on for the next item, the pass end switches it off
 
 
+# Which scopes currently want each assist output energised. An output is on
+# while any scope holds it, so one scope ending cannot cut an output another
+# still needs, and a repeat claim emits nothing.
+_assist_holds = {"air_assist": set(), "aux_assist": set()}
+
+
+def _assist_holds_reset():
+    for holds in _assist_holds.values():
+        holds.clear()
+
+
+def _assist_holds_release():
+    """Drop every hold, queueing an off for anything still energised."""
+    for key, turn_off in (("air_assist", air_off), ("aux_assist", aux_off)):
+        if _assist_holds[key]:
+            _assist_holds[key].clear()
+            turn_off()
+
+
 def _switch_assists(passes, scope, on):
-    """Turn the assists that any of `passes` runs at `scope` on or off.
+    """Claim or release `scope`'s hold on the assists that any of `passes` runs.
 
     Scope is how long an assist stays on: 'feed' while burning, 'pass' for a
     whole pass, 'job' for every pass in the job. Air and aux are independent
-    outputs and each picks its own scope.
+    outputs and each picks its own scope. A command goes out only when the
+    output's overall state changes, so a pass ending leaves a job scope hold
+    energised and repeated feed claims across contiguous burns emit nothing.
     """
     for key, turn_on, turn_off in (
         ("air_assist", air_on, air_off),
         ("aux_assist", aux_on, aux_off),
     ):
-        if any(pass_.get(key) == scope for pass_ in passes):
+        if not any(pass_.get(key) == scope for pass_ in passes):
+            continue
+        holds = _assist_holds[key]
+        was_on = bool(holds)
+        if on:
+            holds.add(scope)
+        else:
+            holds.discard(scope)
+        if bool(holds) != was_on:
             (turn_on if on else turn_off)()
 
 
-# whether the 'feed' scope assists are currently running, see _feed_assists
-_feed_assists_on = False
-
-
 def _feed_assists(pass_, on):
-    """Switch the 'feed' scope assists, holding them on across contiguous burns.
+    """Claim or release the 'feed' scope hold, held across contiguous burns.
 
     Only the seek to the next contour separates one burn from the next, so
     switching per contour would cycle the relay hundreds of times on a job of
-    small shapes and give the gas no time to come up. This turns them on at the
-    first burn and leaves them until the pass ends.
+    small shapes and give the gas no time to come up.
     """
-    global _feed_assists_on
-    if on != _feed_assists_on:
-        _switch_assists([pass_], "feed", on)
-        _feed_assists_on = on
+    _switch_assists([pass_], "feed", on)
 
 
 def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
@@ -1953,16 +1976,35 @@ def job_laser(jobdict):
     # raises an exception if the job is not valid
     job_laser_validate(jobdict)
 
-    # reset valves, including the feed scope tally a previous job may have left
-    global _feed_assists_on
-    _feed_assists_on = False
+    # reset valves, including any holds a previous job may have left behind
+    _assist_holds_reset()
     air_off()
     aux_off()
 
     # assists on for the whole job if any pass asks for it
     _switch_assists(jobdict["passes"], "job", True)
 
-    # loop passes
+    try:
+        _job_laser_passes(jobdict)
+    finally:
+        # Whatever happened, queue the outputs off. A raise part way through a
+        # pass would otherwise leave a relay energised with no command coming.
+        _assist_holds_release()
+
+    # leave machine in absolute mode
+    absolute()
+
+    # return to origin
+    feedrate(conf["seekrate"])
+    intensity(0.0)
+    if "head" in jobdict and "noreturn" in jobdict["head"] and jobdict["head"]["noreturn"]:
+        pass
+    else:
+        move(0, 0, 0)
+
+
+def _job_laser_passes(jobdict):
+    """Emit every pass of a laser job, in order."""
     for pass_ in jobdict["passes"]:
         requested_pxsize = float(pass_.setdefault("pxsize", conf["pxsize"]))
         pxsize_x, pxsize_y = _pass_pxsize(pass_)  # x is 2x horiz resolution
@@ -1997,20 +2039,6 @@ def job_laser(jobdict):
         # assists off, end of pass for both 'feed' and 'pass'
         _feed_assists(pass_, False)
         _switch_assists([pass_], "pass", False)
-
-    # assists off, end of job if set to 'job'
-    _switch_assists(jobdict["passes"], "job", False)
-
-    # leave machine in absolute mode
-    absolute()
-
-    # return to origin
-    feedrate(conf["seekrate"])
-    intensity(0.0)
-    if "head" in jobdict and "noreturn" in jobdict["head"] and jobdict["head"]["noreturn"]:
-        pass
-    else:
-        move(0, 0, 0)
 
 
 def job_mill_validate(jobdict):

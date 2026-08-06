@@ -435,3 +435,37 @@ def test_dwell_progress_cleared_when_a_stop_abandons_it():
     )
     assert info["max"] > 0, "the dwell never ran, so the stop proves nothing"
     assert info["final"] == 0, "abandoned dwell left its count for the next pierce"
+
+
+# ---------------------------------------------------------------------------
+# Assist relays are switched through the motion planner, so a stop that throws
+# the block buffer away also throws away the queued disable. They have to be
+# driven off directly, the way the beam is, or they stay energised for good.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "on_cmd,bit",
+    [
+        (fw.CMD_AIR_ENABLE, fw.AIR_ASSIST_PORTD_BIT),
+        (fw.CMD_AUX_ENABLE, fw.AUX_ASSIST_PORTD_BIT),
+    ],
+    ids=["air", "aux"],
+)
+def test_assist_de_energised_by_a_stop(on_cmd, bit):
+    # switch the assist on, start a long move, then trip a limit part way in
+    send = fw.double([on_cmd]) + fw.line_program(600, feedrate=3000)
+
+    _, _, control = fw.run(send=send, run_cycles=8_000_000, watch_pin=("D", bit))
+    assert control["everhigh"] == 1, "the assist never came on, so the stop proves nothing"
+    assert control["final"] == 1, "the assist should stay on when nothing stops the job"
+
+    _, _, stopped = fw.run(
+        send=send,
+        run_cycles=8_000_000,
+        watch_pin=("D", bit),
+        portc=[fw.LIMIT_PORTC_BIT["x1"]],
+        portc_delay=2_000_000,
+    )
+    assert stopped["everhigh"] == 1
+    assert stopped["final"] == 0, "assist left energised after a stop"

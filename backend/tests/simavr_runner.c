@@ -65,6 +65,16 @@ static void step_pin_hook(struct avr_irq_t *irq, uint32_t value, void *param) {
     step_last = lvl;
 }
 
+/* Level of a watched output pin: whether it was ever driven high, and where it
+ * was left. Used for the assist relays, which have no SRAM state of their own. */
+static int pin_ever_high = 0, pin_final = 0;
+
+static void level_pin_hook(struct avr_irq_t *irq, uint32_t value, void *param) {
+    pin_final = value & 1;
+    if (pin_final)
+        pin_ever_high = 1;
+}
+
 struct pinset {
     char port;
     int bit;
@@ -104,6 +114,8 @@ int main(int argc, char **argv) {
     const char *watch_name = NULL;
     int count_portb_bit = -1; /* count rising edges on this PORTB pin (step pin) */
     long portc_delay = 0;     /* apply PORTC pins this many cycles after hello */
+    char watch_pin_port = 0;  /* watch the level of this output pin, e.g. D,4 */
+    int watch_pin_bit = -1;
 
     for (int i = 2; i < argc; i++) {
         const char *v;
@@ -123,6 +135,11 @@ int main(int argc, char **argv) {
             count_portb_bit = (int)strtol(v, NULL, 10);
         else if ((v = opt_val(argv[i], "--portc-delay=")))
             portc_delay = strtol(v, NULL, 10);
+        else if ((v = opt_val(argv[i], "--watch-pin="))) {
+            /* form: <port letter>,<bit> e.g. D,4 */
+            watch_pin_port = v[0];
+            watch_pin_bit = (v[1] == ',') ? (int)strtol(v + 2, NULL, 10) : -1;
+        }
         else
             fprintf(stderr, "WARN: ignoring unknown arg %s\n", argv[i]);
     }
@@ -157,6 +174,11 @@ int main(int argc, char **argv) {
         avr_irq_register_notify(
             avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ('B'), count_portb_bit),
             step_pin_hook, NULL);
+
+    if (watch_pin_bit >= 0)
+        avr_irq_register_notify(
+            avr_io_getirq(avr, AVR_IOCTL_IOPORT_GETIRQ(watch_pin_port), watch_pin_bit),
+            level_pin_hook, NULL);
 
     /* Resolve a watched SRAM symbol (e.g. pwm_duty) to its data-space address. */
     int watch_addr = -1;
@@ -230,5 +252,8 @@ int main(int argc, char **argv) {
         printf("SYM %s max=%d final=%d\n", watch_name, watch_max, watch_final);
     if (count_portb_bit >= 0)
         printf("STEPS=%ld\n", step_edges);
+    if (watch_pin_bit >= 0)
+        printf("PIN %c%d everhigh=%d final=%d\n", watch_pin_port, watch_pin_bit,
+               pin_ever_high, pin_final);
     return 0;
 }

@@ -464,12 +464,18 @@ def test_job_validate_blank_margin_burns_when_inverted(loop, monkeypatch):
         driveboard.job_laser_validate(job)
 
 
-def test_job_validate_falls_back_when_pixels_unreadable(loop):
+def test_job_rejects_unreadable_image_data(loop):
+    """An image the engraver cannot decode fails before anything is queued.
+
+    The engraver decodes the same bytes, so letting it through validation would
+    raise part way through the job with the assists already energised.
+    """
     loop._status["offset"] = [0.0, 0.0, 0.0]
-    # undecodable data, so the full extent is checked instead of the artwork
-    driveboard.job_laser_validate(_image_job([10.0, 10.0], [40.0, 20.0], None))
-    with pytest.raises(ValueError, match="left"):
-        driveboard.job_laser_validate(_image_job([-20.0, 10.0], [40.0, 20.0], None))
+    job = _image_job([10.0, 10.0], [40.0, 20.0], None)
+    job["head"] = {}  # so job() dispatches instead of rejecting the shape
+    with pytest.raises(ValueError, match="cannot be read"):
+        driveboard.job(job)
+    assert loop.tx_buffer == bytearray(), "nothing may be queued for an unreadable image"
 
 
 @pytest.mark.parametrize(
@@ -849,6 +855,108 @@ def test_job_scope_spans_every_pass(loop):
     end = buf.index(ord(driveboard.CMD_AUX_DISABLE), start)
     bracketed = buf.count(ord(driveboard.CMD_LINE), start, end)
     assert bracketed == buf.count(ord(driveboard.CMD_LINE)) - 1
+
+
+def _cuts_with_assist_off(buf, on_cmd, off_cmd):
+    """Whether any burning move runs while a requested assist is off.
+
+    A seek or the return to origin with the assist off is fine, so only moves
+    made with a non-zero intensity in effect count.
+    """
+    buf = bytes(buf)
+    on = wanted = False
+    intensity = 0.0
+    i = 0
+    while i < len(buf):
+        if buf[i] >= 128 and i + 4 < len(buf) and ord("a") <= buf[i + 4] <= ord("z"):
+            if chr(buf[i + 4]) == driveboard.PARAM_INTENSITY:
+                _, intensity = decode_param(buf, i)
+            i += 5
+            continue
+        if buf[i] == ord(on_cmd):
+            on = wanted = True
+        elif buf[i] == ord(off_cmd):
+            on = False
+        elif buf[i] == ord(driveboard.CMD_LINE) and wanted and not on and intensity > 0:
+            return True
+        i += 1
+    return False
+
+
+# 'off' is left out: a pass that asks for no assist is supposed to cut dry, and
+# the stream carries no pass boundary to tell that apart from a lost hold.
+@pytest.mark.parametrize("first", ["feed", "pass", "job"])
+@pytest.mark.parametrize("second", ["feed", "pass", "job"])
+def test_mixed_assist_scopes_never_cut_with_the_assist_off(loop, first, second):
+    """One scope ending must not switch off an output another scope holds.
+
+    A 'feed' or 'pass' pass ordered before a 'job' pass used to tear down the
+    shared output, so every cut in the later pass ran with the air relay shut.
+    """
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {},
+        "passes": [
+            # an intensity, so the moves actually burn and a dark cut is visible
+            {"items": [0], "intensity": 80, "air_assist": first, "aux_assist": "off"},
+            {"items": [0], "intensity": 80, "air_assist": second, "aux_assist": "off"},
+        ],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[10.0, 10.0], [20.0, 20.0]]]}],
+    }
+    driveboard.job(job)
+    assert not _cuts_with_assist_off(
+        loop.tx_buffer, driveboard.CMD_AIR_ENABLE, driveboard.CMD_AIR_DISABLE
+    ), f"air off during a cut with scopes {first} then {second}"
+
+
+def test_job_scope_survives_an_inner_pass_teardown(loop):
+    # the job hold keeps the output up across the whole run, one on and one off
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {},
+        "passes": [
+            {"items": [0], "air_assist": "feed"},
+            {"items": [0], "air_assist": "job"},
+        ],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[10.0, 10.0], [20.0, 20.0]]]}],
+    }
+    driveboard.job(job)
+    buf = bytes(loop.tx_buffer)
+    assert buf.count(ord(driveboard.CMD_AIR_ENABLE)) == 1
+    start = buf.index(ord(driveboard.CMD_AIR_ENABLE))
+    assert buf.count(ord(driveboard.CMD_AIR_DISABLE), start) == 1
+
+
+def test_assists_released_when_a_pass_raises(loop, monkeypatch):
+    """A raise part way through a job must still queue the assists off.
+
+    Otherwise the relays stay energised with no further command coming, and the
+    module's hold state no longer matches the hardware.
+    """
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+
+    def boom(*a, **k):
+        raise RuntimeError("decoder exploded")
+
+    monkeypatch.setattr(driveboard, "_job_laser_path", boom)
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "intensity": 80, "air_assist": "job", "aux_assist": "job"}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[10.0, 10.0], [20.0, 20.0]]]}],
+    }
+    with pytest.raises(RuntimeError):
+        driveboard.job(job)
+    buf = bytes(loop.tx_buffer)
+    assert buf.rindex(ord(driveboard.CMD_AIR_DISABLE)) > buf.index(
+        ord(driveboard.CMD_AIR_ENABLE)
+    ), "air left energised after the raise"
+    assert buf.rindex(ord(driveboard.CMD_AUX_DISABLE)) > buf.index(
+        ord(driveboard.CMD_AUX_ENABLE)
+    ), "aux left energised after the raise"
+    assert not any(driveboard._assist_holds.values()), "holds left out of step with the hardware"
 
 
 @pytest.mark.parametrize("key", ["air_assist", "aux_assist"])
