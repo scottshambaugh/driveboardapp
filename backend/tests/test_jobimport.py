@@ -242,6 +242,48 @@ def test_raster_transparency_survives_a_non_png_source():
     assert [[px[3] for px in row] for row in _pixels(img)] == [[255, 0], [255, 0]]
 
 
+@pytest.mark.parametrize(
+    "fmt,mime,stays",
+    [
+        ("PNG", "png", True),
+        ("JPEG", "jpeg", True),
+        ("GIF", "gif", True),
+        ("BMP", "bmp", True),
+        ("WEBP", "webp", True),
+        ("ICO", "x-icon", True),
+        # Pillow reads these but no browser renders them, so the preview would
+        # never load and the job would sit there waiting for it
+        ("TIFF", "tiff", False),
+        ("PPM", "x-portable-pixmap", False),
+        ("PCX", "x-pcx", False),
+        ("TGA", "x-tga", False),
+        ("JPEG2000", "jp2", False),
+        ("AVIF", "avif", False),
+    ],
+)
+def test_raster_normalized_to_a_displayable_format(fmt, mime, stays):
+    src = Image.new("RGB", (32, 32), (255, 255, 255))
+    src.putpixel((0, 0), (0, 0, 0))
+    def_, img = _import_raster(uri=_data_uri(src, fmt=fmt, mime=mime))
+    if stays:
+        assert def_["data"].startswith(f"data:image/{mime};base64,")
+    else:
+        assert def_["data"].startswith("data:image/png;base64,")
+        assert img.format == "PNG"
+    assert img.size == (32, 32)
+
+
+def test_linked_image_is_skipped():
+    """A linked image cannot be resolved, so it must not leave a phantom def.
+
+    The backend only ever receives the svg content, never the path it was read
+    from, so a relative href has nothing to resolve against. A def carrying no
+    data would still claim its pos and size during work-area validation.
+    """
+    job = jobimport.convert(_raster_svg(uri="linked.png"), optimize=False)
+    assert [d for d in job["defs"] if d["kind"] == "image"] == []
+
+
 def test_raster_opaque_jpeg_stays_jpeg():
     # no alpha to lose here, so a photo is not inflated into a PNG
     src = Image.new("RGB", (8, 8), (255, 255, 255))

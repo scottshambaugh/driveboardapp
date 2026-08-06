@@ -5,6 +5,7 @@ from config import conf
 from . import pathoptimizer
 from .dxf_parser import DXFParser
 from .gcode_reader import GcodeReader
+from .imagedata import normalize_image_data
 from .svg_reader import SVGReader
 from .utilities import matrixApply
 
@@ -66,6 +67,10 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
         raise TypeError
     if matrix:
         apply_alignment_matrix(job, matrix)
+    # whatever the source, hand the frontend a raster it can actually display
+    for def_ in job.get("defs", []):
+        if def_.get("kind") == "image" and def_.get("data"):
+            def_["data"] = normalize_image_data(def_["data"])
     return job
 
 

@@ -331,20 +331,24 @@ class SVGTagReader:
             log.error("image tag skipped: no href attribute found")
             return
 
-        if data.startswith("data:image/"):
-            # Clean base64 data: remove whitespace that may have been introduced
-            # by XML entity encoding (e.g., &#10; converted to newlines)
-            # Split at comma to preserve the data URI prefix
-            prefix, _, b64data = data.partition(",")
-            if b64data:
-                # Remove all whitespace from base64 portion
-                b64data = "".join(b64data.split())
-                image = prefix + "," + b64data
-            else:
-                image = data
+        if not data.startswith("data:image/"):
+            # A link cannot be resolved here: the backend is handed the svg
+            # content, never the file it came from, so there is no base path to
+            # resolve it against. Emitting a raster with no data would leave a
+            # def that cannot be drawn or engraved, so skip it entirely.
+            log.error("image tag skipped: only embedded images are supported, not linked ones")
+            return
+
+        # Clean base64 data: remove whitespace that may have been introduced
+        # by XML entity encoding (e.g., &#10; converted to newlines)
+        # Split at comma to preserve the data URI prefix
+        prefix, _, b64data = data.partition(",")
+        if b64data:
+            # Remove all whitespace from base64 portion
+            b64data = "".join(b64data.split())
+            image = prefix + "," + b64data
         else:
-            image = ""
-            log.error("ERROR: Only embedded images are supported.")
+            image = data
 
         raster = {}
         raster["pos"] = [x, y]

@@ -3,6 +3,7 @@
 The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboardapp) is no longer maintained. Here are some of the highlights in this fork, see [this thread](https://groups.google.com/g/lasersaur/c/n54LNN86H-c), [this blog post](https://theshamblog.com/software-mods-to-the-lasersaur/), or the [changelog](./CHANGELOG.md) for more info:
 * Upgrade from Python 2 to Python 3
 * Rastering completely rewritten: skips over large whitespace for speed, option for inverting, can select number of gray levels (set to 2-3 for dithering, max of 128), faster pathing Bidirectional option
+* Rastering supports svg-embedded PNG, JPEG, GIF, BMP, WebP, ICO, TIFF, PPM, PCX, TGA, JPEG 2000, AVIF
 * Added a 'pulse' functionality for the laser (all safety interlocks still work)
 * SVG text and area fills are imported as paths
 * Fills of the same color are nested to make holes in fill areas, and faster NearestNeighbor fill algorithm

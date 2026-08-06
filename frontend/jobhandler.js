@@ -142,6 +142,12 @@ jobhandler = {
           var img_base64 = def.data;
           def.data = new Image();
           def.data.onload = allImagesLoaded;
+          def.data.onerror = function () {
+            // a raster the browser cannot decode still has to release the
+            // counter, otherwise the job never finishes loading at all
+            $().uxmessage("warning", "An image could not be displayed.");
+            allImagesLoaded();
+          };
           def.data.src = img_base64; // NOTE: this is async
         }
       }
