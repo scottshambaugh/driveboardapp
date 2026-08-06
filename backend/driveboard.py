@@ -1815,6 +1815,7 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
 
 def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
     path = def_["data"]
+    pierce_time = pass_["pierce_time"]
     for polyline in path:
         if len(polyline) > 0:
             # first vertex -> seek
@@ -1828,23 +1829,32 @@ def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
                 move(polyline[0][0], polyline[0][1])
             else:
                 move(polyline[0][0], polyline[0][1], polyline[0][2])
+            # a lone vertex with no pierce only seeks, so it needs no assist
+            burns = pierce_time > 0 or len(polyline) > 1
+            # turn on assists if set to 'feed'
+            # also air_assist defaults to 'feed'
+            # Ahead of the pierce, where the gas clears the melt.
+            if burns and pass_["air_assist"] == "feed":
+                air_on()
+            # burn through in place first, otherwise a thick material is still
+            # being penetrated as the head sets off
+            if pierce_time > 0:
+                intensity(intensity_)
+                duration(pierce_time)
+                dwell()
             # remaining vertices -> feed
             if len(polyline) > 1:
                 feedrate(feedrate_)
                 intensity(intensity_)
-                # turn on assists if set to 'feed'
-                # also air_assist defaults to 'feed'
-                if pass_["air_assist"] == "feed":
-                    air_on()
                 if is_2d:
                     for i in range(1, len(polyline)):
                         move(polyline[i][0], polyline[i][1])
                 else:
                     for i in range(1, len(polyline)):
                         move(polyline[i][0], polyline[i][1], polyline[i][2])
-                # turn off assists if set to 'feed'
-                if pass_["air_assist"] == "feed":
-                    air_off()
+            # turn off assists if set to 'feed'
+            if burns and pass_["air_assist"] == "feed":
+                air_off()
 
 
 def job_laser(jobdict):
@@ -1911,6 +1921,7 @@ def job_laser(jobdict):
         if pass_.setdefault("air_assist", "pass") == "pass":
             air_on()
         pass_.setdefault("seekzero", True)
+        pass_.setdefault("pierce_time", 0.0)
         seekrate = pass_.setdefault("seekrate", conf["seekrate"])
         feedrate_ = pass_.setdefault("feedrate", conf["feedrate"])
         intensity_ = pass_.setdefault("intensity", 0.0)

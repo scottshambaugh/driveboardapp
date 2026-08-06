@@ -664,6 +664,65 @@ def test_job_accepts_in_range_pass_params(loop):
     driveboard.job(_param_job(feedrate=2000.0, intensity=80.0, pierce_time=0.5))
 
 
+# ---------------------------------------------------------------------------
+# Pierce dwell - burn through in place before travelling, so a thick material
+# is penetrated before the head sets off.
+# ---------------------------------------------------------------------------
+
+
+def _params_before(buf, command):
+    """The (marker, value) params queued ahead of the first `command` byte.
+
+    Single byte commands are interleaved with the 5 byte params, so this scans
+    for the param shape rather than striding. Later values win, which is what
+    is in effect when the command runs.
+    """
+    end = bytes(buf).index(ord(command))
+    params = []
+    i = 0
+    while i + 4 < end:
+        if all(b >= 128 for b in buf[i : i + 4]) and ord("a") <= buf[i + 4] <= ord("z"):
+            params.append(decode_param(buf, i))
+            i += 5
+        else:
+            i += 1
+    return params
+
+
+def test_pierce_dwell_emitted_at_the_cutting_intensity(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(intensity=80.0, pierce_time=0.4))
+    buf = bytes(loop.tx_buffer)
+    assert ord(driveboard.CMD_DWELL) in buf, "no dwell was queued for the pierce"
+    params = dict(_params_before(loop.tx_buffer, driveboard.CMD_DWELL))
+    assert params[driveboard.PARAM_DURATION] == pytest.approx(0.4, abs=1e-3)
+    assert params[driveboard.PARAM_INTENSITY] == pytest.approx(255 * 0.8, abs=1e-1)
+
+
+def test_pierce_precedes_the_cut(loop):
+    # the dwell has to land after the seek and before the feed moves
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(intensity=80.0, pierce_time=0.4))
+    buf = bytes(loop.tx_buffer)
+    assert buf.index(ord(driveboard.CMD_DWELL)) < buf.rindex(ord(driveboard.CMD_LINE))
+
+
+def test_no_pierce_when_unset(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(intensity=80.0))
+    assert ord(driveboard.CMD_DWELL) not in bytes(loop.tx_buffer)
+    assert ord(driveboard.PARAM_DURATION) not in bytes(loop.tx_buffer)
+
+
+def test_pierce_runs_with_air_assist_already_on(loop):
+    # the gas has to be flowing before the burn, not after it
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(intensity=80.0, pierce_time=0.4, air_assist="feed"))
+    buf = bytes(loop.tx_buffer)
+    assert buf.index(ord(driveboard.CMD_AIR_ENABLE)) < buf.index(ord(driveboard.CMD_DWELL))
+    assert buf.index(ord(driveboard.CMD_DWELL)) < buf.rindex(ord(driveboard.CMD_AIR_DISABLE))
+
+
 def test_job_coerces_numeric_strings(loop):
     # svg cut setting tags carry their values as strings
     loop._status["offset"] = [0.0, 0.0, 0.0]

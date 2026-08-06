@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### New Features
-- 
+- `pierce_time` now works, to dwell at the beginning of cut paths to ensure the material is fully pierced before moving
 
 ### Bug Fixes
 - Fix errors in loading a scaled / transformed raster image
