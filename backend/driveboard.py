@@ -1913,7 +1913,7 @@ def job_laser(jobdict):
           "feedrate": 2000,        # optional, rate to other vertices
           "intensity": 100,        # optional, default: 0 (in percent)
           "seekzero": False,       # optional, default: True
-          "pierce_time": 0,        # optional, default: 0
+          "pierce_time": 0,        # optional, default: conf pierce_time
           "pxsize": [0.4],         # optional
           "air_assist": "pass",    # optional (off, feed, pass, job), default: pass
           "aux_assist": "off",     # optional (off, feed, pass, job), default: off
@@ -1966,7 +1966,7 @@ def job_laser(jobdict):
         pass_.setdefault("aux_assist", "off")
         _switch_assists([pass_], "pass", True)
         pass_.setdefault("seekzero", True)
-        pass_.setdefault("pierce_time", 0.0)
+        pass_.setdefault("pierce_time", conf["pierce_time"])
         seekrate = pass_.setdefault("seekrate", conf["seekrate"])
         feedrate_ = pass_.setdefault("feedrate", conf["feedrate"])
         intensity_ = pass_.setdefault("intensity", 0.0)

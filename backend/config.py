@@ -48,6 +48,7 @@ conf = {
     "feedrate": 2000,
     "intensity": 0,
     "pxsize": 0.2,  # size (mm) of beam for rastering
+    "pierce_time": 0.0,  # seconds to burn in place before starting a cut
     "pulse_intensity": 10,
     "pulse_duration": 0.1,
     "max_jobs_in_list": 20,
@@ -85,6 +86,7 @@ userconfigurable = {
     "feedrate": "Default feed rate in mm/min.",
     "intensity": "Default intensity 0-100%.",
     "pxsize": "Default pixel size in mm for rastering and filling.",
+    "pierce_time": "Default seconds to burn in place before starting a cut, 0 to disable.",
     "pulse_intensity": "Pulse intensity 0-100%.",
     "pulse_duration": "Pulse duration in seconds.",
     "max_jobs_in_list": "Jobs to keep in the history list.",

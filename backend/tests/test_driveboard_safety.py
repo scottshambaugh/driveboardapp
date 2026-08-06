@@ -714,6 +714,27 @@ def test_no_pierce_when_unset(loop):
     assert ord(driveboard.PARAM_DURATION) not in bytes(loop.tx_buffer)
 
 
+def test_pierce_falls_back_to_the_config_default(loop, monkeypatch):
+    # a pass without its own pierce_time takes the machine wide default
+    from config import conf
+
+    monkeypatch.setitem(conf, "pierce_time", 0.25)
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(intensity=80.0))
+    params = dict(_params_before(loop.tx_buffer, driveboard.CMD_DWELL))
+    assert params[driveboard.PARAM_DURATION] == pytest.approx(0.25, abs=1e-3)
+
+
+def test_pass_pierce_time_overrides_the_config_default(loop, monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf, "pierce_time", 0.25)
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_param_job(intensity=80.0, pierce_time=0.75))
+    params = dict(_params_before(loop.tx_buffer, driveboard.CMD_DWELL))
+    assert params[driveboard.PARAM_DURATION] == pytest.approx(0.75, abs=1e-3)
+
+
 def test_pierce_runs_with_air_assist_already_on(loop):
     # the gas has to be flowing before the burn, not after it
     loop._status["offset"] = [0.0, 0.0, 0.0]

@@ -40,7 +40,7 @@ Complete File Description
           "feedrate": 2000,      # optional, rate to other vertices
           "intensity": 100,      # optional, default: 0 (in percent)
           "seekzero": False,     # optional, default: True
-          "pierce_time": 0,      # optional, default: 0
+          "pierce_time": 0,      # optional, default: conf pierce_time
           "pxsize": 0.4,         # optional
           "air_assist": "pass",  # optional (off, feed, pass, job), default: pass
           "aux_assist": "off",   # optional (off, feed, pass, job), default: off

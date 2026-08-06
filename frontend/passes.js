@@ -2,11 +2,11 @@ function passes_clear() {
   $("#job_passes").html("");
 }
 
-function passes_add(feedrate, intensity, pxsize, items_assigned) {
+function passes_add(feedrate, intensity, pxsize, pierce_time, items_assigned) {
   // multiple = typeof multiple !== 'undefined' ? multiple : 1  // default to 1
   var num_passes_already = $("#job_passes").children(".pass_widget").length;
   var num = num_passes_already + 1;
-  var html = passes_pass_html(num, feedrate, intensity, pxsize);
+  var html = passes_pass_html(num, feedrate, intensity, pxsize, pierce_time);
   if ($("#pass_add_widget").length) {
     var pass_elem = $(html).insertBefore("#pass_add_widget");
   } else {
@@ -139,6 +139,11 @@ function passes_swap(pass1, pass2) {
       .find("input.pxsize")
       .val(),
   );
+  var pierce1 = parseFloat(
+    $("#pass_" + pass1)
+      .find("input.pierce_time")
+      .val(),
+  );
   // get visible colors for pass1
   var idx1 = $("#pass_" + pass1)
     .find("div.pass_colors")
@@ -174,6 +179,11 @@ function passes_swap(pass1, pass2) {
       .find("input.pxsize")
       .val(),
   );
+  var pierce2 = parseFloat(
+    $("#pass_" + pass2)
+      .find("input.pierce_time")
+      .val(),
+  );
   // get visible colors for pass2
   var idx2 = $("#pass_" + pass2)
     .find("div.pass_colors")
@@ -199,6 +209,9 @@ function passes_swap(pass1, pass2) {
   $("#pass_" + pass1)
     .find("input.pxsize")
     .val(pxsize2);
+  $("#pass_" + pass1)
+    .find("input.pierce_time")
+    .val(pierce2);
   // apply parameters from pass1 to pass 2
   $("#pass_" + pass2)
     .find("input.feedrate")
@@ -209,6 +222,9 @@ function passes_swap(pass1, pass2) {
   $("#pass_" + pass2)
     .find("input.pxsize")
     .val(pxsize1);
+  $("#pass_" + pass2)
+    .find("input.pierce_time")
+    .val(pierce1);
 
   // add colors from pass2 to pass1
   for (var i = 0; i < idx2.length; i++) {
@@ -222,7 +238,7 @@ function passes_swap(pass1, pass2) {
   }
 }
 
-function passes_pass_html(num, feedrate, intensity, pxsize) {
+function passes_pass_html(num, feedrate, intensity, pxsize, pierce_time) {
   // add all color selectors
   var select_html = "";
   var added_html = "";
@@ -267,13 +283,20 @@ function passes_pass_html(num, feedrate, intensity, pxsize) {
       </ul>
     </div>
     <div class="collapse" id="pass_conf_${num}"><div class="well" style="margin-bottom:10px">
-      <div class="input-group" style="margin-right:4px">
-        <div class="input-group-addon">pxsize [mm]</div>
+      <div class="form-inline">
+        <div class="input-group" style="margin-right:4px">
+          <div class="input-group-addon">pxsize [mm]</div>
           <input type="text" class="form-control input-sm pxsize"
             style="width:44px;" value="${pxsize}" title="size of physical raster pixel in mm">
         </div>
+        <div class="input-group">
+          <div class="input-group-addon">pierce [s]</div>
+          <input type="text" class="form-control input-sm pierce_time"
+            style="width:44px;" value="${pierce_time}"
+            title="seconds to burn in place before starting a cut, 0 to disable">
+        </div>
       </div>
-    </div>
+    </div></div>
     <form id="passform_${num}" class="form-inline">
       <div class="form-group">
         <div class="input-group" style="margin-right:4px">
@@ -382,7 +405,13 @@ function passes_add_widget() {
 
   // bind pass_add_btn
   $("#pass_add_btn").click(function (e) {
-    passes_add(2000, 20, app_config_main.pxsize, []);
+    passes_add(
+      2000,
+      20,
+      app_config_main.pxsize,
+      app_config_main.pierce_time,
+      [],
+    );
     passes_set_swapBtns();
     return false;
   });
@@ -456,6 +485,7 @@ function passes_get_active() {
         parseFloat($(this).find("input.intensity").val()),
       );
       var pxsize = parseFloat($(this).find("input.pxsize").val());
+      var pierce_time = parseFloat($(this).find("input.pierce_time").val());
       var pass = { items: [] };
       if (typeof feedrate === "number" && !isNaN(feedrate)) {
         pass.feedrate = feedrate;
@@ -465,6 +495,9 @@ function passes_get_active() {
       }
       if (typeof pxsize === "number" && !isNaN(pxsize)) {
         pass.pxsize = pxsize;
+      }
+      if (typeof pierce_time === "number" && !isNaN(pierce_time)) {
+        pass.pierce_time = pierce_time;
       }
       $(this)
         .children("div.pass_colors")
@@ -494,27 +527,27 @@ function passes_set_assignments() {
       if (pass.pxsize == undefined) {
         pass.pxsize = app_config_main.pxsize;
       }
-      passes_add(pass.feedrate, pass.intensity, pass.pxsize, items);
+      if (pass.pierce_time == undefined) {
+        pass.pierce_time = app_config_main.pierce_time;
+      }
+      passes_add(
+        pass.feedrate,
+        pass.intensity,
+        pass.pxsize,
+        pass.pierce_time,
+        items,
+      );
     });
   } else {
-    passes_add(
-      app_config_main.feedrate,
-      app_config_main.intensity,
-      app_config_main.pxsize,
-      [],
-    );
-    passes_add(
-      app_config_main.feedrate,
-      app_config_main.intensity,
-      app_config_main.pxsize,
-      [],
-    );
-    passes_add(
-      app_config_main.feedrate,
-      app_config_main.intensity,
-      app_config_main.pxsize,
-      [],
-    );
+    for (var i = 0; i < 3; i++) {
+      passes_add(
+        app_config_main.feedrate,
+        app_config_main.intensity,
+        app_config_main.pxsize,
+        app_config_main.pierce_time,
+        [],
+      );
+    }
   }
   passes_add_widget();
   passes_set_swapBtns();
