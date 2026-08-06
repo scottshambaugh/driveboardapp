@@ -723,6 +723,98 @@ def test_pierce_runs_with_air_assist_already_on(loop):
     assert buf.index(ord(driveboard.CMD_DWELL)) < buf.rindex(ord(driveboard.CMD_AIR_DISABLE))
 
 
+# ---------------------------------------------------------------------------
+# Assist scopes - air and aux are independent outputs, each staying on for one
+# burn ('feed'), one pass ('pass'), the whole job ('job') or never ('off').
+# ---------------------------------------------------------------------------
+
+
+def _two_contour_job(**pass_kwargs):
+    pass_ = {"items": [0]}
+    pass_.update(pass_kwargs)
+    return {
+        "head": {},
+        "passes": [pass_],
+        "items": [{"def": 0}],
+        "defs": [
+            {
+                "kind": "path",
+                "data": [[[10.0, 10.0], [20.0, 20.0]], [[30.0, 30.0], [40.0, 40.0]]],
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "key,on_cmd,off_cmd",
+    [
+        ("air_assist", driveboard.CMD_AIR_ENABLE, driveboard.CMD_AIR_DISABLE),
+        ("aux_assist", driveboard.CMD_AUX_ENABLE, driveboard.CMD_AUX_DISABLE),
+    ],
+    ids=["air", "aux"],
+)
+@pytest.mark.parametrize(
+    "mode,expected_ons",
+    [("off", 0), ("feed", 1), ("pass", 1), ("job", 1)],
+)
+def test_assist_scope_cycles(loop, key, on_cmd, off_cmd, mode, expected_ons):
+    # the two contours are contiguous, so no mode cycles more than once
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    other = "aux_assist" if key == "air_assist" else "air_assist"
+    driveboard.job(_two_contour_job(**{key: mode, other: "off"}))
+    buf = bytes(loop.tx_buffer)
+    assert buf.count(ord(on_cmd)) == expected_ons
+    # every job opens by resetting both valves, so an unused assist still has one
+    assert buf.count(ord(off_cmd)) == 1 + expected_ons
+
+
+def test_feed_assist_holds_across_contiguous_contours(loop):
+    """Contiguous burns keep the assist on rather than cycling per contour.
+
+    Only the seek to the next contour separates them, so switching each time
+    would thrash the relay and never let the gas settle.
+    """
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_two_contour_job(air_assist="feed"))
+    buf = bytes(loop.tx_buffer)
+    assert buf.count(ord(driveboard.CMD_AIR_ENABLE)) == 1, "cycled per contour"
+    # and it starts at the first burn, not at the pass' opening seek
+    assert buf.index(ord(driveboard.CMD_AIR_ENABLE)) > buf.index(ord(driveboard.CMD_LINE))
+
+
+def test_assist_off_is_the_aux_default(loop):
+    # aux drives whatever the machine has wired to it, so it stays off unless asked
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_two_contour_job())
+    assert ord(driveboard.CMD_AUX_ENABLE) not in bytes(loop.tx_buffer)
+
+
+def test_job_scope_spans_every_pass(loop):
+    """One enable at the top and one disable at the end, bracketing both passes.
+
+    Only the return to origin falls outside, which runs with the beam off.
+    """
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _two_contour_job(aux_assist="job")
+    job["passes"].append({"items": [0], "aux_assist": "job"})
+    driveboard.job(job)
+    buf = bytes(loop.tx_buffer)
+    assert buf.count(ord(driveboard.CMD_AUX_ENABLE)) == 1, "cycled per pass"
+    start = buf.index(ord(driveboard.CMD_AUX_ENABLE))
+    assert buf.count(ord(driveboard.CMD_AUX_DISABLE), start) == 1, "cycled per pass"
+    end = buf.index(ord(driveboard.CMD_AUX_DISABLE), start)
+    bracketed = buf.count(ord(driveboard.CMD_LINE), start, end)
+    assert bracketed == buf.count(ord(driveboard.CMD_LINE)) - 1
+
+
+@pytest.mark.parametrize("key", ["air_assist", "aux_assist"])
+def test_job_rejects_unknown_assist_mode(loop, key):
+    # an unrecognised mode would otherwise match no branch and run with it off
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match=key):
+        driveboard.job(_two_contour_job(**{key: "pas"}))
+
+
 def test_job_coerces_numeric_strings(loop):
     # svg cut setting tags carry their values as strings
     loop._status["offset"] = [0.0, 0.0, 0.0]

@@ -4,6 +4,8 @@
 
 ### New Features
 - `pierce_time` now works, to dwell at the beginning of cut paths to ensure the material is fully pierced before moving
+- `aux_assist` now works, to actuate an aux device similarly to air
+- New "job" option for air and aux assist modes, to run through the whole job. "feed" no longer switches off and on between contiguous burns.
 
 ### Bug Fixes
 - Fix errors in loading a scaled / transformed raster image

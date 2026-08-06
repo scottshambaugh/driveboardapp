@@ -73,6 +73,9 @@ MIN_FEEDRATE = 0.1  # mm/min
 MAX_FEEDRATE = MAX_PARAM_VALUE  # mm/min
 MAX_DWELL_SECONDS = 10.0
 
+# How long an assist output stays on: one burn, one pass, or the whole job.
+ASSIST_MODES = ("off", "feed", "pass", "job")
+
 ################
 
 
@@ -1350,6 +1353,13 @@ def job_pass_params_validate(jobdict):
                 raise ValueError(f"pass {passidx + 1}: {key} of {val} outside [{lo}, {hi}]")
             # store the coerced number, svg tags arrive as strings
             pass_[key] = val
+        for key in ("air_assist", "aux_assist"):
+            # an unrecognised mode matches no branch and silently runs the job
+            # with that assist off, which for air is a fire risk
+            if key in pass_ and pass_[key] not in ASSIST_MODES:
+                raise ValueError(
+                    f"pass {passidx + 1}: {key} of {pass_[key]!r} is not one of {ASSIST_MODES}"
+                )
 
 
 def job_laser_validate(jobdict):
@@ -1710,8 +1720,7 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
     )
 
     # assists on, beginning of feed if set to 'feed'
-    if pass_["air_assist"] == "feed":
-        air_on()
+    _feed_assists(pass_, True)
 
     posx = pos[0]  # left edge location [mm]
     posy = pos[1]  # top edge location [mm]
@@ -1808,9 +1817,40 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
             intensity_,
         )
 
-    # assists off, end of feed if set to 'feed'
-    if pass_["air_assist"] == "feed":
-        air_off()
+    # left on for the next item, the pass end switches it off
+
+
+def _switch_assists(passes, scope, on):
+    """Turn the assists that any of `passes` runs at `scope` on or off.
+
+    Scope is how long an assist stays on: 'feed' while burning, 'pass' for a
+    whole pass, 'job' for every pass in the job. Air and aux are independent
+    outputs and each picks its own scope.
+    """
+    for key, turn_on, turn_off in (
+        ("air_assist", air_on, air_off),
+        ("aux_assist", aux_on, aux_off),
+    ):
+        if any(pass_.get(key) == scope for pass_ in passes):
+            (turn_on if on else turn_off)()
+
+
+# whether the 'feed' scope assists are currently running, see _feed_assists
+_feed_assists_on = False
+
+
+def _feed_assists(pass_, on):
+    """Switch the 'feed' scope assists, holding them on across contiguous burns.
+
+    Only the seek to the next contour separates one burn from the next, so
+    switching per contour would cycle the relay hundreds of times on a job of
+    small shapes and give the gas no time to come up. This turns them on at the
+    first burn and leaves them until the pass ends.
+    """
+    global _feed_assists_on
+    if on != _feed_assists_on:
+        _switch_assists([pass_], "feed", on)
+        _feed_assists_on = on
 
 
 def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
@@ -1831,11 +1871,10 @@ def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
                 move(polyline[0][0], polyline[0][1], polyline[0][2])
             # a lone vertex with no pierce only seeks, so it needs no assist
             burns = pierce_time > 0 or len(polyline) > 1
-            # turn on assists if set to 'feed'
-            # also air_assist defaults to 'feed'
-            # Ahead of the pierce, where the gas clears the melt.
-            if burns and pass_["air_assist"] == "feed":
-                air_on()
+            # turn on assists if set to 'feed', ahead of the pierce where the
+            # gas clears the melt
+            if burns:
+                _feed_assists(pass_, True)
             # burn through in place first, otherwise a thick material is still
             # being penetrated as the head sets off
             if pierce_time > 0:
@@ -1852,9 +1891,7 @@ def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
                 else:
                     for i in range(1, len(polyline)):
                         move(polyline[i][0], polyline[i][1], polyline[i][2])
-            # turn off assists if set to 'feed'
-            if burns and pass_["air_assist"] == "feed":
-                air_off()
+            # left on for the next contour, the pass end switches it off
 
 
 def job_laser(jobdict):
@@ -1878,7 +1915,8 @@ def job_laser(jobdict):
           "seekzero": False,       # optional, default: True
           "pierce_time": 0,        # optional, default: 0
           "pxsize": [0.4],         # optional
-          "air_assist": "pass",    # optional (feed, pass, off), default: pass
+          "air_assist": "pass",    # optional (off, feed, pass, job), default: pass
+          "aux_assist": "off",     # optional (off, feed, pass, job), default: off
         }
       ],
       "items": [
@@ -1906,8 +1944,14 @@ def job_laser(jobdict):
     # raises an exception if the job is not valid
     job_laser_validate(jobdict)
 
-    # reset valves
+    # reset valves, including the feed scope tally a previous job may have left
+    global _feed_assists_on
+    _feed_assists_on = False
     air_off()
+    aux_off()
+
+    # assists on for the whole job if any pass asks for it
+    _switch_assists(jobdict["passes"], "job", True)
 
     # loop passes
     for pass_ in jobdict["passes"]:
@@ -1918,8 +1962,9 @@ def job_laser(jobdict):
         intensity(0.0)
         pixelwidth(pxsize_x)
         # assists on, beginning of pass if set to 'pass'
-        if pass_.setdefault("air_assist", "pass") == "pass":
-            air_on()
+        pass_.setdefault("air_assist", "pass")
+        pass_.setdefault("aux_assist", "off")
+        _switch_assists([pass_], "pass", True)
         pass_.setdefault("seekzero", True)
         pass_.setdefault("pierce_time", 0.0)
         seekrate = pass_.setdefault("seekrate", conf["seekrate"])
@@ -1940,9 +1985,12 @@ def job_laser(jobdict):
             elif kind == "fill" or kind == "path":
                 _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_)
 
-        # assists off, end of pass if set to 'pass'
-        if pass_["air_assist"] == "pass":
-            air_off()
+        # assists off, end of pass for both 'feed' and 'pass'
+        _feed_assists(pass_, False)
+        _switch_assists([pass_], "pass", False)
+
+    # assists off, end of job if set to 'job'
+    _switch_assists(jobdict["passes"], "job", False)
 
     # leave machine in absolute mode
     absolute()

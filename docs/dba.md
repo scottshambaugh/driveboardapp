@@ -42,8 +42,8 @@ Complete File Description
           "seekzero": False,     # optional, default: True
           "pierce_time": 0,      # optional, default: 0
           "pxsize": 0.4,         # optional
-          "air_assist": "pass",  # optional (feed, pass, off), default: pass
-          "aux_assist": "off",   # optional (feed, pass, off), default: off
+          "air_assist": "pass",  # optional (off, feed, pass, job), default: pass
+          "aux_assist": "off",   # optional (off, feed, pass, job), default: off
       }
   ],
  "items": [
