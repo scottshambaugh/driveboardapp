@@ -18,11 +18,14 @@ Safety functions covered:
   - send_param          28-bit protocol range saturation (no wraparound)
   - RX status parser     limit switches, stop request, watchdog, rx overflow,
                          door interlock, chiller interlock, paused flag
+  - watchdog stall      a host stall only clears the controller's serial
+                         watchdog when the machine was idle
 """
 
 import base64
 import copy
 import io
+import time
 
 import driveboard
 import pytest
@@ -1667,3 +1670,222 @@ def test_mill_job_in_bounds_runs(loop):
 def test_aux_commands_safe_when_disconnected(monkeypatch, fn):
     monkeypatch.setattr(driveboard, "SerialLoop", None)
     getattr(driveboard, fn)()  # must not raise while disconnected
+
+
+# ---------------------------------------------------------------------------
+# Serial watchdog stall recovery.
+#
+# The controller stops itself when it hears nothing for a second. Heavy host
+# work outlasts that: importing a large file runs C parsers that hold the
+# interpreter, so the serial thread never gets to send its status poll. With
+# the machine sitting idle that stop protects nothing, and the operator is
+# left with a red status and a re-home. The loop pre-empts it with a resume,
+# but only when the machine was idle with nothing queued. Every other stall
+# leaves the stop standing.
+# ---------------------------------------------------------------------------
+
+
+def _stall(loop, seconds=1.2):
+    """Backdate the last write so the loop sees a stall of that length."""
+    loop.last_tx_time = time.time() - seconds
+
+
+def _idle(loop):
+    """Put the loop in the state a controller sitting idle reports."""
+    loop._status["ready"] = True
+    loop._status["stops"] = {}
+    loop.tx_buffer = bytearray()
+    loop._paused = False
+
+
+def test_watchdog_stall_resumes_when_idle(loop):
+    loop.device = FakeDevice()
+    _idle(loop)
+    _stall(loop)
+    loop._serial_write()
+    assert ord(driveboard.CMD_RESUME) in loop.device.written
+
+
+def test_watchdog_resume_precedes_the_next_status_request(loop):
+    # The resume has to reach the controller ahead of any status request,
+    # otherwise the frame in between reports the stop and the UI goes red.
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop.request_status = 2
+    _stall(loop)
+    loop._serial_write()
+    written = bytes(loop.device.written)
+    assert ord(driveboard.CMD_RESUME) in written
+    assert ord(driveboard.CMD_STATUS) not in written
+    assert ord(driveboard.CMD_SUPERSTATUS) not in written
+    assert loop.request_status == 2, "status request re-armed for the next pass"
+
+
+def test_watchdog_resume_keeps_cached_status(loop):
+    # Unlike unstop(), this resume must not wipe the cached frame: the
+    # controller held its position and settings right through the stop.
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop._status["pos"] = [10.0, 20.0, 0.0]
+    loop._status["firmver"] = "1.5"
+    loop.firmbuf_used = 42
+    _stall(loop)
+    loop._serial_write()
+    assert loop._status["pos"] == [10.0, 20.0, 0.0]
+    assert loop._status["firmver"] == "1.5"
+    assert loop.firmbuf_used == 0  # a resume clears the controller's rx buffer
+
+
+def test_watchdog_stall_leaves_stop_standing_mid_job(loop):
+    # Controller busy running a job: the watchdog aborted real motion.
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop._status["ready"] = False
+    _stall(loop)
+    loop._serial_write()
+    assert ord(driveboard.CMD_RESUME) not in loop.device.written
+
+
+def test_watchdog_stall_leaves_stop_standing_with_queued_data(loop):
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop.tx_buffer = bytearray(b"queued")
+    _stall(loop)
+    loop._serial_write()
+    assert ord(driveboard.CMD_RESUME) not in loop.device.written
+
+
+def test_watchdog_stall_leaves_stop_standing_while_paused(loop):
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop._paused = True
+    _stall(loop)
+    loop._serial_write()
+    assert ord(driveboard.CMD_RESUME) not in loop.device.written
+
+
+def test_watchdog_stall_leaves_a_real_stop_standing(loop):
+    # A limit hit is not something the host may clear behind the operator.
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop._status["stops"] = {"x1": True}
+    _stall(loop)
+    loop._serial_write()
+    assert ord(driveboard.CMD_RESUME) not in loop.device.written
+
+
+def test_watchdog_stall_does_not_pre_empt_a_requested_stop(loop):
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop.request_stop = True
+    _stall(loop)
+    loop._serial_write()
+    written = bytes(loop.device.written)
+    assert ord(driveboard.CMD_STOP) in written
+    assert ord(driveboard.CMD_RESUME) not in written
+
+
+def test_normal_cadence_never_resumes(loop):
+    # The 0.4s status cadence keeps the watchdog fed, so there is nothing to
+    # recover from and no resume may be sent.
+    loop.device = FakeDevice()
+    _idle(loop)
+    loop.last_tx_time = time.time()
+    loop._serial_write()
+    assert ord(driveboard.CMD_RESUME) not in loop.device.written
+
+
+class WatchdogDevice:
+    """Fake controller applying the firmware's serial watchdog rule.
+
+    Every received byte feeds the watchdog (firmware USART_RX_vect). A second
+    without one trips a stop that only CMD_RESUME clears, as in
+    firmware/src/serial.c.
+    """
+
+    def __init__(self, timeout=1.0):
+        self.timeout = timeout
+        self.last_rx = time.time()
+        self.stopped = False
+        self.stop_count = 0
+        self.written = bytearray()
+
+    def _tick(self):
+        if not self.stopped and time.time() - self.last_rx > self.timeout:
+            self.stopped = True
+            self.stop_count += 1
+
+    def read(self, n):
+        self._tick()
+        return b""
+
+    def write(self, data):
+        self._tick()  # a byte arriving after the timeout is already too late
+        self.last_rx = time.time()
+        self.written.extend(data)
+        if ord(driveboard.CMD_RESUME) in bytes(data):
+            self.stopped = False
+        return len(data)
+
+    def flushOutput(self):
+        pass
+
+    def flushInput(self):
+        pass
+
+    def close(self):
+        pass
+
+
+def test_host_stall_does_not_leave_the_controller_stopped():
+    """A stalled serial thread must not cost the operator a re-home.
+
+    Holding the loop's lock reproduces what a large file import does: keep the
+    serial thread off the wire. The fake controller applies the firmware's
+    watchdog rule to the resulting silence.
+    """
+    dev = WatchdogDevice()
+    sl = driveboard.SerialLoopClass()
+    sl.device = dev
+    sl._status["ready"] = True  # controller sitting idle
+    sl.start()
+    try:
+        time.sleep(0.5)  # normal status cadence
+        assert dev.stopped is False, "the normal cadence must feed the watchdog"
+        with sl.lock:  # the stall
+            mark = len(dev.written)
+            time.sleep(1.4)
+        time.sleep(0.5)  # let the loop recover
+        assert dev.stop_count >= 1, "the stall should have tripped the watchdog"
+        assert dev.stopped is False, "watchdog stop left standing after the stall"
+        after = bytes(dev.written[mark:])
+        assert after[:1] == driveboard.CMD_RESUME.encode(
+            "latin-1"
+        ), "the resume must be the first thing sent after the stall"
+    finally:
+        sl.stop_processing = True
+        sl.join(timeout=5)
+
+
+def test_host_stall_mid_job_leaves_the_controller_stopped():
+    """The same stall during a job must leave the stop for the operator.
+
+    Motion was aborted mid-cut, so silently resuming would hide it.
+    """
+    dev = WatchdogDevice()
+    sl = driveboard.SerialLoopClass()
+    sl.device = dev
+    sl._status["ready"] = False  # controller running a job
+    sl.tx_buffer = bytearray(b"A" * 64)
+    sl.job_size = 64
+    sl.start()
+    try:
+        time.sleep(0.3)
+        with sl.lock:
+            time.sleep(1.4)
+        time.sleep(0.5)
+        assert dev.stop_count >= 1
+        assert dev.stopped is True, "a stop that aborted a job must stand"
+    finally:
+        sl.stop_processing = True
+        sl.join(timeout=5)

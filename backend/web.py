@@ -1,8 +1,11 @@
+import concurrent.futures
 import copy
 import glob
 import gzip
 import json
+import multiprocessing
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -566,6 +569,96 @@ def _unique_name(jobname):
     return jobname
 
 
+# Importing a job is seconds of C parsing (expat, PIL) that never releases the
+# GIL. Done in this interpreter it starves the serial thread, and the
+# controller reads that silence as a lost host and stops itself. A worker
+# process keeps the work off this interpreter, leaving the request thread
+# blocked on a pipe.
+#
+# Source and result travel as temp files rather than through the pipe, which
+# would pickle and copy tens of megabytes each way, and the worker is kept warm
+# between requests, since starting one costs about as much as parsing a
+# mid-size file.
+CONVERT_TIMEOUT = 600  # seconds, a big raster job legitimately takes minutes
+_convert_pool = None
+_convert_pool_lock = threading.Lock()
+
+
+def _convert_worker(in_path, out_path, text, optimize, matrix, conf_overrides):
+    """Convert a job file into a .dba file, in the worker process.
+
+    A spawned worker starts from the config defaults, so the server's values
+    come over with the call. Tolerance is passed explicitly because convert
+    binds it as a default argument at import time.
+    """
+    conf.update(conf_overrides)
+    with open(in_path, "rb") as fp:
+        job = fp.read()
+    if text:
+        job = job.decode("utf-8")
+    job = jobimport.convert(job, optimize=optimize, tolerance=conf["tolerance"], matrix=matrix)
+    with open(out_path, "w") as fp:
+        json.dump(job, fp)
+
+
+def _convert_pool_get():
+    """The import worker, started on first use and kept for later requests."""
+    global _convert_pool
+    if _convert_pool is None:
+        ctx = multiprocessing.get_context("spawn")
+        _convert_pool = concurrent.futures.ProcessPoolExecutor(max_workers=1, mp_context=ctx)
+    return _convert_pool
+
+
+def _convert_pool_drop():
+    """Discard the worker so the next request starts a clean one."""
+    global _convert_pool
+    pool, _convert_pool = _convert_pool, None
+    if pool is not None:
+        for proc in list(pool._processes.values()):
+            proc.kill()
+        pool.shutdown(wait=False)
+
+
+def _convert_job(job, optimize, matrix):
+    """Convert a job to a .dba string, in a worker process where one can be had.
+
+    Spawn rather than fork: this process has the serial and server threads
+    running, and a forked child can inherit a held stdout or import lock and
+    deadlock. Falling back to converting here costs the serial thread its
+    timing, not correctness, so it stays a warning rather than an error.
+    """
+    text = isinstance(job, str)
+    tmpdir = tempfile.mkdtemp(prefix="dbimport_")
+    args = (
+        os.path.join(tmpdir, "job.in"),
+        os.path.join(tmpdir, "job.dba"),
+        text,
+        optimize,
+        matrix,
+        dict(conf),
+    )
+    try:
+        with open(args[0], "wb") as fp:
+            fp.write(job.encode("utf-8") if text else job)
+        try:
+            with _convert_pool_lock:
+                future = _convert_pool_get().submit(_convert_worker, *args)
+            try:
+                future.result(timeout=CONVERT_TIMEOUT)
+            except concurrent.futures.TimeoutError:
+                _convert_pool_drop()
+                raise bottle.HTTPResponse("Import timed out.", 504) from None
+        except (concurrent.futures.BrokenExecutor, OSError, ImportError) as e:
+            print(f"WARN: import worker unavailable ({e}), converting in-process")
+            _convert_pool_drop()
+            _convert_worker(*args)
+        with open(args[1]) as fp:
+            return fp.read()
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 @bottle.route("/load", method="POST")
 @bottle.auth_basic(checkuser)
 def load():
@@ -610,9 +703,9 @@ def load():
     # sanity check
     if job is None or name is None:
         raise bottle.HTTPResponse("Invalid request data.", 400)
-    # convert
+    # convert, off this process so the serial thread keeps its timing
     try:
-        job = jobimport.convert(job, optimize=optimize, matrix=matrix)
+        job = _convert_job(job, optimize, matrix)  # already a .dba string
     except TypeError:
         if DEBUG:
             traceback.print_exc()
@@ -622,7 +715,7 @@ def load():
 
     if not overwrite:
         name = _unique_name(name)
-    _add(json.dumps(job), name)
+    _add(job, name)
     return json.dumps(name)
 
 

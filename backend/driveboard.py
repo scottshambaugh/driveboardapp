@@ -245,6 +245,14 @@ class SerialLoopClass(threading.Thread):
         # Idle is reported only with an empty rx buffer, the one proof the
         # tally has drained.
         self.last_firmware_idle = 0.0
+        # The controller stops itself when it hears nothing for this long
+        # (its serial watchdog, firmware/src/serial.c). A gap past the stall
+        # mark means it has stopped, or is about to.
+        self.FIRMWARE_WATCHDOG_TIMEOUT = 1.0  # seconds, matches the firmware
+        # A little under it, so the recovery is already on the wire by the
+        # time the controller acts. Still twice the 0.4s status cadence.
+        self.WATCHDOG_STALL_TIMEOUT = 0.8 * self.FIRMWARE_WATCHDOG_TIMEOUT
+        self.last_tx_time = time.time()
 
         # used for calculating percentage done
         self.job_size = 0
@@ -257,6 +265,7 @@ class SerialLoopClass(threading.Thread):
 
         self.request_stop = False
         self.request_resume = False
+        self.request_watchdog_resume = False
         self.request_pause = False
         self.request_unpause = False
         self.request_status = 2  # 0: no request, 1: normal request, 2: super request
@@ -563,7 +572,41 @@ class SerialLoopClass(threading.Thread):
                 print("ERROR: invalid marker")
                 self.pdata_count = 0
 
+    def _catch_watchdog_stall(self):
+        """Pre-empt a serial-watchdog stop this host provoked by going quiet.
+
+        The controller stops itself when it hears nothing for a second. Heavy
+        host work holds the interpreter that long (importing a large file runs
+        C parsers that never yield), and with the machine sitting idle there is
+        nothing for that stop to protect: it only leaves the operator a red
+        status and a re-home. Clearing it here, before the next status is
+        asked for, keeps the stop off the wire entirely.
+
+        Only when the machine was idle with nothing queued or paused. The last
+        status frame stays true across the stall because motion only starts
+        when this host sends it, and a host that went quiet sent none. Anything
+        in flight, paused, or already stopped is left alone: that stop is real.
+        """
+        if self.request_resume or self.request_watchdog_resume:
+            return  # a resume is already on its way
+        if self.request_stop or self.request_pause or self.request_unpause:
+            return  # deliberate host commands take precedence
+        if time.time() - self.last_tx_time < self.WATCHDOG_STALL_TIMEOUT:
+            return
+        if (
+            self._status["ready"]
+            and not self._status["stops"]
+            and not self.tx_buffer
+            and not self._paused
+        ):
+            print("WARN: host stalled past the controller serial watchdog, resuming")
+            self.request_watchdog_resume = True
+            # Hold off the status request so the resume goes out first and no
+            # frame can report the stop.
+            self.request_status = 0
+
     def _serial_write(self):
+        self._catch_watchdog_stall()
         ### sending super commands (handled in serial rx interrupt)
         if self.request_status == 1:
             self._send_char(CMD_STATUS)
@@ -581,6 +624,17 @@ class SerialLoopClass(threading.Thread):
             self.firmbuf_used = 0  # a resume resets the hardware's rx buffer
             self.request_resume = False
             self.reset_status()
+            self.request_status = 2  # super request
+
+        if self.request_watchdog_resume:
+            # Same command, but the machine kept position and settings through
+            # the watchdog stop, so the cached status stays valid and is left
+            # standing. Only the stop flag goes.
+            self._send_char(CMD_RESUME)
+            self.firmbuf_used = 0  # a resume resets the hardware's rx buffer
+            self.request_watchdog_resume = False
+            self._s["stops"].pop("watchdog", None)
+            self._status["stops"].pop("watchdog", None)
             self.request_status = 2  # super request
 
         # pause/unpause freeze the controller in place (beam off) without
@@ -620,6 +674,7 @@ class SerialLoopClass(threading.Thread):
                         to_send = to_send_double
                         #
                         t_prewrite = time.time()
+                        self.last_tx_time = t_prewrite  # feeds the firmware watchdog
                         actuallySent = self.device.write(to_send)
                         if actuallySent != expectedSent * 2:
                             print("ERROR: write did not complete")
@@ -656,6 +711,7 @@ class SerialLoopClass(threading.Thread):
     def _send_char(self, char):
         try:
             t_prewrite = time.time()
+            self.last_tx_time = t_prewrite  # feeds the firmware watchdog
             if conf["print_serial_data"]:
                 timestamp = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-4]
                 print(timestamp + " Sending: " + prettify_serial(ord(char), markers=markers_tx))

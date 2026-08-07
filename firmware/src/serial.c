@@ -101,9 +101,9 @@ void serial_init() {
   // executing buffered motion with the beam firing. The watchdog timer is
   // reset on every received byte (USART_RX_vect); the host polls status at
   // least every 0.4s, so a 1s timeout leaves margin without false trips. On
-  // timeout ISR(WDT_vect) forces a safe stop. We use INTERRUPT mode (not
-  // system-reset mode) so position is kept and the host can resume cleanly on
-  // reconnect.
+  // timeout ISR(WDT_vect) kills the beam, and stops the machine when it has
+  // motion in progress. We use INTERRUPT mode (not system-reset mode) so
+  // position is kept and the host can resume cleanly on reconnect.
   cli();
   wdt_reset();
   MCUSR &= ~(1 << WDRF);              // clear any stale watchdog-reset flag
@@ -191,11 +191,20 @@ inline uint8_t serial_read() {
 
 // serial watchdog timeout: the host has gone silent. Force a safe state.
 // Zero the beam directly (in static-PWM mode an idle machine can hold the beam
-// on and the stepper ISR may not be running to act), then stop. Re-arm WDIE to
-// stay in interrupt mode.
+// on and the stepper ISR may not be running to act). Re-arm WDIE to stay in
+// interrupt mode.
+// The stop is raised only when there is motion to halt: blocks queued, the
+// stepper running, unread rx data, or a raster stream open. This is the same
+// idle test protocol.c reports INFO_IDLE_YES on. An idle machine has nothing
+// to run away, and a host that is merely busy rather than gone would otherwise
+// cost the operator a stop and a re-home. The beam stays off either way, and
+// the check repeats every second for as long as the silence lasts.
 ISR(WDT_vect) {
   control_laser_intensity(0);
-  stepper_request_stop(STOPERROR_SERIAL_WATCHDOG);
+  if (stepper_processing() || planner_blocks_available()
+      || serial_data_available() || raster_mode) {
+    stepper_request_stop(STOPERROR_SERIAL_WATCHDOG);
+  }
   WDTCSR |= (1 << WDIE);
 }
 

@@ -197,17 +197,68 @@ def test_multiple_limits_reported_together():
 
 
 # ---------------------------------------------------------------------------
-# Serial watchdog: host silence forces a safe stop.
+# Serial watchdog: host silence stops the machine, but only when it has motion
+# to halt. An idle machine has nothing to run away, and a host that is merely
+# busy rather than gone must not cost the operator a stop and a re-home.
 #
 # NOTE: simavr's modeled WDT fires sooner than the firmware's configured 1s
-# period, so these bound the *behavior* (stops on prolonged silence, does not
-# trip on a brief gap) rather than validating the exact timeout.
+# period, so these bound the *behavior* (stops a moving machine on prolonged
+# silence, leaves an idle one alone, does not trip on a brief gap) rather than
+# validating the exact timeout.
 # ---------------------------------------------------------------------------
 
 
-def test_watchdog_trips_on_host_silence():
-    out, _ = fw.run(send=_status(), idle_cycles=18_000_000, run_cycles=42_000_000)
-    assert fw.STOPERROR_SERIAL_WATCHDOG in out, "watchdog did not stop on host silence"
+def test_watchdog_leaves_an_idle_machine_running():
+    # Long silence with an empty block buffer: no stop code, and the firmware
+    # still reports itself idle rather than stopped.
+    out, _, info = fw.run(
+        send=_status(),
+        idle_cycles=18_000_000,
+        run_cycles=42_000_000,
+        watch_symbol="stop_status",
+    )
+    assert fw.STOPERROR_SERIAL_WATCHDOG not in out, "idle machine stopped for nothing"
+    assert info["final"] == fw.STOPERROR_OK
+    assert fw.INFO_IDLE_YES in out, "expected the machine to still report idle"
+    assert fw.STATUS_END in out
+
+
+def test_watchdog_leaves_the_beam_off_while_idle():
+    out, _, info = fw.run(
+        send=_status(),
+        idle_cycles=18_000_000,
+        run_cycles=42_000_000,
+        watch_symbol="pwm_duty",
+    )
+    assert info["max"] == 0, "beam duty rose while idle"
+    assert fw.STATUS_END in out
+
+
+def test_watchdog_stops_a_moving_machine():
+    # A long move then silence: the stepper is still stepping when the watchdog
+    # fires, so the stop stands. stop_status is read directly because asking
+    # for status would feed the watchdog.
+    _out, _, info = fw.run(
+        send=fw.line_program(200.0, feedrate=600),
+        run_cycles=42_000_000,
+        watch_symbol="stop_status",
+    )
+    assert info["final"] == fw.STOPERROR_SERIAL_WATCHDOG, "moving machine was not stopped"
+
+
+def test_watchdog_stops_a_dwelling_machine():
+    # A dwell holds the beam on in one spot without moving, the state that
+    # looks idle from outside and is the most dangerous to leave running.
+    dwell = fw.dwell_program(200, 5.0)
+    _out, _, info = fw.run(send=dwell, run_cycles=42_000_000, watch_symbol="stop_status")
+    assert info["final"] == fw.STOPERROR_SERIAL_WATCHDOG, "dwelling machine was not stopped"
+
+
+def test_watchdog_kills_the_beam_of_a_dwelling_machine():
+    dwell = fw.dwell_program(200, 5.0)
+    _out, _, info = fw.run(send=dwell, run_cycles=42_000_000, watch_symbol="pwm_duty")
+    assert info["max"] > 0, "the dwell never fired the beam"
+    assert info["final"] == 0, "beam left on after the watchdog fired"
 
 
 def test_watchdog_not_tripped_on_brief_gap():

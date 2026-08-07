@@ -12,6 +12,7 @@ import json
 import os
 
 import driveboard
+import jobimport
 import pytest
 import web  # noqa: F401  (import registers routes on the default app)
 from config import conf
@@ -467,3 +468,34 @@ def test_load_upload_marker_without_a_file_is_rejected(auth_app, isolated_config
     body = {"load_request": json.dumps({"job": "upload_raw", "name": "nofile"})}
     resp = auth_app.post("/load", body, expect_errors=True)
     assert resp.status_int == 400
+
+
+# ---------------------------------------------------------------------------
+# Job import runs in a worker process. In this one it is seconds of C parsing
+# that never releases the GIL, which starves the serial thread until the
+# controller's watchdog reads the silence as a lost host and stops the machine.
+# ---------------------------------------------------------------------------
+
+
+def test_convert_runs_in_a_worker_process():
+    pool = web._convert_pool_get()
+    assert pool.submit(os.getpid).result(timeout=60) != os.getpid()
+
+
+@pytest.mark.parametrize("as_text", [False, True])
+def test_convert_matches_an_in_process_convert(as_text, testjobs_dir):
+    # str and bytes sources both have to survive the trip through the worker
+    with open(os.path.join(testjobs_dir, "key.svg"), "rb") as fp:
+        job = fp.read()
+    if as_text:
+        job = job.decode("utf-8")
+    assert web._convert_job(job, True, None) == json.dumps(
+        jobimport.convert(job, optimize=True, matrix=None)
+    )
+
+
+def test_convert_reports_an_unusable_file_as_a_type_error():
+    # the exception has to come back from the worker with its type intact,
+    # otherwise /load answers 500 instead of 400
+    with pytest.raises(TypeError):
+        web._convert_job(b"not a job at all", True, None)
