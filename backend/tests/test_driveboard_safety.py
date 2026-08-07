@@ -718,6 +718,82 @@ def test_nn_ordering_starts_from_the_given_head_position(loop, monkeypatch):
     assert [pixels for _leadin, _span, pixels in runs] == [5, 3]
 
 
+def test_bidirectional_starts_at_the_nearest_corner(loop, monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_leadin", 1.0)
+    # a tall image, a 3 pixel run on the top line and a 5 pixel run on the
+    # bottom line, both at the left so the approach seek decides the corner
+    dark = [(x, 0) for x in (2, 3, 4)] + [(x, 29) for x in (2, 3, 4, 5, 6)]
+
+    # no head position: top-down as always
+    runs, _pxsize_x = _emit_image(loop, monkeypatch, dark, "Bidirectional", height=30)
+    assert [pixels for _leadin, _span, pixels in runs] == [3, 5]
+
+    # head arriving below the image: bottom-up
+    loop.tx_buffer.clear()
+    runs, _pxsize_x = _emit_image(
+        loop, monkeypatch, dark, "Bidirectional", height=30, head_pos=[100.0, 115.0]
+    )
+    assert [pixels for _leadin, _span, pixels in runs] == [5, 3]
+
+
+def test_bidirectional_first_pass_can_run_right_to_left(loop, monkeypatch):
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_leadin", 1.0)
+    # the top line only, a 3 pixel run at the left and a 5 pixel run at the
+    # right, separated by more than 2 * raster_leadin so they stay two segments
+    dark = [(x, 0) for x in (2, 3, 4)] + [(x, 0) for x in (150, 151, 152, 153, 154)]
+
+    # no head position: left-to-right
+    runs, _pxsize_x = _emit_image(loop, monkeypatch, dark, "Bidirectional", width=200)
+    assert [pixels for _leadin, _span, pixels in runs] == [3, 5]
+
+    # head arriving right of the image: right-to-left
+    loop.tx_buffer.clear()
+    runs, _pxsize_x = _emit_image(
+        loop, monkeypatch, dark, "Bidirectional", width=200, head_pos=[145.0, 100.0]
+    )
+    assert [pixels for _leadin, _span, pixels in runs] == [5, 3]
+
+
+def test_bidirectional_corner_choice_considers_the_next_item(loop, monkeypatch):
+    # approach alone slightly favors entering image A at its top, but the
+    # next image sits above A, so exiting at the top wins overall: A engraves
+    # bottom-up (5 pixel bottom run first) to end near B
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_leadin", 1.0)
+    monkeypatch.setitem(conf, "raster_mode", "Bidirectional")
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    dark_a = [(x, 0) for x in (2, 3, 4)] + [(x, 29) for x in (2, 3, 4, 5, 6)]
+    dark_b = [(x, 1) for x in range(20, 27)]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0, 1, 2], "air_assist": "off", "pxsize": 0.4}],
+        "items": [{"def": 0}, {"def": 1}, {"def": 2}],
+        "defs": [
+            {"kind": "path", "data": [[[10.0, 10.0], [90.0, 105.0]]]},
+            {
+                "kind": "image",
+                "pos": [100.0, 100.0],
+                "size": [40 * 0.2, 30 * 0.4],
+                "data": _dots_png(dark_a, 40, 30),
+            },
+            {
+                "kind": "image",
+                "pos": [95.0, 88.0],
+                "size": [40 * 0.2, 3 * 0.4],
+                "data": _dots_png(dark_b, 40, 3),
+            },
+        ],
+    }
+    driveboard.job(job)
+    runs = _raster_runs(loop.tx_buffer)
+    assert [pixels for _leadin, _span, pixels in runs] == [5, 3, 7]
+
+
 def test_job_threads_head_position_between_items(loop, monkeypatch):
     # a path ending right of the image's bottom line makes the NN ordering
     # engrave the bottom segment first

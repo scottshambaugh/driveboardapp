@@ -229,7 +229,7 @@ def _knn_ids(points, k):
     return out
 
 
-def improve_seek_order(starts, ends, tour, start, k=96, max_passes=50, time_budget=3.0):
+def improve_seek_order(starts, ends, tour, start, k=None, max_passes=50, time_budget=3.0):
     """2-opt improvement of an open seek tour over reversible segments.
 
     starts, ends ... per-segment endpoint coords (entry/exit when not reversed)
@@ -242,11 +242,15 @@ def improve_seek_order(starts, ends, tour, start, k=96, max_passes=50, time_budg
     is near-linear. Greedy nearest-neighbor tours lose most of their excess
     seek travel to a handful of such untangling moves. Raster scanline
     endpoints stack in near-identical columns, so the candidate lists need a
-    generous k to contain the useful reconnections.
+    generous k to contain the useful reconnections: k defaults to the segment
+    count, capped so the lists stay small in memory. The time budget bounds
+    the improvement sweeps on top of that.
     """
     n = len(tour)
     if n < 2:
         return
+    if k is None:
+        k = min(len(starts), 256)
     dist = math.dist
     points = []
     for i in range(len(starts)):

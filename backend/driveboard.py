@@ -5,6 +5,7 @@ import datetime
 import io
 import itertools
 import json
+import math
 import platform
 import sys
 import threading
@@ -1573,6 +1574,103 @@ def _raster_orientations(
     return fwd, rev
 
 
+def _dist_to_rect(p, rect):
+    """Distance from a point to an axis-aligned [x0, y0, x1, y1] rect."""
+    dx = max(rect[0] - p[0], 0.0, p[0] - rect[2])
+    dy = max(rect[1] - p[1], 0.0, p[1] - rect[3])
+    return math.hypot(dx, dy)
+
+
+def _order_raster_bidi(orients, line_of, start, line_count, next_rect=None):
+    """Bidirectional scanline order over collected raster segments, entering
+    at whichever of the four corner starts (top/bottom, first pass
+    left-to-right/right-to-left) costs the least seek travel from `start`.
+
+    Each variant replicates the emitter's parity: the pass direction flips on
+    every line of the image, engraved or not. Approach and interior seeks are
+    costed exactly. A corner start that saves its approach can strand the
+    exit on the far side of the image from the next item, so when next_rect
+    (the next item's extent) is known, the seek towards it counts too.
+
+    orients ... (fwd, rev) orientation dicts per segment
+    line_of ... image line index per segment
+    Returns [(segment_index, direction), ...] in emission order.
+    """
+    by_line = {}
+    for i, li in enumerate(line_of):
+        by_line.setdefault(li, []).append(i)  # canonical order is left-to-right
+    best = None
+    for bottom_up in (False, True):
+        for d0 in (1, -1):
+            first_li = line_count - 1 if bottom_up else 0
+            order = []
+            for li in sorted(by_line, reverse=bottom_up):
+                d = d0 if (li - first_li) % 2 == 0 else -d0
+                idxs = by_line[li] if d == 1 else reversed(by_line[li])
+                order.extend((i, d) for i in idxs)
+            total = 0.0
+            pos = start
+            for i, d in order:
+                o = orients[i][0] if d == 1 else orients[i][1]
+                total += math.dist(pos, [o["leadin"], o["line_y"]])
+                pos = [o["leadout"], o["line_y"]]
+            if next_rect is not None:
+                total += _dist_to_rect(pos, next_rect)
+            if best is None or total < best[0]:
+                best = (total, order)
+    return best[1]
+
+
+def _emit_raster_bidi(
+    segments,
+    start,
+    next_rect,
+    px_w,
+    line_count,
+    posx,
+    pxsize_x,
+    leadin,
+    x_min,
+    x_max,
+    pxarray,
+    pxarray_reversed,
+    px_n,
+    seekrate,
+    feedrate_,
+    intensity_,
+):
+    """Emit collected raster segments in the cheapest of the four bidirectional
+    corner starts, see _order_raster_bidi. Returns the head position after the
+    last segment, or None if there were none."""
+    if not segments:
+        return None
+    orients = []
+    line_of = []
+    for lo, hi, line_start, line_y in segments:
+        orients.append(
+            _raster_orientations(
+                lo,
+                hi,
+                line_start,
+                line_y,
+                posx,
+                pxsize_x,
+                leadin,
+                x_min,
+                x_max,
+                pxarray,
+                pxarray_reversed,
+                px_n,
+            )
+        )
+        line_of.append(line_start // px_w)
+    last = None
+    for i, d in _order_raster_bidi(orients, line_of, start, line_count, next_rect):
+        last = orients[i][0] if d == 1 else orients[i][1]
+        _emit_raster_segment(last, seekrate, feedrate_, intensity_)
+    return [last["leadout"], last["line_y"]]
+
+
 def _emit_raster_nn(
     segments,
     start,
@@ -1800,12 +1898,13 @@ def _raster_line_segments(line, line_start, line_end, direction, pxsize_x, raste
 
 
 def _job_laser_image(
-    def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_, head_pos=None
+    def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_, head_pos=None, next_rect=None
 ):
     """Engrave one image def. head_pos is the planar head position on entry
     (used to anchor seek-optimized ordering), the image corner if unknown.
-    Returns the head position after the last emitted segment, or head_pos if
-    nothing engraves."""
+    next_rect is the extent of the item that follows, letting the corner
+    choice keep the exit near it. Returns the head position after the last
+    emitted segment, or head_pos if nothing engraves."""
     pos = def_["pos"]
     size = def_["size"]
     data = def_["data"]  # in base64, format: jpg, png, gif
@@ -1832,9 +1931,7 @@ def _job_laser_image(
 
     posx = pos[0]  # left edge location [mm]
     posy = pos[1]  # top edge location [mm]
-    line_y = posy + 0.5 * pxsize_y
     line_count = int(size[1] / pxsize_y)
-    line_start = line_end = 0
     x_min, x_max = _reachable_x_range()
 
     # warn if there isn't room for the lead-in / lead-out moves. Only the
@@ -1853,13 +1950,18 @@ def _job_laser_image(
     else:  # 'Forward', 'Bidirectional', or 'NearestNeighbor'
         direction = 1
 
-    # NearestNeighbor collects segments (found in forward direction) and emits
-    # them reordered after the scanline loop
-    nn_segments = []
+    # Bidirectional with a known head position picks the cheapest of the four
+    # corner starts after collecting, like NearestNeighbor it collects
+    # canonical forward segments and reorders after the scanline loop
+    pick_corner = raster_mode == "Bidirectional" and head_pos is not None
+    collect = raster_mode == "NearestNeighbor" or pick_corner
+    collected = []
     last = None
 
-    for _ in range(line_count):
-        line_end += px_w
+    for li in range(line_count):
+        line_start = li * px_w
+        line_end = line_start + px_w
+        line_y = posy + (li + 0.5) * pxsize_y
         line = pxarray[line_start:line_end]
         if not all(px == 255 for px in line):  # skip completely white raster lines
             for segment_start, segment_end in _raster_line_segments(
@@ -1897,38 +1999,41 @@ def _job_laser_image(
                         "hi": px_n - segment_end,
                     }
 
-                if raster_mode == "NearestNeighbor":
-                    nn_segments.append((segment_start, segment_end, line_start, line_y))
+                if collect:
+                    collected.append((segment_start, segment_end, line_start, line_y))
                 else:
                     last = orientation
                     _emit_raster_segment(orientation, seekrate, feedrate_, intensity_)
 
-        # prime for next line
-        if (raster_mode == "Bidirectional") and (direction == 1):  # fwd
+        # prime for next line, collection always scans forward
+        if collect:
+            pass
+        elif (raster_mode == "Bidirectional") and (direction == 1):  # fwd
             direction = -1  # switch to rev
         elif (raster_mode == "Bidirectional") and (direction == -1):  # rev
             direction = 1  # switch to fwd
-        line_start = line_end
-        line_y += pxsize_y
 
+    common = (
+        posx,
+        pxsize_x,
+        conf["raster_leadin"],
+        x_min,
+        x_max,
+        pxarray,
+        pxarray_reversed,
+        px_n,
+        seekrate,
+        feedrate_,
+        intensity_,
+    )
     if raster_mode == "NearestNeighbor":
-        nn_last = _emit_raster_nn(
-            nn_segments,
-            head_pos[:2] if head_pos else [posx, posy],
-            posx,
-            pxsize_x,
-            conf["raster_leadin"],
-            x_min,
-            x_max,
-            pxarray,
-            pxarray_reversed,
-            px_n,
-            seekrate,
-            feedrate_,
-            intensity_,
-        )
+        nn_last = _emit_raster_nn(collected, head_pos[:2] if head_pos else [posx, posy], *common)
         if nn_last:
             return nn_last
+    elif pick_corner:
+        bidi_last = _emit_raster_bidi(collected, head_pos[:2], next_rect, px_w, line_count, *common)
+        if bidi_last:
+            return bidi_last
 
     # left on for the next item, the pass end switches it off
     return [last["leadout"], last["line_y"]] if last else head_pos
@@ -2121,6 +2226,22 @@ def job_laser(jobdict):
         move(0, 0, 0)
 
 
+def _item_seek_rect(jobdict, itemidx):
+    """Extent [x0, y0, x1, y1] the head will seek towards for an item, None
+    if unknown. Images seek somewhere on their def's extent, paths to their
+    first vertex."""
+    def_ = jobdict["defs"][jobdict["items"][itemidx]["def"]]
+    if def_["kind"] == "image":
+        pos, size = def_["pos"], def_["size"]
+        return [pos[0], pos[1], pos[0] + size[0], pos[1] + size[1]]
+    if def_["kind"] in ("fill", "path"):
+        for polyline in def_["data"]:
+            if polyline:
+                p = polyline[0]
+                return [p[0], p[1], p[0], p[1]]
+    return None
+
+
 def _job_laser_passes(jobdict):
     """Emit every pass of a laser job, in order."""
     # a job starts with the head at the offset origin, seek-optimized ordering
@@ -2148,13 +2269,25 @@ def _job_laser_passes(jobdict):
         else:
             relative()
         # loop pass' items
-        for itemidx in pass_["items"]:
+        pass_items = pass_["items"]
+        for i, itemidx in enumerate(pass_items):
             item = jobdict["items"][itemidx]
             def_ = jobdict["defs"][item["def"]]
             kind = def_["kind"]
             if kind == "image":
+                next_rect = None
+                if not pass_["relative"] and i + 1 < len(pass_items):
+                    next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
                 head_pos = _job_laser_image(
-                    def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_, head_pos
+                    def_,
+                    pass_,
+                    pxsize_x,
+                    pxsize_y,
+                    seekrate,
+                    feedrate_,
+                    intensity_,
+                    head_pos,
+                    next_rect,
                 )
             elif kind == "fill" or kind == "path":
                 head_pos = _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_, head_pos)

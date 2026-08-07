@@ -5,6 +5,7 @@
 - Jog moves are now clamped to the work area so the head cannot hit a limit switch. Toggled with the new `jog_soft_limits` config setting
 - Speed up loading svg files with raster images (esp ducplicates)
 - Seek-optimized ordering (NearestNeighbor rasters and vector path sorting) now runs a 2-opt untangling pass to further improve job time
+- Bidirectional rasters now start from whichever of the four image corners is closest
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out
