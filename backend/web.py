@@ -955,6 +955,26 @@ def optimize_fill():
         raise bottle.HTTPResponse(f"Error optimizing fill: {str(e)}", 400) from e
 
 
+@bottle.route("/job_seek_preview", method="POST")
+def job_seek_preview():
+    """Seek lines of a job as dispatch will order it, for the job view.
+
+    Args (via POST JSON):
+        job: dba-style dict with passes/items/defs. Image defs only need
+             kind/pos/size, pixel data is not used.
+
+    Returns:
+        JSON with a list of [[x0,y0],[x1,y1]] seek lines in mm.
+    """
+    try:
+        request_data = json.loads(bottle.request.body.read().decode("utf-8"))
+        seeks = driveboard.job_seek_preview(request_data.get("job", {}))
+        return json.dumps({"seeks": seeks})
+    except Exception as e:
+        traceback.print_exc()
+        raise bottle.HTTPResponse(f"Error computing seek preview: {str(e)}", 400) from e
+
+
 @bottle.route("/pause")
 @bottle.auth_basic(checkuser)
 @checkserial

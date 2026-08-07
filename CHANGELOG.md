@@ -18,6 +18,7 @@
 - Job import now runs in a worker process, so parsing a big file cannot starve the serial link
 - The firmware serial watchdog now only stops the machine when it has motion to halt, (kills the beam regardless)
 - Fixed importing a dba job with 3D vertices crashing during path optimization
+- The UI's seek lines now show the true post-optimizer path
 
 ### Development
 - 

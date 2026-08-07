@@ -421,19 +421,13 @@ jobhandler = {
       for (var j = 0; j < path.length; j++) {
         var pathseg = path[j];
         if (pathseg.length > 0) {
-          // seek move
-          jobview_seekLayer.activate();
-          var p_seek = new paper.Path();
-          p_seek.strokeColor = "#dddddd";
-          p_seek.add([x, y]);
-          x = pathseg[0][0] * jobview_mm2px;
-          y = pathseg[0][1] * jobview_mm2px;
-          p_seek.add([x, y]);
-          // feed move
+          // feed move, seeks come from the backend preview afterwards
           jobview_feedLayer.activate();
           var p_feed = new paper.Path();
           group.addChild(p_feed);
           p_feed.strokeColor = item.color || "#000000";
+          x = pathseg[0][0] * jobview_mm2px;
+          y = pathseg[0][1] * jobview_mm2px;
           p_feed.add([x, y]);
           for (vertex = 1; vertex < pathseg.length; vertex++) {
             x = pathseg[vertex][0] * jobview_mm2px;
@@ -443,6 +437,66 @@ jobhandler = {
         }
       }
     }
+    this.renderSeeks();
+  },
+
+  renderSeeks: function () {
+    // seek lines as dispatch will order the job, drawn when the backend
+    // preview arrives. Images travel as their extent only.
+    var slim_defs = [];
+    for (var i = 0; i < this.defs.length; i++) {
+      var def = this.defs[i];
+      if (def.kind === "image") {
+        slim_defs.push({ kind: "image", pos: def.pos, size: def.size });
+      } else {
+        slim_defs.push({ kind: def.kind, data: def.data });
+      }
+    }
+    var passes = this.passes;
+    if (
+      !passes ||
+      passes.length === 0 ||
+      !passes.some(function (p) {
+        return p.items.length > 0;
+      })
+    ) {
+      // nothing assigned yet, preview all items in listed order
+      var all_items = [];
+      for (var i = 0; i < this.items.length; i++) {
+        all_items.push(i);
+      }
+      passes = [{ items: all_items }];
+    }
+    $.ajax({
+      type: "POST",
+      url: "/job_seek_preview",
+      contentType: "application/json",
+      data: JSON.stringify({
+        job: { head: {}, passes: passes, items: this.items, defs: slim_defs },
+      }),
+      dataType: "json",
+      success: function (result) {
+        jobview_seekLayer.activate();
+        jobview_seekLayer.removeChildren();
+        var seeks = result.seeks;
+        for (var i = 0; i < seeks.length; i++) {
+          var p_seek = new paper.Path();
+          p_seek.strokeColor = "#dddddd";
+          p_seek.add([
+            seeks[i][0][0] * jobview_mm2px,
+            seeks[i][0][1] * jobview_mm2px,
+          ]);
+          p_seek.add([
+            seeks[i][1][0] * jobview_mm2px,
+            seeks[i][1][1] * jobview_mm2px,
+          ]);
+        }
+        paper.view.draw();
+      },
+      error: function (xhr, status, error) {
+        console.error("Seek preview failed: " + error);
+      },
+    });
   },
 
   renderBounds: function () {

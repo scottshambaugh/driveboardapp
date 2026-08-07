@@ -2117,22 +2117,11 @@ def _feed_assists(pass_, on):
     _switch_assists([pass_], "feed", on)
 
 
-def _job_laser_path(
-    def_, pass_, seekrate, feedrate_, intensity_, head_pos=None, next_rect=None, reorder=False
-):
-    """Emit one path def. With reorder set (path kind, absolute pass, known
-    head position) the polylines are re-sequenced and reversed for minimal
-    planner-model seek time from head_pos towards next_rect, on top of the
-    import-time ordering. With conf split_closed_paths, closed contours may
-    also be burned as separate arcs when interleaving them saves travel,
-    arcs the ordering keeps adjacent burn as one continuous move. Fill defs
-    keep their deliberate scanline order. Returns the planar head position
-    after the last emitted vertex, head_pos if nothing was emitted, or None
-    if the pass is relative (the emitted targets are offsets, so the
-    position is unknown)."""
-    path = def_["data"]
-    pierce_time = pass_["pierce_time"]
-    polys = [p for p in path if len(p) > 0]
+def _order_path_def(def_, pass_, seekrate, feedrate_, head_pos, next_rect, reorder):
+    """The polylines of a path def as dispatch burns them: re-sequenced,
+    reversed, and split, in emission order. Returns [(polyline, is_arc), ...]
+    where is_arc marks pieces of a split closed contour."""
+    polys = [p for p in def_["data"] if len(p) > 0]
     tour = [[ci, False] for ci in range(len(polys))]
     arc_flags = None
     if reorder and not pass_.get("relative") and head_pos is not None and polys:
@@ -2167,14 +2156,31 @@ def _job_laser_path(
             pathoptimizer.rotate_closed_entries(
                 polys, tour, start, seekrate, feedrate_, end_rect=next_rect
             )
+    return [
+        (polys[ci][::-1] if rev else polys[ci], bool(arc_flags and arc_flags[ci]))
+        for ci, rev in tour
+    ]
+
+
+def _job_laser_path(
+    def_, pass_, seekrate, feedrate_, intensity_, head_pos=None, next_rect=None, reorder=False
+):
+    """Emit one path def. With reorder set (path kind, absolute pass, known
+    head position) the polylines are re-sequenced and reversed for minimal
+    planner-model seek time from head_pos towards next_rect, on top of the
+    import-time ordering. With conf split_closed_paths, closed contours may
+    also be burned as separate arcs when interleaving them saves travel,
+    arcs the ordering keeps adjacent burn as one continuous move. Fill defs
+    keep their deliberate scanline order. Returns the planar head position
+    after the last emitted vertex, head_pos if nothing was emitted, or None
+    if the pass is relative (the emitted targets are offsets, so the
+    position is unknown)."""
+    pierce_time = pass_["pierce_time"]
+    ordered = _order_path_def(def_, pass_, seekrate, feedrate_, head_pos, next_rect, reorder)
     last = None
     prev_burned = False
     cut_points = set()  # split arc ends already burned, they need no pierce
-    for ci, rev in tour:
-        polyline = polys[ci]
-        is_arc = arc_flags is not None and arc_flags[ci]
-        if rev:
-            polyline = polyline[::-1]
+    for polyline, is_arc in ordered:
         # a split arc entering on an already-cut point resumes a contour
         resumes = is_arc and tuple(polyline[0][:2]) in cut_points
         if is_arc:
@@ -2335,6 +2341,67 @@ def _item_seek_rect(jobdict, itemidx):
                 p = polyline[0]
                 return [p[0], p[1], p[0], p[1]]
     return None
+
+
+def job_seek_preview(jobdict):
+    """Seek lines [[x0,y0],[x1,y1]] of a job as dispatch will order it.
+
+    A dry run of the pass walk: path defs go through the real job-time
+    ordering (re-sequencing, splitting, reversal), so the preview shows what
+    the machine will actually do. Image interiors are approximated by their
+    extents (the raster ordering needs the decoded pixels), and image defs
+    may come without pixel data. Purely computational, safe without a
+    machine connection.
+    """
+
+    def clamp(p, rect):
+        return [min(max(p[0], rect[0]), rect[2]), min(max(p[1], rect[1]), rect[3])]
+
+    seeks = []
+    head_pos = [0.0, 0.0]
+    returns_home = not jobdict.get("head", {}).get("noreturn")
+    passes = jobdict.get("passes") or []
+    for passidx, pass_ in enumerate(passes):
+        seekrate = pass_.get("seekrate", conf["seekrate"])
+        feedrate_ = pass_.get("feedrate", conf["feedrate"])
+        pass_items = pass_.get("items", [])
+        for i, itemidx in enumerate(pass_items):
+            def_ = jobdict["defs"][jobdict["items"][itemidx]["def"]]
+            kind = def_["kind"]
+            next_rect = None
+            if not pass_.get("relative"):
+                if i + 1 < len(pass_items):
+                    next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
+                elif passidx + 1 < len(passes):
+                    nxt = passes[passidx + 1]
+                    if not nxt.get("relative") and nxt.get("items"):
+                        next_rect = _item_seek_rect(jobdict, nxt["items"][0])
+                elif returns_home:
+                    next_rect = [0.0, 0.0, 0.0, 0.0]
+            if kind == "image":
+                pos, size = def_["pos"], def_["size"]
+                rect = [pos[0], pos[1], pos[0] + size[0], pos[1] + size[1]]
+                entry = clamp(head_pos, rect)
+                if entry != head_pos:
+                    seeks.append([head_pos, entry])
+                head_pos = clamp(clamp(entry, next_rect), rect) if next_rect else entry
+            elif kind == "fill" or kind == "path":
+                if pass_.get("relative"):
+                    head_pos = None
+                    continue
+                ordered = _order_path_def(
+                    def_, pass_, seekrate, feedrate_, head_pos, next_rect, kind == "path"
+                )
+                for polyline, _is_arc in ordered:
+                    p0 = list(polyline[0][:2])
+                    if head_pos is not None and p0 != head_pos:
+                        seeks.append([head_pos, p0])
+                    head_pos = list(polyline[-1][:2])
+        if head_pos is None:
+            break  # a relative pass loses the position, stop the preview
+    if returns_home and head_pos is not None and head_pos != [0.0, 0.0]:
+        seeks.append([head_pos, [0.0, 0.0]])
+    return [[[round(a[0], 2), round(a[1], 2)], [round(b[0], 2), round(b[1], 2)]] for a, b in seeks]
 
 
 def _job_laser_passes(jobdict):

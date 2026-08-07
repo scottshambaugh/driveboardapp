@@ -1021,6 +1021,42 @@ def test_split_resume_skips_the_pierce(loop, monkeypatch):
     assert dwells_off > dwells_on
 
 
+def test_job_seek_preview_reflects_dispatch_ordering():
+    # the preview shows the job-time order: nearest polyline first
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0]}],
+        "items": [{"def": 0}],
+        "defs": [
+            {
+                "kind": "path",
+                "data": [
+                    [[50.0, 50.0], [60.0, 50.0]],
+                    [[5.0, 5.0], [15.0, 5.0]],
+                ],
+            }
+        ],
+    }
+    seeks = driveboard.job_seek_preview(job)
+    assert seeks == [[[0.0, 0.0], [5.0, 5.0]], [[15.0, 5.0], [50.0, 50.0]]]
+
+
+def test_job_seek_preview_handles_dataless_images():
+    # the frontend sends image defs without pixel data, extents suffice
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0, 1]}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "image", "pos": [50.0, 50.0], "size": [20.0, 10.0]},
+            {"kind": "path", "data": [[[100.0, 100.0], [110.0, 100.0]]]},
+        ],
+    }
+    seeks = driveboard.job_seek_preview(job)
+    assert seeks[0] == [[0.0, 0.0], [50.0, 50.0]]
+    assert seeks[-1][1] == [100.0, 100.0]
+
+
 def test_fill_polylines_keep_their_stored_order(loop):
     # fills carry a deliberate scanline order chosen by fill_mode, job
     # dispatch must not reorder them
