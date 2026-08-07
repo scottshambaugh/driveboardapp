@@ -830,6 +830,84 @@ def test_bidirectional_corner_choice_considers_the_return_home(loop, monkeypatch
     assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [5, 3]
 
 
+def _line_targets(buf):
+    """(x, y) target of every line move in a tx_buffer, in emission order."""
+    targets = []
+    x = y = None
+    i = 0
+    while i < len(buf):
+        byte = buf[i]
+        if byte >= 128:  # a 4-byte number followed by its parameter marker
+            param, value = decode_param(buf, i)
+            if param == driveboard.PARAM_TARGET_X:
+                x = value
+            elif param == driveboard.PARAM_TARGET_Y:
+                y = value
+            i += 5
+        else:
+            if chr(byte) == driveboard.CMD_LINE:
+                targets.append((round(x, 3), round(y, 3)))
+            i += 1
+    return targets
+
+
+def test_path_polylines_reorder_and_reverse_from_head_position(loop):
+    # stored order starts far away, the near polyline should burn first and
+    # the backwards-stored one should be entered at its near end
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0], "air_assist": "off"}],
+        "items": [{"def": 0}],
+        "defs": [
+            {
+                "kind": "path",
+                "data": [
+                    [[50.0, 50.0], [60.0, 50.0]],
+                    [[5.0, 5.0], [15.0, 5.0]],
+                    [[30.0, 5.0], [20.0, 5.0]],
+                ],
+            }
+        ],
+    }
+    driveboard.job(job)
+    assert _line_targets(loop.tx_buffer) == [
+        (5.0, 5.0),
+        (15.0, 5.0),
+        (20.0, 5.0),
+        (30.0, 5.0),
+        (50.0, 50.0),
+        (60.0, 50.0),
+    ]
+
+
+def test_fill_polylines_keep_their_stored_order(loop):
+    # fills carry a deliberate scanline order chosen by fill_mode, job
+    # dispatch must not reorder them
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0], "air_assist": "off"}],
+        "items": [{"def": 0}],
+        "defs": [
+            {
+                "kind": "fill",
+                "data": [
+                    [[50.0, 50.0], [60.0, 50.0]],
+                    [[5.0, 5.0], [15.0, 5.0]],
+                ],
+            }
+        ],
+    }
+    driveboard.job(job)
+    assert _line_targets(loop.tx_buffer) == [
+        (50.0, 50.0),
+        (60.0, 50.0),
+        (5.0, 5.0),
+        (15.0, 5.0),
+    ]
+
+
 def test_job_threads_head_position_between_items(loop, monkeypatch):
     # a path ending right of the image's bottom line makes the NN ordering
     # engrave the bottom segment first

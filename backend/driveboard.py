@@ -2115,52 +2115,76 @@ def _feed_assists(pass_, on):
     _switch_assists([pass_], "feed", on)
 
 
-def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_, head_pos=None):
-    """Emit one path def. Returns the planar head position after the last
-    emitted vertex, head_pos if nothing was emitted, or None if the pass is
-    relative (the emitted targets are offsets, so the position is unknown)."""
+def _job_laser_path(
+    def_, pass_, seekrate, feedrate_, intensity_, head_pos=None, next_rect=None, reorder=False
+):
+    """Emit one path def. With reorder set (path kind, absolute pass, known
+    head position) the polylines are re-sequenced and reversed for minimal
+    planner-model seek time from head_pos towards next_rect, on top of the
+    import-time ordering. Fill defs keep their deliberate scanline order.
+    Returns the planar head position after the last emitted vertex, head_pos
+    if nothing was emitted, or None if the pass is relative (the emitted
+    targets are offsets, so the position is unknown)."""
     path = def_["data"]
     pierce_time = pass_["pierce_time"]
+    present = [i for i in range(len(path)) if len(path[i]) > 0]
+    tour = [[ci, False] for ci in range(len(present))]
+    if reorder and not pass_.get("relative") and head_pos is not None and len(present) > 1:
+        from jobimport import pathoptimizer
+
+        polys = [path[i] for i in present]
+        pathoptimizer.improve_seek_order(
+            [p[0] for p in polys],
+            [p[-1] for p in polys],
+            tour,
+            head_pos[:2],
+            dirs=pathoptimizer.polyline_dirs(polys),
+            seekrate=seekrate,
+            feedrate=feedrate_,
+            end_rect=next_rect,
+        )
     last = None
-    for polyline in path:
-        if len(polyline) > 0:
-            # a lone vertex with no pierce only seeks, so it needs no assist
-            burns = pierce_time > 0 or len(polyline) > 1
-            # turn on assists if set to 'feed', before the seek so the gas is
-            # already flowing when the head arrives, and so the switch does not
-            # land between the seek and the pierce where it would break the
-            # deceleration the planner works out across that pair
-            if burns:
-                _feed_assists(pass_, True)
-            # first vertex -> seek
-            feedrate(seekrate)
-            if not pass_["seekzero"]:
-                intensity(intensity_)
-            else:
-                intensity(0.0)
-            is_2d = len(polyline[0]) == 2
+    for ci, rev in tour:
+        polyline = path[present[ci]]
+        if rev:
+            polyline = polyline[::-1]
+        # a lone vertex with no pierce only seeks, so it needs no assist
+        burns = pierce_time > 0 or len(polyline) > 1
+        # turn on assists if set to 'feed', before the seek so the gas is
+        # already flowing when the head arrives, and so the switch does not
+        # land between the seek and the pierce where it would break the
+        # deceleration the planner works out across that pair
+        if burns:
+            _feed_assists(pass_, True)
+        # first vertex -> seek
+        feedrate(seekrate)
+        if not pass_["seekzero"]:
+            intensity(intensity_)
+        else:
+            intensity(0.0)
+        is_2d = len(polyline[0]) == 2
+        if is_2d:
+            move(polyline[0][0], polyline[0][1])
+        else:
+            move(polyline[0][0], polyline[0][1], polyline[0][2])
+        # burn through in place first, otherwise a thick material is still
+        # being penetrated as the head sets off
+        if pierce_time > 0:
+            intensity(intensity_)
+            duration(pierce_time)
+            dwell()
+        # remaining vertices -> feed
+        if len(polyline) > 1:
+            feedrate(feedrate_)
+            intensity(intensity_)
             if is_2d:
-                move(polyline[0][0], polyline[0][1])
+                for i in range(1, len(polyline)):
+                    move(polyline[i][0], polyline[i][1])
             else:
-                move(polyline[0][0], polyline[0][1], polyline[0][2])
-            # burn through in place first, otherwise a thick material is still
-            # being penetrated as the head sets off
-            if pierce_time > 0:
-                intensity(intensity_)
-                duration(pierce_time)
-                dwell()
-            # remaining vertices -> feed
-            if len(polyline) > 1:
-                feedrate(feedrate_)
-                intensity(intensity_)
-                if is_2d:
-                    for i in range(1, len(polyline)):
-                        move(polyline[i][0], polyline[i][1])
-                else:
-                    for i in range(1, len(polyline)):
-                        move(polyline[i][0], polyline[i][1], polyline[i][2])
-            # left on for the next contour, the pass end switches it off
-            last = polyline[-1]
+                for i in range(1, len(polyline)):
+                    move(polyline[i][0], polyline[i][1], polyline[i][2])
+        # left on for the next contour, the pass end switches it off
+        last = polyline[-1]
     if pass_.get("relative"):
         return None if last else head_pos
     return [last[0], last[1]] if last else head_pos
@@ -2300,17 +2324,17 @@ def _job_laser_passes(jobdict):
             item = jobdict["items"][itemidx]
             def_ = jobdict["defs"][item["def"]]
             kind = def_["kind"]
+            next_rect = None
+            if not pass_["relative"]:
+                if i + 1 < len(pass_items):
+                    next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
+                elif passidx + 1 < len(passes):
+                    nxt = passes[passidx + 1]
+                    if not nxt.get("relative") and nxt.get("items"):
+                        next_rect = _item_seek_rect(jobdict, nxt["items"][0])
+                elif returns_home:
+                    next_rect = [0.0, 0.0, 0.0, 0.0]
             if kind == "image":
-                next_rect = None
-                if not pass_["relative"]:
-                    if i + 1 < len(pass_items):
-                        next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
-                    elif passidx + 1 < len(passes):
-                        nxt = passes[passidx + 1]
-                        if not nxt.get("relative") and nxt.get("items"):
-                            next_rect = _item_seek_rect(jobdict, nxt["items"][0])
-                    elif returns_home:
-                        next_rect = [0.0, 0.0, 0.0, 0.0]
                 head_pos = _job_laser_image(
                     def_,
                     pass_,
@@ -2323,7 +2347,16 @@ def _job_laser_passes(jobdict):
                     next_rect,
                 )
             elif kind == "fill" or kind == "path":
-                head_pos = _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_, head_pos)
+                head_pos = _job_laser_path(
+                    def_,
+                    pass_,
+                    seekrate,
+                    feedrate_,
+                    intensity_,
+                    head_pos,
+                    next_rect,
+                    reorder=(kind == "path"),
+                )
 
         # assists off, end of pass for both 'feed' and 'pass'
         _feed_assists(pass_, False)

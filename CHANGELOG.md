@@ -8,6 +8,7 @@
 - Bidirectional rasters now start from whichever of the four image corners is closest
 - Seek ordering now minimizes machine time under the firmware's trapezoidal speed profiles and junction speeds
 - Raster ordering also accounts for the seek onwards to the next item or pass, and for the job's final return to origin
+- Vector paths get a second seek optimization at job time, re-sequencing their polylines from the head's actual position towards what follows (fills keep their fill_mode order)
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out

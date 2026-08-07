@@ -222,6 +222,29 @@ def _trapezoid_time(length, vmax, accel, v0, v1):
     return (vmax - v0) / accel + (vmax - v1) / accel + (length - d_acc - d_dec) / vmax
 
 
+def polyline_dirs(path):
+    """Unit entry and exit directions of each polyline in a path, as the
+    (entry_dirs, exit_dirs) pair improve_seek_order takes. None entries mark
+    degenerate ends (single vertex, or coincident end vertices)."""
+
+    def unit(a, b):
+        dx = b[0] - a[0]
+        dy = b[1] - a[1]
+        d = math.hypot(dx, dy)
+        return (dx / d, dy / d) if d > 1e-12 else None
+
+    entry_dirs = []
+    exit_dirs = []
+    for seg in path:
+        if len(seg) < 2:
+            entry_dirs.append(None)
+            exit_dirs.append(None)
+        else:
+            entry_dirs.append(unit(seg[0], seg[1]))
+            exit_dirs.append(unit(seg[-2], seg[-1]))
+    return entry_dirs, exit_dirs
+
+
 def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
     """Planner-model time (s) of a seek from p0 to p1.
 
@@ -451,27 +474,12 @@ def sort_by_seektime(path, start=None):
             usedIdxs[i] = True
 
     # untangle greedy crossings, minimizing planner-model seek time
-    def unit(a, b):
-        dx = b[0] - a[0]
-        dy = b[1] - a[1]
-        d = math.hypot(dx, dy)
-        return (dx / d, dy / d) if d > 1e-12 else None
-
-    entry_dirs = []
-    exit_dirs = []
-    for seg in path_unsorted:
-        if len(seg) < 2:
-            entry_dirs.append(None)
-            exit_dirs.append(None)
-        else:
-            entry_dirs.append(unit(seg[0], seg[1]))
-            exit_dirs.append(unit(seg[-2], seg[-1]))
     improve_seek_order(
         [seg[0] for seg in path_unsorted],
         [seg[-1] for seg in path_unsorted],
         tour,
         start,
-        dirs=(entry_dirs, exit_dirs),
+        dirs=polyline_dirs(path_unsorted),
     )
 
     for t, (i, rev) in enumerate(tour):
