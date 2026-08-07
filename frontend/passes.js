@@ -2,6 +2,19 @@ function passes_clear() {
   $("#job_passes").html("");
 }
 
+function passes_selected_reps() {
+  // pass entries of the selected items, items sharing an entry counted once
+  var idxs = jobview_selection();
+  var reps = [];
+  for (var i = 0; i < idxs.length; i++) {
+    var rep = jobhandler.groupRep(idxs[i]);
+    if (reps.indexOf(rep) == -1) {
+      reps.push(rep);
+    }
+  }
+  return reps;
+}
+
 function passes_add(feedrate, intensity, pxsize, pierce_time, items_assigned) {
   // multiple = typeof multiple !== 'undefined' ? multiple : 1  // default to 1
   var num_passes_already = $("#job_passes").children(".pass_widget").length;
@@ -38,11 +51,14 @@ function passes_add(feedrate, intensity, pxsize, pierce_time, items_assigned) {
 
   // bind color assign button
   $("#assign_btn_" + num).click(function (e) {
-    if (jobview_item_selected !== undefined) {
-      var idx = jobhandler.groupRep(jobview_item_selected);
-      $("#passsel_" + num + "_" + idx).hide();
-      $("#pass_" + num + "_" + idx).hide();
-      $("#pass_" + num + "_" + idx).show(300);
+    var reps = passes_selected_reps();
+    if (reps.length > 0) {
+      for (var i = 0; i < reps.length; i++) {
+        var idx = reps[i];
+        $("#passsel_" + num + "_" + idx).hide();
+        $("#pass_" + num + "_" + idx).hide();
+        $("#pass_" + num + "_" + idx).show(300);
+      }
       passes_update_handler();
       return false;
     } else {

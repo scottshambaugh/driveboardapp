@@ -17,6 +17,7 @@
 - Selecting an item now also selects everything sharing its pass entry (copies of the same raster, paths of the same color) and highlights that entry in the pass list
 - The seek line preview only shows items assigned to a pass, and updates when assignments change
 - The items within a pass are also re-sequenced at job time for minimal seek time, on top of the per-item optimizations
+- Lasso select multiple items in the job view, to bulk-assign to a pass or fill
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out

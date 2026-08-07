@@ -372,21 +372,32 @@ function controls_ready() {
     delay: { show: 1000, hide: 100 },
   });
   $("#addfill_btn").click(function (e) {
-    if (jobview_item_selected !== undefined) {
-      var kind =
-        jobhandler.defs[jobhandler.items[jobview_item_selected].def].kind;
-      if (kind != "path") {
-        $().uxmessage("notice", "Make sure a path is selected.");
-        return false;
-      }
-      app_fill_btn.start();
-      fills_add_by_item(jobview_item_selected, function () {
-        app_fill_btn.stop();
-      });
-      return false;
-    } else {
+    var idxs = jobview_selection();
+    if (idxs.length == 0) {
       return true;
     }
+    // a fill covers all paths of one color, so fill each color once
+    var colors = [];
+    var fill_idxs = [];
+    for (var i = 0; i < idxs.length; i++) {
+      var item = jobhandler.items[idxs[i]];
+      if (jobhandler.defs[item.def].kind != "path") {
+        continue;
+      }
+      if (colors.indexOf(item.color) == -1) {
+        colors.push(item.color);
+        fill_idxs.push(idxs[i]);
+      }
+    }
+    if (fill_idxs.length == 0) {
+      $().uxmessage("notice", "Make sure a path is selected.");
+      return false;
+    }
+    app_fill_btn.start();
+    fills_add_by_items(fill_idxs, function () {
+      app_fill_btn.stop();
+    });
+    return false;
   });
 
   $("#offset_set_btn").tooltip({

@@ -1,3 +1,18 @@
+function fills_add_by_items(idxs, callback) {
+  // fills are added one at a time, each one appends an item to the job
+  var i = 0;
+  function next() {
+    if (i >= idxs.length) {
+      callback();
+      return;
+    }
+    var idx = idxs[i];
+    i++;
+    fills_add_by_item(idx, next);
+  }
+  next();
+}
+
 function fills_add_by_item(idx, callback) {
   if (jobhandler.defs[jobhandler.items[idx].def].kind != "path") {
     callback();

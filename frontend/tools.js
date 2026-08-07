@@ -4,34 +4,241 @@ var tools_tmove = undefined;
 var tools_tjog = undefined;
 var posText = undefined;
 
+var tools_tselect_band = undefined;
+var tools_tselect_start = undefined;
+var tools_tselect_dragged = false;
+// px of movement before a press turns into a box selection
+var tools_tselect_threshold = 4;
+
 function tools_tselect_init() {
+  // rubber band lives on its own layer, away from the hit tested feed layer
+  jobview_selectLayer = new paper.Layer();
+  jobview_selectLayer.transformContent = false;
+  jobview_selectLayer.pivot = new paper.Point(0, 0);
   tools_tselect = new paper.Tool();
   tools_tselect.onMouseDown = function (event) {
-    var hitOptions = {
-      // class: paper.Group,
-      segments: true,
-      stroke: true,
-      fill: true,
-      tolerance: 10,
-    };
-    var hitResult = jobview_feedLayer.hitTest(event.point, hitOptions);
     jobview_deselect_all();
     jobhandler.clearPassHighlights();
-    if (hitResult) {
-      var idx = hitResult.item.parent.itemidx;
-      var idxs = jobhandler.matchingItems(idx);
-      for (var i = 0; i < idxs.length; i++) {
-        var group = jobhandler.itemidx2group[idxs[i]];
-        if (group) {
-          group.selected = true;
-        }
-      }
-      jobhandler.highlightPassEntries(idxs);
-      jobview_item_selected = idx;
-    } else {
-      jobview_item_selected = undefined;
-    }
+    // any press can grow into a box selection, the hit test waits for the
+    // release so a fast drag is not held up by it
+    tools_tselect_start = event.point;
+    tools_tselect_dragged = false;
   };
+  tools_tselect.onMouseDrag = function (event) {
+    if (tools_tselect_start === undefined) {
+      return;
+    }
+    if (
+      !tools_tselect_dragged &&
+      tools_tselect_start.getDistance(event.point) < tools_tselect_threshold
+    ) {
+      return;
+    }
+    tools_tselect_dragged = true;
+    tools_tselect_band_update(tools_tselect_start, event.point);
+    // paper redraws on the next frame by itself, drawing here instead
+    // renders the whole job again for every mouse move
+  };
+  tools_tselect.onMouseUp = function (event) {
+    var start = tools_tselect_start;
+    var dragged = tools_tselect_dragged;
+    tools_tselect_start = undefined;
+    tools_tselect_dragged = false;
+    tools_tselect_band_clear();
+    if (start === undefined) {
+      paper.view.draw();
+      return;
+    }
+    var idxs = [];
+    var primary = undefined;
+    if (dragged) {
+      idxs = tools_tselect_inbox(start, event.point);
+      if (idxs.length > 0) {
+        primary = idxs[0];
+      }
+    } else {
+      // a click selects what it pressed on, and everything matching it
+      primary = tools_tselect_hit(start);
+      if (primary !== undefined) {
+        idxs = jobhandler.matchingItems(primary);
+      }
+    }
+    tools_tselect_show(idxs);
+    jobview_item_selected = primary;
+    jobview_items_selected = idxs;
+    paper.view.draw();
+  };
+}
+
+function tools_tselect_hit(point) {
+  // item index under the point, undefined when it misses everything
+  var hitOptions = {
+    // class: paper.Group,
+    segments: true,
+    stroke: true,
+    fill: true,
+    tolerance: 10,
+  };
+  var hitResult = jobview_feedLayer.hitTest(point, hitOptions);
+  if (!hitResult) {
+    return undefined;
+  }
+  return hitResult.item.parent.itemidx;
+}
+
+function tools_tselect_band_update(from, to) {
+  // the band is one path that follows the drag, corners in draw order
+  var x1 = Math.min(from.x, to.x);
+  var y1 = Math.min(from.y, to.y);
+  var x2 = Math.max(from.x, to.x);
+  var y2 = Math.max(from.y, to.y);
+  if (!tools_tselect_band) {
+    tools_tselect_band = new paper.Path();
+    tools_tselect_band.closed = true;
+    tools_tselect_band.strokeColor = "#0088cc";
+    tools_tselect_band.strokeWidth = 1;
+    tools_tselect_band.dashArray = [4, 4];
+    tools_tselect_band.add([x1, y1], [x2, y1], [x2, y2], [x1, y2]);
+    jobview_selectLayer.addChild(tools_tselect_band);
+    return;
+  }
+  var segments = tools_tselect_band.segments;
+  segments[0].point = [x1, y1];
+  segments[1].point = [x2, y1];
+  segments[2].point = [x2, y2];
+  segments[3].point = [x1, y2];
+}
+
+function tools_tselect_band_clear() {
+  if (tools_tselect_band) {
+    tools_tselect_band.remove();
+    tools_tselect_band = undefined;
+  }
+}
+
+function tools_tselect_show(idxs) {
+  // mark the items and their pass entries as selected
+  for (var i = 0; i < idxs.length; i++) {
+    var group = jobhandler.itemidx2group[idxs[i]];
+    if (group) {
+      group.selected = true;
+    }
+  }
+  jobhandler.highlightPassEntries(idxs);
+}
+
+function tools_tselect_inbox(from, to) {
+  // items with geometry in the box spanned by the two canvas points,
+  // in mm to match the item data
+  var x1 = Math.min(from.x, to.x) / jobview_mm2px;
+  var y1 = Math.min(from.y, to.y) / jobview_mm2px;
+  var x2 = Math.max(from.x, to.x) / jobview_mm2px;
+  var y2 = Math.max(from.y, to.y) / jobview_mm2px;
+  var idxs = [];
+  var stats_items = jobhandler.stats.items;
+  if (!stats_items) {
+    return idxs;
+  }
+  jobhandler.loopItems(function (item, i) {
+    var stats = stats_items[i];
+    if (!stats || !stats.bbox) {
+      return;
+    }
+    var bbox = stats.bbox;
+    if (bbox[2] < x1 || bbox[0] > x2 || bbox[3] < y1 || bbox[1] > y2) {
+      // the box is nowhere near this item
+      return;
+    }
+    var def = jobhandler.defs[item.def];
+    if (def.kind === "image") {
+      // rasters engrave their whole bbox
+      idxs.push(i);
+      return;
+    }
+    if (def.data && tools_tselect_data_inbox(def.data, x1, y1, x2, y2)) {
+      idxs.push(i);
+    }
+  });
+  return idxs;
+}
+
+function tools_tselect_data_inbox(data, x1, y1, x2, y2) {
+  // an item counts as boxed when a vertex sits in the box or a segment
+  // crosses it, so empty space between its polylines does not select it
+  for (var i = 0; i < data.length; i++) {
+    var polyline = data[i];
+    for (var j = 0; j < polyline.length; j++) {
+      var x = polyline[j][0];
+      var y = polyline[j][1];
+      if (x >= x1 && x <= x2 && y >= y1 && y <= y2) {
+        return true;
+      }
+      if (
+        j > 0 &&
+        tools_tselect_seg_inbox(
+          polyline[j - 1][0],
+          polyline[j - 1][1],
+          x,
+          y,
+          x1,
+          y1,
+          x2,
+          y2,
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function tools_tselect_seg_inbox(ax, ay, bx, by, x1, y1, x2, y2) {
+  // segment against box, clipped one slab at a time
+  var dx = bx - ax;
+  var dy = by - ay;
+  var t0 = 0;
+  var t1 = 1;
+  var tmp = 0;
+  if (dx === 0) {
+    if (ax < x1 || ax > x2) {
+      return false;
+    }
+  } else {
+    var tx0 = (x1 - ax) / dx;
+    var tx1 = (x2 - ax) / dx;
+    if (tx0 > tx1) {
+      tmp = tx0;
+      tx0 = tx1;
+      tx1 = tmp;
+    }
+    if (tx0 > t0) {
+      t0 = tx0;
+    }
+    if (tx1 < t1) {
+      t1 = tx1;
+    }
+  }
+  if (dy === 0) {
+    if (ay < y1 || ay > y2) {
+      return false;
+    }
+  } else {
+    var ty0 = (y1 - ay) / dy;
+    var ty1 = (y2 - ay) / dy;
+    if (ty0 > ty1) {
+      tmp = ty0;
+      ty0 = ty1;
+      ty1 = tmp;
+    }
+    if (ty0 > t0) {
+      t0 = ty0;
+    }
+    if (ty1 < t1) {
+      t1 = ty1;
+    }
+  }
+  return t0 <= t1;
 }
 
 function tools_addfill_init() {

@@ -10,6 +10,7 @@ var jobview_headLayer = undefined;
 var jobview_offsetLayer = undefined;
 var jobview_moveLayer = undefined;
 var jobview_jogLayer = undefined;
+var jobview_selectLayer = undefined;
 
 var nav_height_init = 0;
 var info_width_init = 0;
@@ -18,6 +19,8 @@ var jobview_width_last = 0;
 var jobview_height_last = 0;
 
 var jobview_item_selected = undefined;
+// every selected item, empty when nothing is selected
+var jobview_items_selected = [];
 
 function jobview_clear() {
   jobview_boundsLayer.removeChildren();
@@ -25,6 +28,7 @@ function jobview_clear() {
   jobview_feedLayer.removeChildren();
   paper.view.draw();
   jobview_item_selected = undefined;
+  jobview_items_selected = [];
 }
 
 function jobview_resize() {
@@ -99,6 +103,19 @@ function jobview_deselect_all() {
       child.selected = false;
     }
   }
+  jobview_item_selected = undefined;
+  jobview_items_selected = [];
+}
+
+function jobview_selection() {
+  // item indices of the current selection, from a click or a box select
+  if (jobview_items_selected.length > 0) {
+    return jobview_items_selected;
+  }
+  if (jobview_item_selected !== undefined) {
+    return [jobview_item_selected];
+  }
+  return [];
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -532,12 +532,14 @@ jobhandler = {
     }
     this.highlightPassEntries(idxs);
     jobview_item_selected = idx;
+    jobview_items_selected = idxs;
     setTimeout(function () {
       for (var i = 0; i < groups.length; i++) {
         groups[i].selected = false;
       }
       jobhandler.clearPassHighlights();
       jobview_item_selected = undefined;
+      jobview_items_selected = [];
       paper.view.draw();
     }, 1500);
     paper.view.draw();
