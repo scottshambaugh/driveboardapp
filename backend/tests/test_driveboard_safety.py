@@ -2362,9 +2362,9 @@ def test_host_stall_does_not_leave_the_controller_stopped():
         assert dev.stop_count >= 1, "the stall should have tripped the watchdog"
         assert dev.stopped is False, "watchdog stop left standing after the stall"
         after = bytes(dev.written[mark:])
-        assert after[:1] == driveboard.CMD_RESUME.encode(
-            "latin-1"
-        ), "the resume must be the first thing sent after the stall"
+        assert after[:1] == driveboard.CMD_RESUME.encode("latin-1"), (
+            "the resume must be the first thing sent after the stall"
+        )
     finally:
         sl.stop_processing = True
         sl.join(timeout=5)
