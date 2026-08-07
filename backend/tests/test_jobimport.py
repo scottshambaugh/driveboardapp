@@ -13,7 +13,9 @@ import os
 
 import jobimport
 import pytest
+from jobimport import imagedata
 from jobimport.gcode_reader import GcodeReader
+from jobimport.imagedata import preview_image_data
 from jobimport.svg_text_converter import convert_text_to_paths
 from PIL import Image
 
@@ -588,3 +590,83 @@ def test_apply_alignment_matrix_translation():
     jobimport.apply_alignment_matrix(job, matrix)
     assert job["defs"][0]["data"][0][0] == [10.0, 20.0]
     assert job["defs"][0]["data"][0][1] == [11.0, 21.0]
+
+
+# ---------------------------------------------------------------------------
+# source previews
+# ---------------------------------------------------------------------------
+
+
+def _big_png_uri(width, height):
+    """Data URI for a noisy image, big enough to need downscaling."""
+    img = Image.new("RGBA", (width, height))
+    img.putdata(
+        [
+            ((x * 7) % 256, (y * 11) % 256, (x + y) % 256, 255)
+            for y in range(height)
+            for x in range(width)
+        ]
+    )
+    return _data_uri(img)
+
+
+def _decode_uri(uri):
+    """A data URI as a PIL image (the def-level helper above takes a def)."""
+    return Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1])))
+
+
+def test_preview_downscales_a_large_image_keeping_aspect():
+    uri = _big_png_uri(600, 300)
+    preview = preview_image_data(uri)
+    img = _decode_uri(preview)
+    assert max(img.size) <= imagedata.PREVIEW_MAX_DIM
+    assert img.size == (256, 128)
+
+
+def test_preview_leaves_a_small_image_untouched():
+    # small rasters are already preview sized, so they are not re-encoded
+    uri = _png_data_uri(MARKER)
+    assert preview_image_data(uri) == uri
+
+
+def test_preview_is_idempotent():
+    once = preview_image_data(_big_png_uri(600, 300))
+    assert preview_image_data(once) == once
+
+
+def test_preview_passes_through_data_it_cannot_read():
+    assert (
+        preview_image_data("data:image/png;base64,notanimage") == "data:image/png;base64,notanimage"
+    )
+    assert preview_image_data("") == ""
+
+
+def test_preview_keeps_transparency():
+    img = Image.new("RGBA", (400, 400), (255, 0, 0, 0))
+    preview = preview_image_data(_data_uri(img))
+    assert _decode_uri(preview).convert("RGBA").getpixel((0, 0))[3] == 0
+
+
+def test_clipped_source_ships_downscaled_but_def_data_stays_full_size():
+    """The preview a job carries for the passes list is thumbnail sized, while
+    the raster the laser actually burns keeps every pixel."""
+    uri = _big_png_uri(600, 300)
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        '<defs><clipPath id="c1"><rect x="10" y="50" width="20" height="10"/></clipPath></defs>'
+        f'<image x="10" y="20" width="40" height="20" xlink:href="{uri}"/>'
+        f'<image x="10" y="50" width="40" height="20" clip-path="url(#c1)" xlink:href="{uri}"/>'
+        "</svg>"
+    )
+    job = jobimport.convert(svg, optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    full, clipped = defs
+    # the unclipped placement still carries the original pixels
+    assert _decode_uri(full["data"]).size == (600, 300)
+    # the preview rides along downscaled, keyed by the shared source id
+    assert list(job["sources"]) == [full["source"]]
+    source = job["sources"][full["source"]]
+    assert _decode_uri(source).size == (256, 128)

@@ -65,6 +65,7 @@ conf = {
         "laser": "laser",
     },
     "enable_gzip": True,  # allow gzip upload of files / jobs
+    "force_gzip": False,  # compress uploads even when the link looks fast
     "home_on_startup": False,
     "mill_mode": False,
     "mill_max_rpm": 18000,
@@ -102,6 +103,7 @@ userconfigurable = {
     "home_on_startup": "Automatically perform a homing cycle when the machine first connects.",
     "mill_max_rpm": "Maximum spindle RPM.",
     "require_unit": "Whether a physical unit (cm, mm, in) should be required to load SVG files.",
+    "force_gzip": "Always compress uploaded jobs. Compression is otherwise used only over a connection the browser reports as slow, since it costs more time than it saves on a local or lan link.",
 }
 
 

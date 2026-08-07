@@ -67,6 +67,10 @@ function request_use_gzip() {
   if (!app_config_main.enable_gzip) {
     return false;
   }
+  if (app_config_main.force_gzip) {
+    // for a slow link the browser reports as fast, or does not report at all
+    return true;
+  }
   var host = window.location.hostname;
   if (
     host == "" ||

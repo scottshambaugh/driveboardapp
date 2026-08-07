@@ -5,7 +5,7 @@ from config import conf
 from . import pathoptimizer
 from .dxf_parser import DXFParser
 from .gcode_reader import GcodeReader
-from .imagedata import normalize_image_data
+from .imagedata import normalize_image_data, preview_image_data
 from .svg_reader import SVGReader
 from .utilities import matrixApply
 
@@ -76,10 +76,13 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
             if data not in normalized:
                 normalized[data] = normalize_image_data(data)
             def_["data"] = normalized[data]
+    # a source is only ever shown as a small preview, so it ships downscaled
+    # rather than as a second full resolution copy of the raster
+    previews = {}
     for key, data in job.get("sources", {}).items():
-        if data not in normalized:
-            normalized[data] = normalize_image_data(data)
-        job["sources"][key] = normalized[data]
+        if data not in previews:
+            previews[data] = preview_image_data(data)
+        job["sources"][key] = previews[data]
     return job
 
 
