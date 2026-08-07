@@ -2,7 +2,7 @@
 
 ## Unreleased
 ### New Features
-- Copies of the same raster image now share a single pass entry (like same-color lines), so they get the same burn settings assigned together
+-
 
 ### Bug Fixes
 -
@@ -16,6 +16,7 @@
 - `pierce_time` now works, to dwell at the beginning of cut paths to ensure the material is fully pierced before moving. Per-pass, selectable in the UI and savable in presets
 - `aux_assist` now works, to actuate an aux device similarly to air
 - New "job" option for air and aux assist modes, to run through the whole job. "feed" no longer switches off and on between contiguous burns.
+- Copies of the same raster image now share a single pass entry (like same-color lines), so they get the same burn settings assigned together
 
 ### Bug Fixes
 - Fix errors in loading a scaled / transformed raster image

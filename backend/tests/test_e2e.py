@@ -13,13 +13,16 @@ without a Driveboard attached; the firmware end of the same protocol is
 exercised separately in test_simavr.py.
 """
 
+import base64
 import glob
+import io
 import os
 
 import driveboard
 import jobimport
 import pytest
 from helpers import FakeSerialDevice
+from PIL import Image
 
 
 def _drain(loop):
@@ -98,6 +101,85 @@ def test_full_stack_job_has_bounded_params(loop, library_dir):
         else:
             i += 1
     assert saw_param, "expected at least one parameter in the job program"
+
+
+def _decode_program(buf):
+    """Decode a queued command program into (rastermoves, rasterdata lengths).
+
+    Parameters latch until a command byte consumes them, so each CMD_RASTER
+    reads its target from the last x/y params. Raster pixel streams are framed
+    by CMD_RASTER_DATA_START/END with every payload byte >= 128."""
+    moves = []
+    chunks = []
+    params = {}
+    i = 0
+    while i < len(buf):
+        b = buf[i]
+        if b == ord(driveboard.CMD_RASTER_DATA_START):
+            j = i + 1
+            while buf[j] != ord(driveboard.CMD_RASTER_DATA_END):
+                j += 1
+            chunks.append(j - i - 1)
+            i = j + 1
+        elif b >= 128:
+            num = (
+                (buf[i] - 128)
+                + ((buf[i + 1] - 128) << 7)
+                + ((buf[i + 2] - 128) << 14)
+                + ((buf[i + 3] - 128) << 21)
+            )
+            params[chr(buf[i + 4])] = num / 1000.0 - 134217.728
+            i += 5
+        else:
+            if chr(b) == driveboard.CMD_RASTER:
+                moves.append((params.get("x"), params.get("y")))
+            i += 1
+    return moves, chunks
+
+
+def test_clipped_raster_engraves_only_the_cropped_region(loop):
+    """A clip-path on an SVG image carries all the way to the wire: every
+    raster move targets the clipped box and each line streams the cropped
+    pixel count, not the full image's."""
+    img = Image.new("RGB", (2, 2), (255, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        '<defs><clipPath id="c"><rect x="10" y="20" width="20" height="10"/></clipPath></defs>'
+        f'<image x="10" y="20" width="40" height="20" clip-path="url(#c)" xlink:href="{uri}"/>'
+        "</svg>"
+    )
+
+    job = jobimport.convert(svg, optimize=False)
+    assert job["defs"][0]["pos"] == pytest.approx([10.0, 20.0])
+    assert job["defs"][0]["size"] == pytest.approx([20.0, 10.0])
+
+    job["passes"] = [{"items": [0], "feedrate": 4000, "intensity": 50, "pxsize": 0.4}]
+    driveboard.job(job)
+    moves, chunks = _decode_program(loop.tx_buffer)
+
+    # 10mm of clipped height at 0.4mm lines, all solid color, one run per line
+    assert len(moves) == 25
+    assert len(chunks) == 25
+    # every raster move ends on a pixel edge inside the 20mm clipped width,
+    # on a scanline inside the clipped height (the full image spans to x=50,
+    # y=40, so an unclipped run would burst these bounds)
+    for x, y in moves:
+        assert 10.0 - 1e-6 <= x <= 30.0 + 1e-6
+        assert 20.0 <= y <= 30.0
+    # 20mm wide at 0.2mm horizontal pixels (pxsize/2) is 100 pixels per line
+    assert chunks == [100] * 25
+
+    # the serialized wire stream still honors the duplicate-byte protocol
+    program = bytes(loop.tx_buffer)
+    wire = _drain(loop)
+    assert wire[0::2] == program
+    assert wire[1::2] == program
 
 
 def test_library_jobs_exist(library_dir):
