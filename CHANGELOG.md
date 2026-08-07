@@ -2,7 +2,7 @@
 
 ## Unreleased
 ### New Features
-- 
+- Identical raster images now share a single pass entry (like same-color lines), so duplicated images get the same burn settings assigned together
 
 ### Bug Fixes
 -

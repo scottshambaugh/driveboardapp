@@ -37,6 +37,8 @@ jobhandler = {
   defs: [],
   stats: {},
   itemidx2group: [],
+  image_group_rep: {},
+  image_group_members: {},
   name: "",
   path_group: undefined,
   fill_group: undefined,
@@ -48,6 +50,8 @@ jobhandler = {
     this.defs = [];
     this.stats = {};
     this.itemidx2group = [];
+    this.image_group_rep = {};
+    this.image_group_members = {};
     this.name = "";
     jobview_clear();
     passes_clear();
@@ -114,6 +118,9 @@ jobhandler = {
       // items, defs
       this.defs = job.defs;
       this.items = job.items;
+
+      // group identical images while data is still base64
+      this.groupIdenticalImages();
 
       var image_to_load = -1;
       function allImagesLoaded() {
@@ -397,11 +404,20 @@ jobhandler = {
   },
 
   selectItem: function (idx) {
-    var group = this.itemidx2group[idx];
-    group.selected = true;
+    var idxs = this.groupMembers(idx);
+    var groups = [];
+    for (var i = 0; i < idxs.length; i++) {
+      var group = this.itemidx2group[idxs[i]];
+      if (group) {
+        group.selected = true;
+        groups.push(group);
+      }
+    }
     jobview_item_selected = idx;
     setTimeout(function () {
-      group.selected = false;
+      for (var i = 0; i < groups.length; i++) {
+        groups[i].selected = false;
+      }
       jobview_item_selected = undefined;
       paper.view.draw();
     }, 1500);
@@ -409,6 +425,43 @@ jobhandler = {
   },
 
   // passes and colors //////////////////////////
+
+  groupIdenticalImages: function () {
+    // image items with byte-identical raster data share one pass entry,
+    // like same-color paths do
+    this.image_group_rep = {};
+    this.image_group_members = {};
+    var data2rep = {};
+    this.loopItems(function (item, i) {
+      var data = jobhandler.defs[item.def].data;
+      var key = typeof data === "string" ? data : data.src;
+      if (key in data2rep) {
+        var rep = data2rep[key];
+        jobhandler.image_group_rep[i] = rep;
+        jobhandler.image_group_members[rep].push(i);
+      } else {
+        data2rep[key] = i;
+        jobhandler.image_group_rep[i] = i;
+        jobhandler.image_group_members[i] = [i];
+      }
+    }, "image");
+  },
+
+  groupRep: function (idx) {
+    // index of the pass entry representing this item
+    if (idx in this.image_group_rep) {
+      return this.image_group_rep[idx];
+    }
+    return idx;
+  },
+
+  groupMembers: function (idx) {
+    // all item indices sharing the pass entry at idx
+    if (idx in this.image_group_members) {
+      return this.image_group_members[idx];
+    }
+    return [idx];
+  },
 
   normalizeColors: function () {
     this.loopItems(function (path, i) {

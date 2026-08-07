@@ -19,7 +19,7 @@ function passes_add(feedrate, intensity, pxsize, pierce_time, items_assigned) {
 
   // assign colors
   for (var i = 0; i < items_assigned.length; i++) {
-    var idx = items_assigned[i];
+    var idx = jobhandler.groupRep(items_assigned[i]);
     $("#passsel_" + num + "_" + idx).hide();
     $("#pass_" + num + "_" + idx).show(300);
     passes_update_handler();
@@ -27,6 +27,9 @@ function passes_add(feedrate, intensity, pxsize, pierce_time, items_assigned) {
 
   // assign image thumbs
   jobhandler.loopItems(function (image, idx) {
+    if (jobhandler.groupRep(idx) != idx) {
+      return;
+    }
     var img1 = jobhandler.getImageThumb(image, -100, 50);
     $(img1).appendTo("#passsel_" + num + "_" + idx + " a");
     var img2 = jobhandler.getImageThumb(image, -100, 50);
@@ -36,7 +39,7 @@ function passes_add(feedrate, intensity, pxsize, pierce_time, items_assigned) {
   // bind color assign button
   $("#assign_btn_" + num).click(function (e) {
     if (jobview_item_selected !== undefined) {
-      var idx = jobview_item_selected;
+      var idx = jobhandler.groupRep(jobview_item_selected);
       $("#passsel_" + num + "_" + idx).hide();
       $("#pass_" + num + "_" + idx).hide();
       $("#pass_" + num + "_" + idx).show(300);
@@ -244,9 +247,15 @@ function passes_pass_html(num, feedrate, intensity, pxsize, pierce_time) {
   var added_html = "";
 
   jobhandler.loopItems(function (image, idx) {
+    // identical images share one entry, listed under their representative
+    if (jobhandler.groupRep(idx) != idx) {
+      return;
+    }
     var color = "#ffffff";
-    select_html += passes_select_html(num, idx, "image", color);
-    added_html += passes_added_html(num, idx, "image", color);
+    var count = jobhandler.groupMembers(idx).length;
+    var kind = count > 1 ? "image ×" + count : "image";
+    select_html += passes_select_html(num, idx, kind, color);
+    added_html += passes_added_html(num, idx, kind, color);
   }, "image");
 
   jobhandler.loopItems(function (fill, idx) {
@@ -514,7 +523,11 @@ function passes_get_active() {
         .filter(":visible")
         .each(function (k) {
           var idx = parseFloat($(this).find(".idxmem").text());
-          pass.items.push(idx);
+          // grouped images expand to all their copies
+          var members = jobhandler.groupMembers(idx);
+          for (var m = 0; m < members.length; m++) {
+            pass.items.push(members[m]);
+          }
         });
       if (pass.items.length) {
         passes.push(pass);
