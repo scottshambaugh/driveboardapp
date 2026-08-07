@@ -185,15 +185,17 @@ def sort_by_seektime(path, start=None):
         # copy, so we can place the result in path
         path_unsorted.append(pathseg)
         # populate kdtree
-        tree.insert(pathseg[0], (i, False))  # startpoint, data
-        tree.insert(pathseg[-1], (i, True))  # endpoint, data
+        # seek distance is planar, so only x and y feed the tree
+        # (dba vertices may carry a z coordinate)
+        tree.insert(pathseg[0][:2], (i, False))  # startpoint, data
+        tree.insert(pathseg[-1][:2], (i, True))  # endpoint, data
 
     # sort by proximity, greedy
     endpoint = start
     newIdx = 0
     usedIdxs = {}
     for _p in range(2 * len(path_unsorted)):
-        node, distsq = tree.nearest(endpoint, checkempty=True)
+        node, distsq = tree.nearest(endpoint[:2], checkempty=True)
         i, rev = node.data
         node.data = None
         if i not in usedIdxs:

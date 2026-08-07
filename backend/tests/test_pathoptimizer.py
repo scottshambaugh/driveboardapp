@@ -67,3 +67,25 @@ def test_connect_segments_joins_touching_ends():
     epsilon2 = (0.1 * 0.01) ** 2
     pathoptimizer.connect_segments(path, epsilon2)
     assert len(path) == 1
+
+
+def test_optimize_handles_3d_vertices():
+    # dba paths may carry [x, y, z] vertices, seek sorting must stay planar
+    path = [
+        [[0.0, 10.0, 0.0], [20.0, 10.0, 0.0]],
+        [[5.0, 0.0, 0.0], [5.0, 30.0, 0.0]],
+    ]
+    pathoptimizer.optimize(path, tolerance=0.01)
+    assert len(path) == 2
+    assert all(len(vertex) == 3 for seg in path for vertex in seg)
+
+
+def test_sort_by_seektime_orders_by_proximity():
+    # nearest segment end from the origin comes first, reversing as needed
+    path = [
+        [[100.0, 100.0], [50.0, 50.0]],
+        [[40.0, 40.0], [1.0, 1.0]],
+    ]
+    pathoptimizer.sort_by_seektime(path)
+    assert path[0] == [[1.0, 1.0], [40.0, 40.0]]
+    assert path[1] == [[50.0, 50.0], [100.0, 100.0]]

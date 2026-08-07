@@ -8,7 +8,8 @@
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out
 - Job import now runs in a worker process, so parsing a big file cannot starve the serial link
-- The firmware serial watchdog now only stops the machine when it has motion to halt, and kills the beam either way (needs a reflash)
+- The firmware serial watchdog now only stops the machine when it has motion to halt, (kills the beam regardless)
+- Fixed importing a dba job with 3D vertices crashing during path optimization
 
 ### Development
 - 
