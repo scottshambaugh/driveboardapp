@@ -48,3 +48,21 @@ def test_static_asset_served(app, url):
 def test_missing_asset_404s(app):
     resp = app.get("/this-asset-does-not-exist.js", expect_errors=True)
     assert resp.status_int == 404
+
+
+@pytest.mark.parametrize("url", ["/"] + [r[0] for r in _asset_routes()])
+def test_static_asset_must_revalidate(app, url):
+    # without this a browser guesses a freshness lifetime from the file's age
+    # and can run frontend code older than the backend it talks to
+    resp = app.get(url)
+    assert "no-cache" in resp.headers.get("Cache-Control", ""), url
+
+
+def test_revalidated_asset_still_answers_304(app):
+    # revalidation has to stay cheap, so an unchanged asset returns no body
+    resp = app.get("/jobhandler.js")
+    for header in ("If-None-Match", "If-Modified-Since"):
+        value = resp.headers["Etag"] if header == "If-None-Match" else resp.headers["Last-Modified"]
+        again = app.get("/jobhandler.js", headers={header: value}, status="*")
+        assert again.status_int == 304, header
+        assert "no-cache" in again.headers.get("Cache-Control", ""), header

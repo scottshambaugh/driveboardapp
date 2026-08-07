@@ -52,41 +52,54 @@ def checkserial(func):
 ### STATIC FILES
 
 
+def _frontend_file(filename, *subdirs):
+    """Serve a frontend asset, revalidated on every request.
+
+    Without an explicit Cache-Control a browser is free to guess how long the
+    response stays fresh, and the usual guess of a tenth of the file's age lets
+    a client keep running frontend code that is weeks older than the backend it
+    talks to. no-cache still allows the cached copy to be reused, it just has to
+    be revalidated first, which costs one 304 per asset.
+    """
+    root = os.path.join(conf["rootdir"], frontend_path, *subdirs)
+    response = bottle.static_file(filename, root=root)
+    response.set_header("Cache-Control", "no-cache")
+    return response
+
+
 @bottle.route("/")
 def default_handler():
-    return bottle.static_file("app.html", root=os.path.join(conf["rootdir"], frontend_path))
+    return _frontend_file("app.html")
 
 
 @bottle.route("/<file>")
 def static_bin_handler(file):
-    return bottle.static_file(file, root=os.path.join(conf["rootdir"], frontend_path))
+    return _frontend_file(file)
 
 
 @bottle.route("/css/<path:path>")
 def static_css_handler(path):
-    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "css"))
+    return _frontend_file(path, "css")
 
 
 @bottle.route("/fonts/<path:path>")
 def static_font_handler(path):
-    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "fonts"))
+    return _frontend_file(path, "fonts")
 
 
 @bottle.route("/js/<path:path>")
 def static_js_handler(path):
-    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "js"))
+    return _frontend_file(path, "js")
 
 
 @bottle.route("/img/<path:path>")
 def static_img_handler(path):
-    return bottle.static_file(path, root=os.path.join(conf["rootdir"], frontend_path, "img"))
+    return _frontend_file(path, "img")
 
 
 @bottle.route("/favicon.ico")
 def favicon_handler():
-    return bottle.static_file(
-        "favicon.ico", root=os.path.join(conf["rootdir"], frontend_path, "img")
-    )
+    return _frontend_file("favicon.ico", "img")
 
 
 @bottle.route("/temp", method="POST")
