@@ -2129,7 +2129,7 @@ def _job_laser_path(
     pierce_time = pass_["pierce_time"]
     present = [i for i in range(len(path)) if len(path[i]) > 0]
     tour = [[ci, False] for ci in range(len(present))]
-    if reorder and not pass_.get("relative") and head_pos is not None and len(present) > 1:
+    if reorder and not pass_.get("relative") and head_pos is not None and present:
         from jobimport import pathoptimizer
 
         polys = [path[i] for i in present]
@@ -2142,6 +2142,10 @@ def _job_laser_path(
             seekrate=seekrate,
             feedrate=feedrate_,
             end_rect=next_rect,
+        )
+        # closed contours are free to be entered anywhere along the loop
+        pathoptimizer.rotate_closed_entries(
+            polys, tour, head_pos[:2], seekrate, feedrate_, end_rect=next_rect
         )
     last = None
     for ci, rev in tour:

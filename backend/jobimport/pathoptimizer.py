@@ -222,17 +222,21 @@ def _trapezoid_time(length, vmax, accel, v0, v1):
     return (vmax - v0) / accel + (vmax - v1) / accel + (length - d_acc - d_dec) / vmax
 
 
+def _unit(a, b):
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    d = math.hypot(dx, dy)
+    return (dx / d, dy / d) if d > 1e-12 else None
+
+
+def _neg(d):
+    return None if d is None else (-d[0], -d[1])
+
+
 def polyline_dirs(path):
     """Unit entry and exit directions of each polyline in a path, as the
     (entry_dirs, exit_dirs) pair improve_seek_order takes. None entries mark
     degenerate ends (single vertex, or coincident end vertices)."""
-
-    def unit(a, b):
-        dx = b[0] - a[0]
-        dy = b[1] - a[1]
-        d = math.hypot(dx, dy)
-        return (dx / d, dy / d) if d > 1e-12 else None
-
     entry_dirs = []
     exit_dirs = []
     for seg in path:
@@ -240,9 +244,83 @@ def polyline_dirs(path):
             entry_dirs.append(None)
             exit_dirs.append(None)
         else:
-            entry_dirs.append(unit(seg[0], seg[1]))
-            exit_dirs.append(unit(seg[-2], seg[-1]))
+            entry_dirs.append(_unit(seg[0], seg[1]))
+            exit_dirs.append(_unit(seg[-2], seg[-1]))
     return entry_dirs, exit_dirs
+
+
+def rotate_closed_entries(
+    polys,
+    tour,
+    start,
+    seekrate=DEFAULT_SEEKRATE,
+    feedrate=DEFAULT_FEEDRATE,
+    end_rect=None,
+    grid=10.0,
+    closed_eps=0.001,
+):
+    """Rotate each closed polyline in a tour to the entry vertex with the
+    fastest seek in and out, walking the tour in order. Mutates the polylines
+    in place, ordering and orientation stay as the tour says.
+
+    A polyline counts as closed only when its ends coincide within
+    closed_eps (mm): rotating anything looser would close the gap with a
+    burned edge. Candidate entries are existing vertices spaced at least
+    `grid` mm apart along the contour (the stored entry always among them),
+    so densely sampled contours stay cheap to evaluate.
+    """
+    eps2 = closed_eps * closed_eps
+    prev_pos = start[:2]
+    prev_dir = None
+    for t, (ci, rev) in enumerate(tour):
+        p = polys[ci]
+        n = len(p)
+        if n > 3 and d2(p[0][:2], p[-1][:2]) <= eps2:
+            # next seek target and its entry direction, for the out cost
+            next_pos = next_dir = None
+            if t + 1 < len(tour):
+                nci, nrev = tour[t + 1]
+                np_ = polys[nci]
+                next_pos = np_[-1][:2] if nrev else np_[0][:2]
+                if len(np_) >= 2:
+                    if nrev:
+                        next_dir = _neg(_unit(np_[-2], np_[-1]))
+                    else:
+                        next_dir = _unit(np_[0], np_[1])
+            m = n - 1  # unique vertices, p[m] duplicates p[0]
+            cands = [0]
+            acc = 0.0
+            for k in range(1, m):
+                acc += math.dist(p[k - 1][:2], p[k][:2])
+                if acc >= grid:
+                    cands.append(k)
+                    acc = 0.0
+            best = None
+            for k in cands:
+                t_in = _unit(p[(k - 1) % m], p[k])  # incoming edge at vertex k
+                t_out = _unit(p[k], p[(k + 1) % m])  # outgoing edge at vertex k
+                entry_dir = _neg(t_in) if rev else t_out
+                exit_dir = _neg(t_out) if rev else t_in
+                cost = seek_time(prev_pos, prev_dir, p[k][:2], entry_dir, seekrate, feedrate)
+                if next_pos is not None:
+                    cost += seek_time(p[k][:2], exit_dir, next_pos, next_dir, seekrate, feedrate)
+                elif end_rect is not None:
+                    towards = [
+                        min(max(p[k][0], end_rect[0]), end_rect[2]),
+                        min(max(p[k][1], end_rect[1]), end_rect[3]),
+                    ]
+                    cost += seek_time(p[k][:2], exit_dir, towards, None, seekrate, feedrate)
+                if best is None or cost < best[0]:
+                    best = (cost, k)
+            k = best[1]
+            if k != 0:
+                # re-close at vertex k, reusing the existing first edge
+                p[:] = p[k:] + p[1 : k + 1]
+        prev_pos = p[0][:2] if rev else p[-1][:2]
+        if len(p) >= 2:
+            prev_dir = _neg(_unit(p[0], p[1])) if rev else _unit(p[-2], p[-1])
+        else:
+            prev_dir = None
 
 
 def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
@@ -481,6 +559,8 @@ def sort_by_seektime(path, start=None):
         start,
         dirs=polyline_dirs(path_unsorted),
     )
+    # closed contours are free to be entered anywhere along the loop
+    rotate_closed_entries(path_unsorted, tour, start)
 
     for t, (i, rev) in enumerate(tour):
         path[t] = path_unsorted[i]

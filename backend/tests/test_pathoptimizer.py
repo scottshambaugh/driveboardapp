@@ -199,6 +199,49 @@ def test_improve_seek_order_ends_near_the_end_rect():
     assert tour == [[0, False], [1, False]]
 
 
+def test_rotate_closed_entries_picks_the_near_vertex():
+    # a closed square stored entering at its far corner re-enters at the near one
+    square = [[60.0, 60.0], [50.0, 60.0], [50.0, 50.0], [60.0, 50.0], [60.0, 60.0]]
+    polys = [square]
+    pathoptimizer.rotate_closed_entries(polys, [[0, False]], [0.0, 0.0], grid=5.0)
+    assert square[0] == [50.0, 50.0]
+    assert square[-1] == square[0]
+    assert len(square) == 5
+    assert sorted(map(tuple, square[:-1])) == [
+        (50.0, 50.0),
+        (50.0, 60.0),
+        (60.0, 50.0),
+        (60.0, 60.0),
+    ]
+
+
+def test_rotate_closed_entries_respects_the_grid():
+    # a densely sampled circle gets entered near the ideal point without
+    # evaluating every vertex, so the entry lands within a grid step of it
+    import math
+
+    n = 360
+    circle = [
+        [50.0 + 20.0 * math.cos(2 * math.pi * i / n), 20.0 * math.sin(2 * math.pi * i / n)]
+        for i in range(n)
+    ]
+    circle.append(circle[0][:])
+    pathoptimizer.rotate_closed_entries([circle], [[0, False]], [0.0, 0.0], grid=10.0)
+    # nearest point to the origin is (30, 0)
+    assert math.dist(circle[0], [30.0, 0.0]) <= 10.0
+    assert circle[-1] == circle[0]
+    assert len(circle) == n + 1
+
+
+def test_rotate_closed_entries_leaves_open_contours_alone():
+    # a 0.5mm gap marks a deliberately open contour, rotating it would burn
+    # a bridge across the gap
+    arc = [[60.0, 60.0], [50.0, 60.0], [50.0, 50.0], [60.0, 50.0], [60.0, 59.5]]
+    ref = [row[:] for row in arc]
+    pathoptimizer.rotate_closed_entries([arc], [[0, False]], [0.0, 0.0], grid=5.0)
+    assert arc == ref
+
+
 def test_knn_ids_matches_brute_force():
     import random
 

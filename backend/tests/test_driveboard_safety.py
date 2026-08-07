@@ -881,6 +881,29 @@ def test_path_polylines_reorder_and_reverse_from_head_position(loop):
     ]
 
 
+def test_job_enters_closed_contours_at_the_near_vertex(loop):
+    # a closed square stored entering at its far corner burns from the near one
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0], "air_assist": "off"}],
+        "items": [{"def": 0}],
+        "defs": [
+            {
+                "kind": "path",
+                "data": [
+                    [[60.0, 60.0], [50.0, 60.0], [50.0, 50.0], [60.0, 50.0], [60.0, 60.0]],
+                ],
+            }
+        ],
+    }
+    driveboard.job(job)
+    targets = _line_targets(loop.tx_buffer)
+    assert len(targets) == 5
+    assert targets[0] == (50.0, 50.0)
+    assert targets[-1] == (50.0, 50.0)
+
+
 def test_fill_polylines_keep_their_stored_order(loop):
     # fills carry a deliberate scanline order chosen by fill_mode, job
     # dispatch must not reorder them
