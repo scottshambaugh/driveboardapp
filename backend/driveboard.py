@@ -1747,13 +1747,15 @@ def _emit_raster_nn(
         current = [orientation["leadout"], orientation["line_y"]]
 
     # a segment's two lead-in points are where a seek can enter or leave it,
-    # and every unreversed segment burns left to right
+    # and every unreversed segment burns left to right. Scanline endpoints
+    # stack in near-identical columns, so rasters get deeper candidate lists
     n_segs = len(orients)
     pathoptimizer.improve_seek_order(
         [[o[0][0]["leadin"], o[0][0]["line_y"]] for o in orients],
         [[o[0][1]["leadin"], o[0][1]["line_y"]] for o in orients],
         tour,
         list(start),
+        k=min(n_segs, 256),
         dirs=([(1.0, 0.0)] * n_segs, [(1.0, 0.0)] * n_segs),
         seekrate=seekrate,
         feedrate=feedrate_,
@@ -2121,37 +2123,78 @@ def _job_laser_path(
     """Emit one path def. With reorder set (path kind, absolute pass, known
     head position) the polylines are re-sequenced and reversed for minimal
     planner-model seek time from head_pos towards next_rect, on top of the
-    import-time ordering. Fill defs keep their deliberate scanline order.
-    Returns the planar head position after the last emitted vertex, head_pos
-    if nothing was emitted, or None if the pass is relative (the emitted
-    targets are offsets, so the position is unknown)."""
+    import-time ordering. With conf split_closed_paths, closed contours may
+    also be burned as separate arcs when interleaving them saves travel,
+    arcs the ordering keeps adjacent burn as one continuous move. Fill defs
+    keep their deliberate scanline order. Returns the planar head position
+    after the last emitted vertex, head_pos if nothing was emitted, or None
+    if the pass is relative (the emitted targets are offsets, so the
+    position is unknown)."""
     path = def_["data"]
     pierce_time = pass_["pierce_time"]
-    present = [i for i in range(len(path)) if len(path[i]) > 0]
-    tour = [[ci, False] for ci in range(len(present))]
-    if reorder and not pass_.get("relative") and head_pos is not None and present:
+    polys = [p for p in path if len(p) > 0]
+    tour = [[ci, False] for ci in range(len(polys))]
+    arc_flags = None
+    if reorder and not pass_.get("relative") and head_pos is not None and polys:
         from jobimport import pathoptimizer
 
-        polys = [path[i] for i in present]
-        pathoptimizer.improve_seek_order(
-            [p[0] for p in polys],
-            [p[-1] for p in polys],
-            tour,
-            head_pos[:2],
-            dirs=pathoptimizer.polyline_dirs(polys),
-            seekrate=seekrate,
-            feedrate=feedrate_,
-            end_rect=next_rect,
-        )
-        # closed contours are free to be entered anywhere along the loop
-        pathoptimizer.rotate_closed_entries(
-            polys, tour, head_pos[:2], seekrate, feedrate_, end_rect=next_rect
-        )
+        start = head_pos[:2]
+
+        def improve():
+            pathoptimizer.improve_seek_order(
+                [p[0] for p in polys],
+                [p[-1] for p in polys],
+                tour,
+                start,
+                dirs=pathoptimizer.polyline_dirs(polys),
+                seekrate=seekrate,
+                feedrate=feedrate_,
+                end_rect=next_rect,
+            )
+
+        if conf["split_closed_paths"]:
+            # enter loops well first, then split them into arcs the ordering
+            # is free to interleave, a loop kept together burns as before
+            pathoptimizer.rotate_closed_entries(
+                polys, tour, start, seekrate, feedrate_, end_rect=next_rect
+            )
+            polys, arc_flags = pathoptimizer.split_closed_paths(polys)
+            tour = [[ci, False] for ci in range(len(polys))]
+            improve()
+        else:
+            improve()
+            # closed contours are free to be entered anywhere along the loop
+            pathoptimizer.rotate_closed_entries(
+                polys, tour, start, seekrate, feedrate_, end_rect=next_rect
+            )
     last = None
+    prev_burned = False
+    cut_points = set()  # split arc ends already burned, they need no pierce
     for ci, rev in tour:
-        polyline = path[present[ci]]
+        polyline = polys[ci]
+        is_arc = arc_flags is not None and arc_flags[ci]
         if rev:
             polyline = polyline[::-1]
+        # a split arc entering on an already-cut point resumes a contour
+        resumes = is_arc and tuple(polyline[0][:2]) in cut_points
+        if is_arc:
+            cut_points.add(tuple(polyline[0][:2]))
+            cut_points.add(tuple(polyline[-1][:2]))
+        # an arc starting where the head rests continues the current burn,
+        # so re-joined pieces of a split contour stay one seamless cut
+        if prev_burned and len(polyline) > 1 and polyline[0] == last:
+            feedrate(feedrate_)
+            intensity(intensity_)
+            is_2d = len(polyline[0]) == 2
+            if is_2d:
+                for i in range(1, len(polyline)):
+                    move(polyline[i][0], polyline[i][1])
+            else:
+                for i in range(1, len(polyline)):
+                    move(polyline[i][0], polyline[i][1], polyline[i][2])
+            last = polyline[-1]
+            prev_burned = True
+            continue
         # a lone vertex with no pierce only seeks, so it needs no assist
         burns = pierce_time > 0 or len(polyline) > 1
         # turn on assists if set to 'feed', before the seek so the gas is
@@ -2172,8 +2215,9 @@ def _job_laser_path(
         else:
             move(polyline[0][0], polyline[0][1], polyline[0][2])
         # burn through in place first, otherwise a thick material is still
-        # being penetrated as the head sets off
-        if pierce_time > 0:
+        # being penetrated as the head sets off. A resumed split arc sits on
+        # kerf that is already through, so its pierce is skippable
+        if pierce_time > 0 and not (resumes and conf["skip_pierce_on_resume"]):
             intensity(intensity_)
             duration(pierce_time)
             dwell()
@@ -2189,6 +2233,7 @@ def _job_laser_path(
                     move(polyline[i][0], polyline[i][1], polyline[i][2])
         # left on for the next contour, the pass end switches it off
         last = polyline[-1]
+        prev_burned = burns
     if pass_.get("relative"):
         return None if last else head_pos
     return [last[0], last[1]] if last else head_pos

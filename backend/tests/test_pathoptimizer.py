@@ -242,6 +242,23 @@ def test_rotate_closed_entries_leaves_open_contours_alone():
     assert arc == ref
 
 
+def test_split_closed_paths_splits_into_shared_vertex_halves():
+    square = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+    open_line = [[50.0, 50.0], [60.0, 50.0]]
+    out, flags = pathoptimizer.split_closed_paths([square, open_line], grid=10.0)
+    assert open_line in out
+    assert flags == [True, True, False]
+    half_a, half_b = out[0], out[1]
+    # halves meet at the half-perimeter vertex and close the loop together
+    assert half_a == [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]
+    assert half_b == [[10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+
+
+def test_split_closed_paths_keeps_small_contours_whole():
+    small = [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]
+    assert pathoptimizer.split_closed_paths([small], grid=10.0) == ([small], [False])
+
+
 def test_knn_ids_matches_brute_force():
     import random
 

@@ -9,6 +9,9 @@
 - Seek ordering now minimizes machine time under the firmware's trapezoidal speed profiles and junction speeds
 - Raster ordering also accounts for the seek onwards to the next item or pass, and for the job's final return to origin
 - Vector paths get a second seek optimization at job time, re-sequencing their polylines from the head's actual position towards what follows (fills keep their fill_mode order)
+- Closed contours are now entered at whichever point along the loop is fastest to reach
+- Closed contours can be burned as two arcs when that saves travel, eg the near sides of a row of shapes on the way out and the far sides on the way back. Arcs kept adjacent still burn as one continuous move. Toggled with the new `split_closed_paths` config setting
+- A split contour resuming on an already-cut point skips its pierce dwell, toggled with the new `skip_pierce_on_resume` config setting
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out

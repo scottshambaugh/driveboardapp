@@ -61,6 +61,8 @@ conf = {
     "raster_leadin": 10,
     "fill_mode": "Bidirectional",  # 'Forward', 'Reverse', 'Bidirectional', 'NearestNeighbor'
     "fill_leadin": 10,
+    "split_closed_paths": True,  # let seek optimization leave a closed contour part-done
+    "skip_pierce_on_resume": True,  # no pierce dwell when resuming a split contour
     "users": {
         "laser": "laser",
     },
@@ -100,6 +102,8 @@ userconfigurable = {
     "raster_leadin": "Leadin for raster fills in mm. Note: rastering may fail if this is 0",
     "fill_mode": "Pathing to use when engraving a fill area: 'Forward', 'Reverse', 'Bidirectional', or 'NearestNeighbor'.",
     "fill_leadin": "Leadin for vector fills in mm.",
+    "split_closed_paths": "Allow seek optimization to burn a closed contour in separate arcs when that saves travel (eg the far sides of a row of circles on the way back). Adjacent arcs still burn as one continuous move. Disable for delicate cuts where an interrupted contour could resume misaligned.",
+    "skip_pierce_on_resume": "Skip the pierce dwell when a split contour resumes at a point that is already cut through. Only affects arcs created by split_closed_paths.",
     "home_on_startup": "Automatically perform a homing cycle when the machine first connects.",
     "mill_max_rpm": "Maximum spindle RPM.",
     "require_unit": "Whether a physical unit (cm, mm, in) should be required to load SVG files.",

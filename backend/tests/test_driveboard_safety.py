@@ -904,6 +904,123 @@ def test_job_enters_closed_contours_at_the_near_vertex(loop):
     assert targets[-1] == (50.0, 50.0)
 
 
+def _move_distances(buf):
+    """(seek_mm, feed_mm) totals from a tx_buffer, classified by the feedrate
+    in effect at each line move. Assumes seekrate is well above feedrate."""
+    import math
+
+    seek = feed = 0.0
+    x = y = None
+    rate = None
+    pos = (0.0, 0.0)
+    i = 0
+    while i < len(buf):
+        byte = buf[i]
+        if byte >= 128:
+            param, value = decode_param(buf, i)
+            if param == driveboard.PARAM_TARGET_X:
+                x = value
+            elif param == driveboard.PARAM_TARGET_Y:
+                y = value
+            elif param == driveboard.PARAM_FEEDRATE:
+                rate = value
+            i += 5
+        else:
+            if chr(byte) == driveboard.CMD_LINE:
+                tx = x if x is not None else pos[0]
+                ty = y if y is not None else pos[1]
+                d = math.dist(pos, (tx, ty))
+                if rate and rate > 4000:
+                    seek += d
+                else:
+                    feed += d
+                pos = (tx, ty)
+            i += 1
+    return seek, feed
+
+
+def _octagon(cx, cy, r):
+    import math
+
+    pts = [
+        [cx + r * math.cos(math.pi / 4 * i), cy + r * math.sin(math.pi / 4 * i)] for i in range(8)
+    ]
+    pts.append(pts[0][:])
+    return pts
+
+
+def test_split_closed_paths_beats_whole_loops_on_a_row_of_circles(loop, monkeypatch):
+    # three circles in a row: interleaving near and far arcs beats completing
+    # each loop, same geometry burned either way
+    from config import conf
+
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+
+    def make_job():
+        return {
+            "head": {},
+            "passes": [{"items": [0], "air_assist": "off"}],
+            "items": [{"def": 0}],
+            "defs": [
+                {
+                    "kind": "path",
+                    "data": [
+                        _octagon(60.0, 60.0, 20.0),
+                        _octagon(110.0, 60.0, 20.0),
+                        _octagon(160.0, 60.0, 20.0),
+                    ],
+                }
+            ],
+        }
+
+    monkeypatch.setitem(conf, "split_closed_paths", False)
+    driveboard.job(make_job())
+    seek_off, feed_off = _move_distances(loop.tx_buffer)
+
+    loop.tx_buffer.clear()
+    monkeypatch.setitem(conf, "split_closed_paths", True)
+    driveboard.job(make_job())
+    seek_on, feed_on = _move_distances(loop.tx_buffer)
+
+    assert feed_on == pytest.approx(feed_off, rel=1e-6)
+    assert seek_on < seek_off
+
+
+def test_split_resume_skips_the_pierce(loop, monkeypatch):
+    # a resumed split arc sits on already-cut kerf: one pierce per contour
+    # with suppression on, one per seek-resumed arc without
+    from config import conf
+
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+
+    def make_job():
+        return {
+            "head": {},
+            "passes": [{"items": [0], "air_assist": "off", "pierce_time": 0.5}],
+            "items": [{"def": 0}],
+            "defs": [
+                {
+                    "kind": "path",
+                    "data": [
+                        _octagon(60.0, 60.0, 20.0),
+                        _octagon(110.0, 60.0, 20.0),
+                        _octagon(160.0, 60.0, 20.0),
+                    ],
+                }
+            ],
+        }
+
+    driveboard.job(make_job())
+    dwells_on = loop.tx_buffer.count(ord(driveboard.CMD_DWELL))
+    assert dwells_on == 3
+
+    loop.tx_buffer.clear()
+    monkeypatch.setitem(conf, "skip_pierce_on_resume", False)
+    driveboard.job(make_job())
+    dwells_off = loop.tx_buffer.count(ord(driveboard.CMD_DWELL))
+    assert dwells_off > dwells_on
+
+
 def test_fill_polylines_keep_their_stored_order(loop):
     # fills carry a deliberate scanline order chosen by fill_mode, job
     # dispatch must not reorder them

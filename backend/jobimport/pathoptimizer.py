@@ -14,6 +14,7 @@ It takes a list of paths and optimizes in-place.
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 
+import functools
 import logging
 import math
 import time
@@ -249,6 +250,53 @@ def polyline_dirs(path):
     return entry_dirs, exit_dirs
 
 
+def split_closed_paths(polys, grid=30.0, closed_eps=0.001):
+    """Split closed polylines into two arcs at the vertex nearest half the
+    perimeter, so seek ordering may burn the near half on the way out and
+    the far half on the way back. Halves stay single relocatable pieces for
+    the tour moves, and each contour gains at most one extra burn start.
+    Contours whose halves would be shorter than `grid` mm stay whole (small
+    loops gain little and doubling their count burdens the tour search),
+    open polylines pass through unchanged.
+
+    The arcs share their boundary vertices, so an ordering that keeps them
+    adjacent burns seamlessly again (emission coalesces touching polylines
+    back into one continuous move). Returns (polylines, arc_flags) where
+    arc_flags marks the split arcs, the input polylines are not modified.
+    """
+    eps2 = closed_eps * closed_eps
+    out = []
+    flags = []
+    for p in polys:
+        n = len(p)
+        if not (n > 3 and d2(p[0][:2], p[-1][:2]) <= eps2):
+            out.append(p)
+            flags.append(False)
+            continue
+        lengths = [math.dist(p[k - 1][:2], p[k][:2]) for k in range(1, n)]
+        perimeter = sum(lengths)
+        if perimeter < 2.0 * grid:
+            out.append(p)
+            flags.append(False)
+            continue
+        half = best_k = None
+        acc = 0.0
+        for k in range(1, n - 1):
+            acc += lengths[k - 1]
+            gap = abs(acc - 0.5 * perimeter)
+            if (half is None or gap < half) and acc >= grid and perimeter - acc >= grid:
+                half = gap
+                best_k = k
+        if best_k is None:
+            out.append(p)
+            flags.append(False)
+            continue
+        out.append(p[: best_k + 1])
+        out.append(p[best_k:])
+        flags.extend((True, True))
+    return out, flags
+
+
 def rotate_closed_entries(
     polys,
     tour,
@@ -323,6 +371,28 @@ def rotate_closed_entries(
             prev_dir = None
 
 
+@functools.lru_cache(maxsize=8)
+def seek_cost(seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
+    """seek_time specialized to fixed rates, for the optimization hot loops.
+    Returns a cost(p0, d0, p1, d1) closure with the per-call constant work
+    hoisted, the physics stays in _junction_speed and _trapezoid_time."""
+    vseek = seekrate / 60.0
+    vcap = min(feedrate / 60.0, vseek)
+
+    def cost(p0, d0, p1, d1):
+        dx = p1[0] - p0[0]
+        dy = p1[1] - p0[1]
+        length = math.hypot(dx, dy)
+        if length < 1e-9:
+            return 0.0
+        u = (dx / length, dy / length)
+        v_in = _junction_speed(d0, u, vcap)
+        v_out = _junction_speed(u, d1, vcap)
+        return _trapezoid_time(length, vseek, ACCEL, v_in, v_out)
+
+    return cost
+
+
 def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
     """Planner-model time (s) of a seek from p0 to p1.
 
@@ -332,17 +402,7 @@ def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRA
     straight through rides the ramps while a direction reversal pays a full
     stop at both ends. None directions mean a stop. Rates in mm/min.
     """
-    dx = p1[0] - p0[0]
-    dy = p1[1] - p0[1]
-    length = math.hypot(dx, dy)
-    vseek = seekrate / 60.0
-    vfeed = feedrate / 60.0
-    if length < 1e-9:
-        return 0.0
-    u = (dx / length, dy / length)
-    v_in = _junction_speed(d0, u, min(vfeed, vseek))
-    v_out = _junction_speed(u, d1, min(vfeed, vseek))
-    return _trapezoid_time(length, vseek, ACCEL, v_in, v_out)
+    return seek_cost(seekrate, feedrate)(p0, d0, p1, d1)
 
 
 def _knn_ids(points, k):
@@ -423,22 +483,24 @@ def improve_seek_order(
                      after the tour (the next item, or the return to origin),
                      costed as one more edge so the tour ends near it.
 
-    Reversing a stretch of the tour flips each segment in it, which
-    time-reverses the seeks inside the stretch (their cost is unchanged) and
-    only rewires its two boundary seeks. Candidate stretches come from
-    k-nearest endpoint lists, so a pass is near-linear. Greedy
-    nearest-neighbor tours lose most of their excess seek time to a handful
-    of such untangling moves. Raster scanline endpoints stack in
-    near-identical columns, so the candidate lists need a generous k to
-    contain the useful reconnections: k defaults to the segment count, capped
-    so the lists stay small in memory. The time budget bounds the improvement
-    sweeps on top of that.
+    Two move kinds, both candidate-driven from k-nearest endpoint lists so a
+    pass is near-linear. 2-opt: reversing a stretch of the tour flips each
+    segment in it, which time-reverses the seeks inside the stretch (their
+    cost is unchanged) and only rewires its two boundary seeks. Or-opt:
+    relocating one segment (optionally flipped) next to a nearby one, which
+    escapes the cost-neutral plateaus 2-opt cannot cross, like leaving a
+    split contour half-done for the return trip. Greedy nearest-neighbor
+    tours lose most of their excess seek time to a handful of such moves.
+    Raster scanline endpoints stack in near-identical columns, so the
+    candidate lists need a generous k to contain the useful reconnections: k
+    defaults to the segment count, capped so the lists stay small in memory.
+    The time budget bounds the improvement sweeps on top of that.
     """
     n = len(tour)
     if n < 2:
         return
     if k is None:
-        k = min(len(starts), 256)
+        k = min(len(starts), 128)
     points = []
     for i in range(len(starts)):
         points.append(starts[i][:2])
@@ -474,8 +536,7 @@ def improve_seek_order(
         i, rev = tour[t]
         return neg(entry_dirs[i]) if rev else exit_dirs[i]
 
-    def cost(p0, d0, p1, d1):
-        return seek_time(p0, d0, p1, d1, seekrate, feedrate)
+    cost = seek_cost(seekrate, feedrate)
 
     def end_cost(p, d):
         towards = [
@@ -484,12 +545,76 @@ def improve_seek_order(
         ]
         return cost(p, d, towards, None)
 
+    def exit_state(t):
+        if t < 0:
+            return start, None
+        return exit_(t), exit_dir(t)
+
+    def link(a, b):
+        # seek cost leaving position a for position b, -1 is the tour start
+        # and n the end target (free when there is none)
+        p, d = exit_state(a)
+        if b >= n:
+            return end_cost(p, d) if end_rect is not None else 0.0
+        return cost(p, d, entry(b), entry_dir(b))
+
+    # segments probed without finding a move sleep until a move lands nearby
+    dont_look = set()
+
+    def wake(positions):
+        for t in positions:
+            if 0 <= t < n:
+                dont_look.discard(tour[t][0])
+
+    def relocate(i):
+        # Or-opt: move the segment at position i to just after a nearby one,
+        # optionally flipped. Escapes plateaus 2-opt reversals cannot cross.
+        seg = tour[i][0]
+        rem = link(i - 1, i + 1) - link(i - 1, i) - link(i, i + 1)
+        tried = set()
+        for e in nbrs[2 * seg] + nbrs[2 * seg + 1]:
+            j = pos.get(e // 2)
+            if j is None or j == i or j == i - 1 or j in tried:
+                continue
+            tried.add(j)
+            base = link(j, j + 1)
+            pj, dj = exit_state(j)
+            for flip in (False, True):
+                if flip:
+                    e_pt, e_dir = exit_(i), neg(exit_dir(i))
+                    x_pt, x_dir = entry(i), neg(entry_dir(i))
+                else:
+                    e_pt, e_dir = entry(i), entry_dir(i)
+                    x_pt, x_dir = exit_(i), exit_dir(i)
+                ins = cost(pj, dj, e_pt, e_dir) - base
+                if j + 1 >= n:
+                    ins += end_cost(x_pt, x_dir) if end_rect is not None else 0.0
+                else:
+                    ins += cost(x_pt, x_dir, entry(j + 1), entry_dir(j + 1))
+                if rem + ins < -1e-9:
+                    wake((i - 1, i, i + 1, j, j + 1))
+                    elem = tour.pop(i)
+                    if flip:
+                        elem = [elem[0], not elem[1]]
+                    tour.insert(j + 1 if j < i else j, elem)
+                    pos.clear()
+                    for t, (s, _r) in enumerate(tour):
+                        pos[s] = t
+                    dont_look.discard(elem[0])
+                    return True
+        return False
+
+    # 2-opt sweeps converge first, the pricier Or-opt relocations then run
+    # on what 2-opt alone cannot fix
+    use_oropt = False
     deadline = time.monotonic() + time_budget
     for _pass in range(max_passes):
         improved = False
         for i in range(n):
             if time.monotonic() > deadline:
                 return
+            if tour[i][0] in dont_look:
+                continue
             if i == 0:
                 prev = start
                 prevdir = None
@@ -500,10 +625,13 @@ def improve_seek_order(
                 prevdir = exit_dir(i - 1)
                 cand = nbrs[2 * previdx if prevrev else 2 * previdx + 1]
             t_prev_entry = cost(prev, prevdir, entry(i), entry_dir(i))
+            applied = False
+            tried = set()
             for e in cand:
                 j = pos.get(e // 2)
-                if j is None or j < i:
+                if j is None or j < i or j in tried:
                     continue
+                tried.add(j)
                 # reversal makes segment j's exit the new stretch entry and
                 # segment i's entry the new stretch exit, with flipped dirs
                 delta = cost(prev, prevdir, exit_(j), neg(exit_dir(j))) - t_prev_entry
@@ -514,13 +642,23 @@ def improve_seek_order(
                     delta += end_cost(entry(i), neg(entry_dir(i)))
                     delta -= end_cost(exit_(j), exit_dir(j))
                 if delta < -1e-9:
+                    wake((i - 1, i, i + 1, j, j + 1))
                     tour[i : j + 1] = [[s, not r] for s, r in reversed(tour[i : j + 1])]
                     for t in range(i, j + 1):
                         pos[tour[t][0]] = t
-                    improved = True
+                    applied = True
                     break
+            if not applied and use_oropt:
+                applied = relocate(i)
+            if applied:
+                improved = True
+            else:
+                dont_look.add(tour[i][0])
         if not improved:
-            break
+            if use_oropt:
+                break
+            use_oropt = True
+            dont_look.clear()
 
 
 def sort_by_seektime(path, start=None):
