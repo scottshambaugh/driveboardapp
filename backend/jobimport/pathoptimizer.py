@@ -250,14 +250,21 @@ def polyline_dirs(path):
     return entry_dirs, exit_dirs
 
 
-def split_closed_paths(polys, grid=30.0, closed_eps=0.001):
-    """Split closed polylines into two arcs at the vertex nearest half the
-    perimeter, so seek ordering may burn the near half on the way out and
-    the far half on the way back. Halves stay single relocatable pieces for
-    the tour moves, and each contour gains at most one extra burn start.
-    Contours whose halves would be shorter than `grid` mm stay whole (small
-    loops gain little and doubling their count burdens the tour search),
-    open polylines pass through unchanged.
+def split_closed_paths(polys, grid=30.0, closed_eps=0.001, start=None, neighbors=False):
+    """Split closed polylines into two arcs, so seek ordering may burn the
+    near half on the way out and the far half on the way back. By default
+    a contour is cut at its entry vertex and the vertex nearest half the
+    perimeter, spreading the arc endpoints for a free-form tour. With
+    `neighbors` the cuts land at the vertex nearest whatever precedes the
+    contour (`start` or the previous polyline's exit) and the vertex
+    nearest the next polyline's entry, so the endpoints face the hops of a
+    tour that keeps the stored sequence, the winning shape for rows of
+    shapes. Neither placement dominates, callers race both and keep the
+    cheaper tour. Halves stay single relocatable pieces for the tour
+    moves, and each contour gains at most one extra burn start. Contours
+    whose halves would be shorter than `grid` mm stay whole (small loops
+    gain little and doubling their count burdens the tour search), open
+    polylines pass through unchanged.
 
     The arcs share their boundary vertices, so an ordering that keeps them
     adjacent burns seamlessly again (emission coalesces touching polylines
@@ -267,33 +274,57 @@ def split_closed_paths(polys, grid=30.0, closed_eps=0.001):
     eps2 = closed_eps * closed_eps
     out = []
     flags = []
-    for p in polys:
+    prev_pt = start[:2] if neighbors and start else None
+    for idx, p in enumerate(polys):
         n = len(p)
         if not (n > 3 and d2(p[0][:2], p[-1][:2]) <= eps2):
             out.append(p)
             flags.append(False)
+            if p:
+                prev_pt = p[-1][:2]
             continue
         lengths = [math.dist(p[k - 1][:2], p[k][:2]) for k in range(1, n)]
         perimeter = sum(lengths)
         if perimeter < 2.0 * grid:
             out.append(p)
             flags.append(False)
+            prev_pt = p[-1][:2]
             continue
-        half = best_k = None
-        acc = 0.0
-        for k in range(1, n - 1):
-            acc += lengths[k - 1]
-            gap = abs(acc - 0.5 * perimeter)
-            if (half is None or gap < half) and acc >= grid and perimeter - acc >= grid:
-                half = gap
+        verts = n - 1
+        # near cut where the tour arrives, far cut facing the next entry,
+        # the entry vertex and the antipode without neighbor context
+        if neighbors and prev_pt is not None:
+            a = min(range(verts), key=lambda k: d2(p[k][:2], prev_pt))
+        else:
+            a = 0
+        ring = p if a == 0 else p[a:-1] + p[: a + 1]
+        ring_lengths = lengths[a:] + lengths[:a]
+        next_pt = None
+        if neighbors and idx + 1 < len(polys) and polys[idx + 1]:
+            next_pt = polys[idx + 1][0][:2]
+        acc = [0.0]
+        for length in ring_lengths:
+            acc.append(acc[-1] + length)
+        best = best_k = None
+        for k in range(1, verts):
+            if acc[k] < grid or perimeter - acc[k] < grid:
+                continue
+            if next_pt is not None:
+                gap = d2(ring[k][:2], next_pt)
+            else:
+                gap = abs(acc[k] - 0.5 * perimeter)
+            if best is None or gap < best:
+                best = gap
                 best_k = k
         if best_k is None:
             out.append(p)
             flags.append(False)
+            prev_pt = p[-1][:2]
             continue
-        out.append(p[: best_k + 1])
-        out.append(p[best_k:])
+        out.append(ring[: best_k + 1])
+        out.append(ring[best_k:])
         flags.extend((True, True))
+        prev_pt = ring[-1][:2]
     return out, flags
 
 
@@ -500,6 +531,9 @@ def improve_seek_order(
     candidate lists need a generous k to contain the useful reconnections: k
     defaults to the segment count, capped so the lists stay small in memory.
     The time budget bounds the improvement sweeps on top of that.
+
+    Returns the planner-model seek time of the final tour including the
+    end_rect leg, or None when there are fewer than two segments.
     """
     n = len(tour)
     if n < 2:
@@ -563,6 +597,9 @@ def improve_seek_order(
             return end_cost(p, d) if end_rect is not None else 0.0
         return cost(p, d, entry(b), entry_dir(b))
 
+    def tour_time():
+        return sum(link(t - 1, t) for t in range(n)) + link(n - 1, n)
+
     # segments probed without finding a move sleep until a move lands nearby
     dont_look = set()
 
@@ -617,7 +654,7 @@ def improve_seek_order(
         improved = False
         for i in range(n):
             if time.monotonic() > deadline:
-                return
+                return tour_time()
             if tour[i][0] in dont_look:
                 continue
             if i == 0:
@@ -664,6 +701,7 @@ def improve_seek_order(
                 break
             use_oropt = True
             dont_look.clear()
+    return tour_time()
 
 
 def sort_by_seektime(path, start=None):

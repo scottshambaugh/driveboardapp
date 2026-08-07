@@ -259,6 +259,36 @@ def test_split_closed_paths_keeps_small_contours_whole():
     assert pathoptimizer.split_closed_paths([small], grid=10.0) == ([small], [False])
 
 
+def _octagon(cx, cy, r):
+    import math
+
+    return [
+        [
+            round(cx + r * math.cos(math.tau * i / 8.0), 3),
+            round(cy + r * math.sin(math.tau * i / 8.0), 3),
+        ]
+        for i in range(9)
+    ]
+
+
+def test_split_closed_paths_neighbor_cuts_face_the_gaps():
+    # a row of contours cut at the vertices facing their neighbors, so an
+    # out-and-back interleave hops only the gaps between them
+    polys = [_octagon(60.0, 60.0, 20.0), _octagon(110.0, 60.0, 20.0), _octagon(160.0, 60.0, 20.0)]
+    out, flags = pathoptimizer.split_closed_paths(polys, start=[0.0, 0.0], neighbors=True)
+    assert flags == [True] * 6
+    mid_ends = {tuple(out[2][0]), tuple(out[2][-1])}
+    assert mid_ends == {(90.0, 60.0), (130.0, 60.0)}
+
+
+def test_improve_seek_order_returns_the_tour_time():
+    starts = [[0.0, 0.0], [20.0, 0.0]]
+    ends = [[10.0, 0.0], [30.0, 0.0]]
+    tour = [[0, False], [1, False]]
+    t = pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0])
+    assert t == pathoptimizer.seek_time([10.0, 0.0], None, [20.0, 0.0], None)
+
+
 def test_knn_ids_matches_brute_force():
     import random
 

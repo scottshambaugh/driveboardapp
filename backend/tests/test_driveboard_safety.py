@@ -798,9 +798,9 @@ def test_bidirectional_corner_choice_considers_the_next_item(loop, monkeypatch):
     assert [pixels for _leadin, _span, pixels in runs] == [5, 3, 7]
 
 
-def test_bidirectional_corner_choice_considers_the_return_home(loop, monkeypatch):
-    # approach is a near tie, but the job seeks back to the origin afterwards,
-    # so ending at the image top (nearest the origin) wins: engrave bottom-up
+def test_bidirectional_corner_choice_ignores_the_return_home(loop, monkeypatch):
+    # the closing seek home is deliberately not modeled, so ordering favors a
+    # first cut near the origin: the approach decides, with or without return
     from config import conf
 
     monkeypatch.setitem(conf, "raster_leadin", 1.0)
@@ -824,14 +824,12 @@ def test_bidirectional_corner_choice_considers_the_return_home(loop, monkeypatch
             ],
         }
 
-    # noreturn: only the approach counts, top-down wins
     driveboard.job(make_job({"noreturn": True}))
     assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [3, 5]
 
-    # returning home: the closing seek flips the choice to bottom-up
     loop.tx_buffer.clear()
     driveboard.job(make_job({}))
-    assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [5, 3]
+    assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [3, 5]
 
 
 def _line_targets(buf):

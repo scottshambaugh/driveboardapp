@@ -2129,8 +2129,8 @@ def _order_path_def(def_, pass_, seekrate, feedrate_, head_pos, next_rect, reord
 
         start = head_pos[:2]
 
-        def improve():
-            pathoptimizer.improve_seek_order(
+        def improve(polys, tour):
+            return pathoptimizer.improve_seek_order(
                 [p[0] for p in polys],
                 [p[-1] for p in polys],
                 tour,
@@ -2143,19 +2143,52 @@ def _order_path_def(def_, pass_, seekrate, feedrate_, head_pos, next_rect, reord
 
         if conf["split_closed_paths"]:
             # enter loops well first, then split them into arcs the ordering
-            # is free to interleave, a loop kept together burns as before
+            # is free to interleave, a loop kept together burns as before.
+            # neither cut placement dominates, so both are improved and the
+            # cheaper tour wins
             pathoptimizer.rotate_closed_entries(
                 polys, tour, start, seekrate, feedrate_, end_rect=next_rect
             )
-            polys, arc_flags = pathoptimizer.split_closed_paths(polys)
-            tour = [[ci, False] for ci in range(len(polys))]
-            improve()
+            best = None
+            for neighbors in (False, True):
+                v_polys, v_flags = pathoptimizer.split_closed_paths(
+                    polys, start=start, neighbors=neighbors
+                )
+                if neighbors and best is not None and v_polys == best[1]:
+                    break
+                v_tour = [[ci, False] for ci in range(len(v_polys))]
+                v_cost = improve(v_polys, v_tour)
+                if best is None or (v_cost is not None and v_cost < best[0]):
+                    best = (v_cost, v_polys, v_tour, v_flags)
+                if not any(v_flags):
+                    break  # nothing split, the variants are identical
+            _cost, polys, tour, arc_flags = best
         else:
-            improve()
+            improve(polys, tour)
             # closed contours are free to be entered anywhere along the loop
             pathoptimizer.rotate_closed_entries(
                 polys, tour, start, seekrate, feedrate_, end_rect=next_rect
             )
+        # with nothing to head for afterwards a tour and its reverse cost
+        # the same inside, so whichever end is nearer the head starts
+        if next_rect is None and len(tour) > 1:
+            entry_dirs, exit_dirs = pathoptimizer.polyline_dirs(polys)
+
+            def tour_entry(t, flipped):
+                ci, rev = t
+                if flipped:
+                    rev = not rev
+                if rev:
+                    d = exit_dirs[ci]
+                    return polys[ci][-1][:2], None if d is None else (-d[0], -d[1])
+                return polys[ci][0][:2], entry_dirs[ci]
+
+            p_fwd, d_fwd = tour_entry(tour[0], False)
+            p_rev, d_rev = tour_entry(tour[-1], True)
+            t_fwd = pathoptimizer.seek_time(start, None, p_fwd, d_fwd, seekrate, feedrate_)
+            t_rev = pathoptimizer.seek_time(start, None, p_rev, d_rev, seekrate, feedrate_)
+            if t_rev < t_fwd - 1e-9:
+                tour[:] = [[ci, not rev] for ci, rev in reversed(tour)]
     return [
         (polys[ci][::-1] if rev else polys[ci], bool(arc_flags and arc_flags[ci]))
         for ci, rev in tour
@@ -2399,6 +2432,13 @@ def _order_pass_items(jobdict, pass_, head_pos, end_rect, seekrate):
                 if after + 1e-9 < before:
                     order[i : j + 1] = order[i : j + 1][::-1]
                     improved = True
+    # with nothing to head for afterwards the reversed order costs the same
+    # inside, so whichever end is nearer the head goes first
+    if (
+        end_rect is None
+        and leg(start_rect, rects[order[-1]]) < leg(start_rect, rects[order[0]]) - 1e-9
+    ):
+        order.reverse()
     return [items[k] for k in order]
 
 
