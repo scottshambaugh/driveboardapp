@@ -12,6 +12,8 @@
 - Closed contours are now entered at whichever point along the loop is fastest to reach
 - Closed contours can be burned as two arcs when that saves travel, eg the near sides of a row of shapes on the way out and the far sides on the way back. Arcs kept adjacent still burn as one continuous move. Toggled with the new `split_closed_paths` config setting
 - A split contour resuming on an already-cut point skips its pierce dwell, toggled with the new `skip_pierce_on_resume` config setting
+- The job view's seek lines now show the true dispatch-time ordering instead of the stored file order
+- Loading a file now shows the job as soon as it is parsed, the seek optimization finishes in the background and the view refreshes when it lands
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out

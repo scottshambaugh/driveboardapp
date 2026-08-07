@@ -31,31 +31,7 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
         if type(job) is str:
             job = json.loads(job)
         if optimize:
-            if "defs" in job:
-                for def_ in job["defs"]:
-                    if def_["kind"] == "path":
-                        pathoptimizer.optimize(def_["data"], tolerance)
-                    if def_["kind"] == "fill":
-                        fill_mode = conf["fill_mode"]
-                        if fill_mode not in [
-                            "Forward",
-                            "Reverse",
-                            "Bidirectional",
-                            "NearestNeighbor",
-                        ]:
-                            fill_mode = "Bidirectional"
-                            print("WARN: fill_mode not recognized. Please check your config file.")
-                        if fill_mode == "Forward":
-                            pass
-                        elif fill_mode == "Reverse":
-                            pathoptimizer.reverse_path(def_["data"])
-                        elif fill_mode == "Bidirectional":
-                            pathoptimizer.fill_optimize(def_["data"], tolerance)
-                        elif fill_mode == "NearestNeighbor":
-                            pathoptimizer.optimize(def_["data"], tolerance)
-                if "head" not in job:
-                    job["head"] = {}
-                job["head"]["optimized"] = tolerance
+            optimize_job(job, tolerance)
     elif type_ == "svg":
         job = read_svg(job, tolerance, optimize=optimize)
     elif type_ == "dxf":
@@ -84,6 +60,29 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
             previews[data] = preview_image_data(data)
         job["sources"][key] = previews[data]
     return job
+
+
+def optimize_job(job, tolerance):
+    """Optimize the path and fill defs of a parsed dba job in place."""
+    for def_ in job.get("defs", []):
+        if def_["kind"] == "path":
+            pathoptimizer.optimize(def_["data"], tolerance)
+        if def_["kind"] == "fill":
+            fill_mode = conf["fill_mode"]
+            if fill_mode not in ["Forward", "Reverse", "Bidirectional", "NearestNeighbor"]:
+                fill_mode = "Bidirectional"
+                print("WARN: fill_mode not recognized. Please check your config file.")
+            if fill_mode == "Forward":
+                pass
+            elif fill_mode == "Reverse":
+                pathoptimizer.reverse_path(def_["data"])
+            elif fill_mode == "Bidirectional":
+                pathoptimizer.fill_optimize(def_["data"], tolerance)
+            elif fill_mode == "NearestNeighbor":
+                pathoptimizer.optimize(def_["data"], tolerance)
+    if "head" not in job:
+        job["head"] = {}
+    job["head"]["optimized"] = tolerance
 
 
 def apply_alignment_matrix(job, matrix):

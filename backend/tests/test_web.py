@@ -489,8 +489,9 @@ def test_convert_matches_an_in_process_convert(as_text, testjobs_dir):
         job = fp.read()
     if as_text:
         job = job.decode("utf-8")
-    assert web._convert_job(job, True, None) == json.dumps(
-        jobimport.convert(job, optimize=True, matrix=None)
+    assert web._convert_job(job, True, None) == (
+        json.dumps(jobimport.convert(job, optimize=True, matrix=None)),
+        None,
     )
 
 

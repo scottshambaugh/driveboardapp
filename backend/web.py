@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import traceback
+import uuid
 import webbrowser
 import wsgiref.simple_server
 
@@ -584,8 +585,11 @@ _convert_pool = None
 _convert_pool_lock = threading.Lock()
 
 
-def _convert_worker(in_path, out_path, text, optimize, matrix, conf_overrides):
+def _convert_worker(in_path, out_path, quick_path, text, optimize, matrix, conf_overrides):
     """Convert a job file into a .dba file, in the worker process.
+
+    With quick_path, the parsed-but-unoptimized job lands there as soon as it
+    exists, so the caller can show it while the optimization still runs.
 
     A spawned worker starts from the config defaults, so the server's values
     come over with the call. Tolerance is passed explicitly because convert
@@ -596,7 +600,17 @@ def _convert_worker(in_path, out_path, text, optimize, matrix, conf_overrides):
         job = fp.read()
     if text:
         job = job.decode("utf-8")
-    job = jobimport.convert(job, optimize=optimize, tolerance=conf["tolerance"], matrix=matrix)
+    if quick_path:
+        # gcode is procedural, its order is never optimized (see read_gcode)
+        optimize = optimize and jobimport.get_type(job) != "gcode"
+        job = jobimport.convert(job, optimize=False, tolerance=conf["tolerance"], matrix=matrix)
+        with open(quick_path + ".tmp", "w") as fp:
+            json.dump(job, fp)
+        os.replace(quick_path + ".tmp", quick_path)  # appear only when complete
+        if optimize:
+            jobimport.optimize_job(job, conf["tolerance"])
+    else:
+        job = jobimport.convert(job, optimize=optimize, tolerance=conf["tolerance"], matrix=matrix)
     with open(out_path, "w") as fp:
         json.dump(job, fp)
 
@@ -620,8 +634,41 @@ def _convert_pool_drop():
         pool.shutdown(wait=False)
 
 
-def _convert_job(job, optimize, matrix):
+# progressive loads still optimizing, {token: {"event", "name", "error"}}
+_load_pending = {}
+_load_pending_lock = threading.Lock()
+
+
+def _pending_register(future, out_path, tmpdir):
+    """Track a still-optimizing load, finish it on a watcher thread."""
+    token = uuid.uuid4().hex
+    entry = {"event": threading.Event(), "name": None, "error": None}
+    with _load_pending_lock:
+        _load_pending[token] = entry
+
+    def watch():
+        try:
+            future.result(timeout=CONVERT_TIMEOUT)
+            with open(out_path) as fp:
+                entry["result"] = fp.read()
+            # the queue entry gets the optimized job under the same name
+            if entry["name"]:
+                _add(entry["result"], entry["name"])
+        except Exception as e:
+            entry["error"] = str(e)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            entry["event"].set()
+
+    threading.Thread(target=watch, daemon=True).start()
+    return token
+
+
+def _convert_job(job, optimize, matrix, progressive=False):
     """Convert a job to a .dba string, in a worker process where one can be had.
+
+    Returns (dba_string, token): token is None when the string is final, and
+    a /load_result handle when it is the quick parse of a progressive load.
 
     Spawn rather than fork: this process has the serial and server threads
     running, and a forked child can inherit a held stdout or import lock and
@@ -630,9 +677,11 @@ def _convert_job(job, optimize, matrix):
     """
     text = isinstance(job, str)
     tmpdir = tempfile.mkdtemp(prefix="dbimport_")
+    quick_path = os.path.join(tmpdir, "job.quick") if progressive else None
     args = (
         os.path.join(tmpdir, "job.in"),
         os.path.join(tmpdir, "job.dba"),
+        quick_path,
         text,
         optimize,
         matrix,
@@ -645,6 +694,18 @@ def _convert_job(job, optimize, matrix):
             with _convert_pool_lock:
                 future = _convert_pool_get().submit(_convert_worker, *args)
             try:
+                if progressive:
+                    # hand back the parsed job as soon as it appears, the
+                    # optimized one follows via /load_result
+                    waited = 0.0
+                    while not future.done() and waited < CONVERT_TIMEOUT:
+                        if os.path.exists(quick_path):
+                            with open(quick_path) as fp:
+                                quick = fp.read()
+                            token = _pending_register(future, args[1], tmpdir)
+                            tmpdir = None  # the watcher owns the cleanup now
+                            return quick, token
+                        time.sleep(0.05)
                 future.result(timeout=CONVERT_TIMEOUT)
             except concurrent.futures.TimeoutError:
                 _convert_pool_drop()
@@ -654,9 +715,10 @@ def _convert_job(job, optimize, matrix):
             _convert_pool_drop()
             _convert_worker(*args)
         with open(args[1]) as fp:
-            return fp.read()
+            return fp.read(), None
     finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @bottle.route("/load", method="POST")
@@ -703,9 +765,10 @@ def load():
     # sanity check
     if job is None or name is None:
         raise bottle.HTTPResponse("Invalid request data.", 400)
+    progressive = bool(load_request.get("progressive"))
     # convert, off this process so the serial thread keeps its timing
     try:
-        job = _convert_job(job, optimize, matrix)  # already a .dba string
+        job, pending = _convert_job(job, optimize, matrix, progressive)  # a .dba string
     except TypeError:
         if DEBUG:
             traceback.print_exc()
@@ -716,7 +779,37 @@ def load():
     if not overwrite:
         name = _unique_name(name)
     _add(job, name)
+    if pending:
+        with _load_pending_lock:
+            entry = _load_pending[pending]
+        entry["name"] = name
+        # the watcher may have finished before the name was known
+        if entry["event"].is_set() and entry.get("result") and not entry["error"]:
+            _add(entry["result"], name)
+        return json.dumps({"name": name, "pending": pending})
     return json.dumps(name)
+
+
+@bottle.route("/load_result/<token>")
+@bottle.auth_basic(checkuser)
+def load_result(token):
+    """Wait for a progressive load's optimization to finish.
+
+    Returns the job name once the queue entry holds the optimized job, so
+    the frontend can re-fetch it via /get.
+    """
+    with _load_pending_lock:
+        entry = _load_pending.get(token)
+    if entry is None:
+        raise bottle.HTTPResponse("Unknown load token.", 404)
+    entry["event"].wait(timeout=CONVERT_TIMEOUT)
+    with _load_pending_lock:
+        _load_pending.pop(token, None)
+    if entry["error"]:
+        raise bottle.HTTPResponse(entry["error"], 422)
+    if not entry["event"].is_set():
+        raise bottle.HTTPResponse("Import timed out.", 504)
+    return json.dumps({"name": entry["name"]})
 
 
 @bottle.route("/listing")

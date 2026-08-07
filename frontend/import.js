@@ -89,14 +89,32 @@ $(document).ready(function () {
     }
 
     // send to backend
-    var load_request = { job: job, name: import_name, optimize: true };
+    var load_request = {
+      job: job,
+      name: import_name,
+      optimize: true,
+      progressive: true,
+    };
     request_post({
       url: "/load",
       data: load_request,
-      success: function (jobname) {
+      success: function (result) {
+        // a progressive load answers with the quick parse first and a token
+        // to pick up the optimized job when it is ready
+        var jobname = result && result.name ? result.name : result;
         $().uxmessage("notice", "Parsed " + jobname + ".");
         queue_update();
         import_open(jobname);
+        if (result && result.pending) {
+          request_get({
+            url: "/load_result/" + result.pending,
+            success: function (done) {
+              $().uxmessage("notice", "Optimized " + done.name + ".");
+              import_open(done.name);
+            },
+            error: function () {},
+          });
+        }
       },
       error: function (data) {
         $().uxmessage("error", "/load error.");
