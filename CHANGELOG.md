@@ -6,6 +6,8 @@
 - Speed up loading svg files with raster images (esp ducplicates)
 - Seek-optimized ordering (NearestNeighbor rasters and vector path sorting) now runs a 2-opt untangling pass to further improve job time
 - Bidirectional rasters now start from whichever of the four image corners is closest
+- Seek ordering now minimizes machine time under the firmware's trapezoidal speed profiles and junction speeds
+- Raster ordering also accounts for the seek onwards to the next item or pass, and for the job's final return to origin
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out

@@ -91,14 +91,14 @@ def test_sort_by_seektime_orders_by_proximity():
     assert path[1] == [[50.0, 50.0], [100.0, 100.0]]
 
 
-def _seek_length(starts, ends, tour, start):
-    import math
-
+def _seek_cost(starts, ends, tour, start):
+    # planner-model seek time with unknown directions, the optimizer's metric
+    # when no dirs are passed
     total = 0.0
     pos = start
     for i, rev in tour:
         entry, exit_ = (ends[i], starts[i]) if rev else (starts[i], ends[i])
-        total += math.dist(pos, entry)
+        total += pathoptimizer.seek_time(pos, None, entry, None)
         pos = exit_
     return total
 
@@ -117,9 +117,9 @@ def test_improve_seek_order_untangles_a_crossing():
     starts = [[0.0, 0.0], [100.0, 0.0], [0.0, 1.0], [100.0, 1.0]]
     ends = [[10.0, 0.0], [110.0, 0.0], [10.0, 1.0], [110.0, 1.0]]
     tour = [[0, False], [1, False], [2, False], [3, False]]
-    before = _seek_length(starts, ends, tour, [0.0, 0.0])
+    before = _seek_cost(starts, ends, tour, [0.0, 0.0])
     pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0])
-    after = _seek_length(starts, ends, tour, [0.0, 0.0])
+    after = _seek_cost(starts, ends, tour, [0.0, 0.0])
     assert after < before
     assert sorted(i for i, _rev in tour) == [0, 1, 2, 3]
     # both left column segments come before the right column
@@ -139,12 +139,64 @@ def test_improve_seek_order_never_worsens_random_tours():
         ends = [[s[0] + rng.uniform(-5, 5), s[1] + rng.uniform(-5, 5)] for s in starts]
         tour = [[i, bool(rng.getrandbits(1))] for i in rng.sample(range(n), n)]
         start = [rng.uniform(0, 100), rng.uniform(0, 100)]
-        before = _seek_length(starts, ends, tour, start)
+        before = _seek_cost(starts, ends, tour, start)
         pathoptimizer.improve_seek_order(starts, ends, tour, start)
-        after = _seek_length(starts, ends, tour, start)
+        after = _seek_cost(starts, ends, tour, start)
         assert after <= before + 1e-9
         assert sorted(i for i, _rev in tour) == list(range(n))
         assert math.isfinite(after)
+
+
+def test_trapezoid_time_matches_closed_forms():
+    a = pathoptimizer.ACCEL
+    # long move from stop to stop: cruise time plus one full ramp up and down
+    t = pathoptimizer._trapezoid_time(100.0, 100.0, a, 0.0, 0.0)
+    assert abs(t - (100.0 / 100.0 + 100.0 / a)) < 1e-9
+    # short move never reaches cruise: symmetric triangular profile
+    t = pathoptimizer._trapezoid_time(1.0, 100.0, a, 0.0, 0.0)
+    assert abs(t - 2.0 * (1.0 / a) ** 0.5) < 1e-9
+
+
+def test_junction_speed_by_angle():
+    vcap = 100.0
+    straight = pathoptimizer._junction_speed((1.0, 0.0), (1.0, 0.0), vcap)
+    corner = pathoptimizer._junction_speed((1.0, 0.0), (0.0, 1.0), vcap)
+    reversal = pathoptimizer._junction_speed((1.0, 0.0), (-1.0, 0.0), vcap)
+    assert straight == vcap
+    assert reversal == 0.0
+    assert 0.0 < corner < 5.0  # a 90 degree corner is close to a stop
+
+
+def test_seek_time_reversal_costs_more_than_continuation():
+    # the same 10mm seek, continuing the feed direction vs reversing it
+    cont = pathoptimizer.seek_time([0.0, 0.0], (1.0, 0.0), [10.0, 0.0], (1.0, 0.0))
+    rev = pathoptimizer.seek_time([10.0, 0.0], (1.0, 0.0), [0.0, 0.0], (-1.0, 0.0))
+    assert 0.0 < cont < rev
+
+
+def test_improve_seek_order_avoids_reversal_over_short_backtrack():
+    # continuing in the feed direction to the far end of the next segment
+    # beats a shorter seek that forces two full reversals
+    starts = [[0.0, 0.0], [12.0, 0.4]]
+    ends = [[10.0, 0.0], [2.0, 0.4]]
+    dirs = ([(1.0, 0.0), (-1.0, 0.0)], [(1.0, 0.0), (-1.0, 0.0)])
+    tour = [[0, False], [1, True]]
+    pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0], dirs=dirs)
+    assert tour == [[0, False], [1, False]]
+
+
+def test_improve_seek_order_ends_near_the_end_rect():
+    # two stacked segments: without a terminal target the short backtrack
+    # wins, with one just right of the top segment the tour ends there
+    starts = [[0.0, 0.0], [0.0, 2.0]]
+    ends = [[10.0, 0.0], [10.0, 2.0]]
+    home = [10.5, 2.0, 10.5, 2.0]
+    tour = [[0, False], [1, False]]
+    pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0])
+    assert tour == [[0, False], [1, True]]
+    tour = [[0, False], [1, False]]
+    pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0], end_rect=home)
+    assert tour == [[0, False], [1, False]]
 
 
 def test_knn_ids_matches_brute_force():

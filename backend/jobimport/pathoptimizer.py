@@ -177,6 +177,73 @@ def simplify_all(path, tolerance2):
             log.info("INFO: polylines optimized by " + str(int(diffpct)) + "%")
 
 
+# firmware motion constants, in sync with CONFIG_ACCELERATION and
+# CONFIG_JUNCTION_DEVIATION in firmware/src/config.*.h (laser variants)
+# CONFIG_ACCELERATION is scalar accel along the path in mm/min^2
+ACCEL = 1800000.0 / 3600.0  # mm/s^2
+JUNCTION_DEVIATION = 0.006  # mm
+# rates the optimizers assume when the pass rates are not known (mm/min)
+DEFAULT_SEEKRATE = 6000.0
+DEFAULT_FEEDRATE = 2000.0
+
+
+def _junction_speed(d_prev, d_cur, vcap, accel=ACCEL, deviation=JUNCTION_DEVIATION):
+    """Speed (mm/s) the firmware planner carries through a junction between
+    unit directions d_prev and d_cur, replicating planner.c: full speed when
+    nearly collinear, a stop when reversing, and the centripetal
+    junction-deviation approximation between. None for a direction means the
+    head stops there."""
+    if d_prev is None or d_cur is None:
+        return 0.0
+    cos_theta = -(d_prev[0] * d_cur[0] + d_prev[1] * d_cur[1])
+    if cos_theta >= 0.95:  # close to 180 degree turn
+        return 0.0
+    if cos_theta <= -0.95:  # close to straight through
+        return vcap
+    sin_half = math.sqrt(0.5 * (1.0 - cos_theta))
+    return min(vcap, math.sqrt(accel * deviation * sin_half / (1.0 - sin_half)))
+
+
+def _trapezoid_time(length, vmax, accel, v0, v1):
+    """Time (s) of a move of `length` mm under the planner's trapezoidal
+    profile: enter at v0, ramp towards vmax, leave at v1 (mm/s)."""
+    if length <= 0.0:
+        return 0.0
+    v0 = min(v0, vmax)
+    v1 = min(v1, vmax)
+    # an exit speed the length cannot reach collapses to what is reachable
+    v1 = min(v1, math.sqrt(v0 * v0 + 2.0 * accel * length))
+    v0 = min(v0, math.sqrt(v1 * v1 + 2.0 * accel * length))
+    vpeak = math.sqrt(accel * length + 0.5 * (v0 * v0 + v1 * v1))
+    if vpeak <= vmax:  # triangular, cruise speed never reached
+        return (2.0 * vpeak - v0 - v1) / accel
+    d_acc = (vmax * vmax - v0 * v0) / (2.0 * accel)
+    d_dec = (vmax * vmax - v1 * v1) / (2.0 * accel)
+    return (vmax - v0) / accel + (vmax - v1) / accel + (length - d_acc - d_dec) / vmax
+
+
+def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
+    """Planner-model time (s) of a seek from p0 to p1.
+
+    d0 is the unit direction the head was moving on arrival at p0 (its last
+    feed move), d1 the direction it must move leaving p1. Junction angles set
+    how much speed carries into and out of the seek, so a seek continuing
+    straight through rides the ramps while a direction reversal pays a full
+    stop at both ends. None directions mean a stop. Rates in mm/min.
+    """
+    dx = p1[0] - p0[0]
+    dy = p1[1] - p0[1]
+    length = math.hypot(dx, dy)
+    vseek = seekrate / 60.0
+    vfeed = feedrate / 60.0
+    if length < 1e-9:
+        return 0.0
+    u = (dx / length, dy / length)
+    v_in = _junction_speed(d0, u, min(vfeed, vseek))
+    v_out = _junction_speed(u, d1, min(vfeed, vseek))
+    return _trapezoid_time(length, vseek, ACCEL, v_in, v_out)
+
+
 def _knn_ids(points, k):
     """For each 2D point, ids of up to k nearest other points.
 
@@ -229,39 +296,62 @@ def _knn_ids(points, k):
     return out
 
 
-def improve_seek_order(starts, ends, tour, start, k=None, max_passes=50, time_budget=3.0):
-    """2-opt improvement of an open seek tour over reversible segments.
+def improve_seek_order(
+    starts,
+    ends,
+    tour,
+    start,
+    k=None,
+    max_passes=50,
+    time_budget=3.0,
+    dirs=None,
+    seekrate=DEFAULT_SEEKRATE,
+    feedrate=DEFAULT_FEEDRATE,
+    end_rect=None,
+):
+    """2-opt improvement of an open seek tour over reversible segments,
+    minimizing planner-model seek time (see seek_time).
 
     starts, ends ... per-segment endpoint coords (entry/exit when not reversed)
     tour         ... visit order as [seg_index, reversed] pairs, improved in place
     start        ... head position before the first seek
+    dirs         ... optional (entry_dirs, exit_dirs) unit vectors per segment
+                     in the unreversed orientation, None entries mean a stop.
+                     Reversing a segment negates and swaps its pair.
+    end_rect     ... optional [x0, y0, x1, y1] extent the head seeks towards
+                     after the tour (the next item, or the return to origin),
+                     costed as one more edge so the tour ends near it.
 
-    Reversing a stretch of the tour flips each segment in it, which leaves
-    the seeks inside the stretch unchanged and only rewires its two boundary
-    seeks. Candidate stretches come from k-nearest endpoint lists, so a pass
-    is near-linear. Greedy nearest-neighbor tours lose most of their excess
-    seek travel to a handful of such untangling moves. Raster scanline
-    endpoints stack in near-identical columns, so the candidate lists need a
-    generous k to contain the useful reconnections: k defaults to the segment
-    count, capped so the lists stay small in memory. The time budget bounds
-    the improvement sweeps on top of that.
+    Reversing a stretch of the tour flips each segment in it, which
+    time-reverses the seeks inside the stretch (their cost is unchanged) and
+    only rewires its two boundary seeks. Candidate stretches come from
+    k-nearest endpoint lists, so a pass is near-linear. Greedy
+    nearest-neighbor tours lose most of their excess seek time to a handful
+    of such untangling moves. Raster scanline endpoints stack in
+    near-identical columns, so the candidate lists need a generous k to
+    contain the useful reconnections: k defaults to the segment count, capped
+    so the lists stay small in memory. The time budget bounds the improvement
+    sweeps on top of that.
     """
     n = len(tour)
     if n < 2:
         return
     if k is None:
         k = min(len(starts), 256)
-    dist = math.dist
     points = []
     for i in range(len(starts)):
         points.append(starts[i][:2])
         points.append(ends[i][:2])
+    entry_dirs, exit_dirs = dirs if dirs else (None, None)
     nbrs = _knn_ids(points, k)
     start = start[:2]
     start_nbrs = sorted(range(len(points)), key=lambda j: d2(start, points[j]))[:k]
     pos = {}
     for t in range(n):
         pos[tour[t][0]] = t
+
+    def neg(d):
+        return None if d is None else (-d[0], -d[1])
 
     def entry(t):
         i, rev = tour[t]
@@ -271,6 +361,28 @@ def improve_seek_order(starts, ends, tour, start, k=None, max_passes=50, time_bu
         i, rev = tour[t]
         return points[2 * i] if rev else points[2 * i + 1]
 
+    def entry_dir(t):
+        if not dirs:
+            return None
+        i, rev = tour[t]
+        return neg(exit_dirs[i]) if rev else entry_dirs[i]
+
+    def exit_dir(t):
+        if not dirs:
+            return None
+        i, rev = tour[t]
+        return neg(entry_dirs[i]) if rev else exit_dirs[i]
+
+    def cost(p0, d0, p1, d1):
+        return seek_time(p0, d0, p1, d1, seekrate, feedrate)
+
+    def end_cost(p, d):
+        towards = [
+            min(max(p[0], end_rect[0]), end_rect[2]),
+            min(max(p[1], end_rect[1]), end_rect[3]),
+        ]
+        return cost(p, d, towards, None)
+
     deadline = time.monotonic() + time_budget
     for _pass in range(max_passes):
         improved = False
@@ -279,19 +391,27 @@ def improve_seek_order(starts, ends, tour, start, k=None, max_passes=50, time_bu
                 return
             if i == 0:
                 prev = start
+                prevdir = None
                 cand = start_nbrs
             else:
                 previdx, prevrev = tour[i - 1]
                 prev = exit_(i - 1)
+                prevdir = exit_dir(i - 1)
                 cand = nbrs[2 * previdx if prevrev else 2 * previdx + 1]
-            d_prev_entry = dist(prev, entry(i))
+            t_prev_entry = cost(prev, prevdir, entry(i), entry_dir(i))
             for e in cand:
                 j = pos.get(e // 2)
                 if j is None or j < i:
                     continue
-                delta = dist(prev, exit_(j)) - d_prev_entry
+                # reversal makes segment j's exit the new stretch entry and
+                # segment i's entry the new stretch exit, with flipped dirs
+                delta = cost(prev, prevdir, exit_(j), neg(exit_dir(j))) - t_prev_entry
                 if j + 1 < n:
-                    delta += dist(entry(i), entry(j + 1)) - dist(exit_(j), entry(j + 1))
+                    delta += cost(entry(i), neg(entry_dir(i)), entry(j + 1), entry_dir(j + 1))
+                    delta -= cost(exit_(j), exit_dir(j), entry(j + 1), entry_dir(j + 1))
+                elif end_rect is not None:
+                    delta += end_cost(entry(i), neg(entry_dir(i)))
+                    delta -= end_cost(exit_(j), exit_dir(j))
                 if delta < -1e-9:
                     tour[i : j + 1] = [[s, not r] for s, r in reversed(tour[i : j + 1])]
                     for t in range(i, j + 1):
@@ -330,12 +450,28 @@ def sort_by_seektime(path, start=None):
             endpoint = path_unsorted[i][0] if rev else path_unsorted[i][-1]
             usedIdxs[i] = True
 
-    # untangle greedy crossings
+    # untangle greedy crossings, minimizing planner-model seek time
+    def unit(a, b):
+        dx = b[0] - a[0]
+        dy = b[1] - a[1]
+        d = math.hypot(dx, dy)
+        return (dx / d, dy / d) if d > 1e-12 else None
+
+    entry_dirs = []
+    exit_dirs = []
+    for seg in path_unsorted:
+        if len(seg) < 2:
+            entry_dirs.append(None)
+            exit_dirs.append(None)
+        else:
+            entry_dirs.append(unit(seg[0], seg[1]))
+            exit_dirs.append(unit(seg[-2], seg[-1]))
     improve_seek_order(
         [seg[0] for seg in path_unsorted],
         [seg[-1] for seg in path_unsorted],
         tour,
         start,
+        dirs=(entry_dirs, exit_dirs),
     )
 
     for t, (i, rev) in enumerate(tour):

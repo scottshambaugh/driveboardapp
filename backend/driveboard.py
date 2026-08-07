@@ -5,7 +5,6 @@ import datetime
 import io
 import itertools
 import json
-import math
 import platform
 import sys
 import threading
@@ -1574,28 +1573,31 @@ def _raster_orientations(
     return fwd, rev
 
 
-def _dist_to_rect(p, rect):
-    """Distance from a point to an axis-aligned [x0, y0, x1, y1] rect."""
-    dx = max(rect[0] - p[0], 0.0, p[0] - rect[2])
-    dy = max(rect[1] - p[1], 0.0, p[1] - rect[3])
-    return math.hypot(dx, dy)
-
-
-def _order_raster_bidi(orients, line_of, start, line_count, next_rect=None):
+def _order_raster_bidi(
+    orients, line_of, start, line_count, next_rect=None, seekrate=None, feedrate_=None
+):
     """Bidirectional scanline order over collected raster segments, entering
     at whichever of the four corner starts (top/bottom, first pass
-    left-to-right/right-to-left) costs the least seek travel from `start`.
+    left-to-right/right-to-left) costs the least planner-model seek time
+    from `start`.
 
     Each variant replicates the emitter's parity: the pass direction flips on
     every line of the image, engraved or not. Approach and interior seeks are
-    costed exactly. A corner start that saves its approach can strand the
-    exit on the far side of the image from the next item, so when next_rect
-    (the next item's extent) is known, the seek towards it counts too.
+    costed exactly, including the ramps a direction reversal forces. A corner
+    start that saves its approach can strand the exit on the far side of the
+    image from the next item, so when next_rect (the next item's extent) is
+    known, the seek towards it counts too.
 
     orients ... (fwd, rev) orientation dicts per segment
     line_of ... image line index per segment
     Returns [(segment_index, direction), ...] in emission order.
     """
+    from jobimport import pathoptimizer
+
+    if seekrate is None:
+        seekrate = pathoptimizer.DEFAULT_SEEKRATE
+    if feedrate_ is None:
+        feedrate_ = pathoptimizer.DEFAULT_FEEDRATE
     by_line = {}
     for i, li in enumerate(line_of):
         by_line.setdefault(li, []).append(i)  # canonical order is left-to-right
@@ -1610,12 +1612,21 @@ def _order_raster_bidi(orients, line_of, start, line_count, next_rect=None):
                 order.extend((i, d) for i in idxs)
             total = 0.0
             pos = start
+            pdir = None
             for i, d in order:
                 o = orients[i][0] if d == 1 else orients[i][1]
-                total += math.dist(pos, [o["leadin"], o["line_y"]])
+                sdir = (1.0, 0.0) if d == 1 else (-1.0, 0.0)
+                total += pathoptimizer.seek_time(
+                    pos, pdir, [o["leadin"], o["line_y"]], sdir, seekrate, feedrate_
+                )
                 pos = [o["leadout"], o["line_y"]]
+                pdir = sdir
             if next_rect is not None:
-                total += _dist_to_rect(pos, next_rect)
+                towards = [
+                    min(max(pos[0], next_rect[0]), next_rect[2]),
+                    min(max(pos[1], next_rect[1]), next_rect[3]),
+                ]
+                total += pathoptimizer.seek_time(pos, pdir, towards, None, seekrate, feedrate_)
             if best is None or total < best[0]:
                 best = (total, order)
     return best[1]
@@ -1665,7 +1676,9 @@ def _emit_raster_bidi(
         )
         line_of.append(line_start // px_w)
     last = None
-    for i, d in _order_raster_bidi(orients, line_of, start, line_count, next_rect):
+    for i, d in _order_raster_bidi(
+        orients, line_of, start, line_count, next_rect, seekrate, feedrate_
+    ):
         last = orients[i][0] if d == 1 else orients[i][1]
         _emit_raster_segment(last, seekrate, feedrate_, intensity_)
     return [last["leadout"], last["line_y"]]
@@ -1674,6 +1687,7 @@ def _emit_raster_bidi(
 def _emit_raster_nn(
     segments,
     start,
+    next_rect,
     posx,
     pxsize_x,
     leadin,
@@ -1732,12 +1746,18 @@ def _emit_raster_nn(
         tour.append([idx, which == 1])
         current = [orientation["leadout"], orientation["line_y"]]
 
-    # a segment's two lead-in points are where a seek can enter or leave it
+    # a segment's two lead-in points are where a seek can enter or leave it,
+    # and every unreversed segment burns left to right
+    n_segs = len(orients)
     pathoptimizer.improve_seek_order(
         [[o[0][0]["leadin"], o[0][0]["line_y"]] for o in orients],
         [[o[0][1]["leadin"], o[0][1]["line_y"]] for o in orients],
         tour,
         list(start),
+        dirs=([(1.0, 0.0)] * n_segs, [(1.0, 0.0)] * n_segs),
+        seekrate=seekrate,
+        feedrate=feedrate_,
+        end_rect=next_rect,
     )
 
     last = None
@@ -2027,7 +2047,9 @@ def _job_laser_image(
         intensity_,
     )
     if raster_mode == "NearestNeighbor":
-        nn_last = _emit_raster_nn(collected, head_pos[:2] if head_pos else [posx, posy], *common)
+        nn_last = _emit_raster_nn(
+            collected, head_pos[:2] if head_pos else [posx, posy], next_rect, *common
+        )
         if nn_last:
             return nn_last
     elif pick_corner:
@@ -2247,7 +2269,11 @@ def _job_laser_passes(jobdict):
     # a job starts with the head at the offset origin, seek-optimized ordering
     # anchors on the emitted position from there (None once it is unknown)
     head_pos = [0.0, 0.0]
-    for pass_ in jobdict["passes"]:
+    # the job's closing seek back to the origin counts towards ordering too
+    noreturn = bool(jobdict.get("head", {}).get("noreturn"))
+    returns_home = not noreturn and target_in_workarea(0.0, 0.0)
+    passes = jobdict["passes"]
+    for passidx, pass_ in enumerate(passes):
         requested_pxsize = float(pass_.setdefault("pxsize", conf["pxsize"]))
         pxsize_x, pxsize_y = _pass_pxsize(pass_)  # x is 2x horiz resolution
         if requested_pxsize != pxsize_y:
@@ -2276,8 +2302,15 @@ def _job_laser_passes(jobdict):
             kind = def_["kind"]
             if kind == "image":
                 next_rect = None
-                if not pass_["relative"] and i + 1 < len(pass_items):
-                    next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
+                if not pass_["relative"]:
+                    if i + 1 < len(pass_items):
+                        next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
+                    elif passidx + 1 < len(passes):
+                        nxt = passes[passidx + 1]
+                        if not nxt.get("relative") and nxt.get("items"):
+                            next_rect = _item_seek_rect(jobdict, nxt["items"][0])
+                    elif returns_home:
+                        next_rect = [0.0, 0.0, 0.0, 0.0]
                 head_pos = _job_laser_image(
                     def_,
                     pass_,

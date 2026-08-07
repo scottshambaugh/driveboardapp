@@ -50,6 +50,8 @@
 #define CONFIG_FEEDRATE 800.0 // in millimeters per minute
 #define CONFIG_SEEKRATE 800.0
 #define CONFIG_HOMINGRATE 300  // ms/pulse
+// NOTE: acceleration and junction deviation are mirrored by the seek-time
+// model in backend/jobimport/pathoptimizer.py, keep them in sync
 #define CONFIG_ACCELERATION 100000.0 // mm/min^2, typically 1000000-8000000, divide by (60*60) to get mm/sec^2
 #define CONFIG_JUNCTION_DEVIATION 0.006 // mm
 #define CONFIG_X_ORIGIN_OFFSET -235.8   // mm, x-offset of table origin from physical home

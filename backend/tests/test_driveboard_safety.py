@@ -794,6 +794,42 @@ def test_bidirectional_corner_choice_considers_the_next_item(loop, monkeypatch):
     assert [pixels for _leadin, _span, pixels in runs] == [5, 3, 7]
 
 
+def test_bidirectional_corner_choice_considers_the_return_home(loop, monkeypatch):
+    # approach is a near tie, but the job seeks back to the origin afterwards,
+    # so ending at the image top (nearest the origin) wins: engrave bottom-up
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_leadin", 1.0)
+    monkeypatch.setitem(conf, "raster_mode", "Bidirectional")
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    dark = [(x, 0) for x in (2, 3, 4)] + [(x, 29) for x in (2, 3, 4, 5, 6)]
+
+    def make_job(head):
+        return {
+            "head": head,
+            "passes": [{"items": [0, 1], "air_assist": "off", "pxsize": 0.4}],
+            "items": [{"def": 0}, {"def": 1}],
+            "defs": [
+                {"kind": "path", "data": [[[10.0, 10.0], [90.0, 105.0]]]},
+                {
+                    "kind": "image",
+                    "pos": [100.0, 100.0],
+                    "size": [40 * 0.2, 30 * 0.4],
+                    "data": _dots_png(dark, 40, 30),
+                },
+            ],
+        }
+
+    # noreturn: only the approach counts, top-down wins
+    driveboard.job(make_job({"noreturn": True}))
+    assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [3, 5]
+
+    # returning home: the closing seek flips the choice to bottom-up
+    loop.tx_buffer.clear()
+    driveboard.job(make_job({}))
+    assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [5, 3]
+
+
 def test_job_threads_head_position_between_items(loop, monkeypatch):
     # a path ending right of the image's bottom line makes the NN ordering
     # engrave the bottom segment first
