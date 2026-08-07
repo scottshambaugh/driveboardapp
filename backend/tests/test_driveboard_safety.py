@@ -761,7 +761,8 @@ def test_bidirectional_first_pass_can_run_right_to_left(loop, monkeypatch):
 def test_bidirectional_corner_choice_considers_the_next_item(loop, monkeypatch):
     # approach alone slightly favors entering image A at its top, but the
     # next image sits above A, so exiting at the top wins overall: A engraves
-    # bottom-up (5 pixel bottom run first) to end near B
+    # bottom-up (5 pixel bottom run first) to end near B. B rides in its own
+    # pass so item-level reordering cannot pull it ahead of A
     from config import conf
 
     monkeypatch.setitem(conf, "raster_leadin", 1.0)
@@ -771,7 +772,10 @@ def test_bidirectional_corner_choice_considers_the_next_item(loop, monkeypatch):
     dark_b = [(x, 1) for x in range(20, 27)]
     job = {
         "head": {"noreturn": True},
-        "passes": [{"items": [0, 1, 2], "air_assist": "off", "pxsize": 0.4}],
+        "passes": [
+            {"items": [0, 1], "air_assist": "off", "pxsize": 0.4},
+            {"items": [2], "air_assist": "off", "pxsize": 0.4},
+        ],
         "items": [{"def": 0}, {"def": 1}, {"def": 2}],
         "defs": [
             {"kind": "path", "data": [[[10.0, 10.0], [90.0, 105.0]]]},
@@ -1110,6 +1114,80 @@ def test_job_threads_head_position_between_items(loop, monkeypatch):
     driveboard.job(job)
     runs = _raster_runs(loop.tx_buffer)
     assert [pixels for _leadin, _span, pixels in runs] == [5, 3]
+
+
+def test_pass_items_reorder_from_head_position(loop):
+    # a pass listing the far item first still burns the near item first
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0, 1], "air_assist": "off"}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "path", "data": [[[200.0, 200.0], [210.0, 200.0]]]},
+            {"kind": "path", "data": [[[5.0, 5.0], [15.0, 5.0]]]},
+        ],
+    }
+    driveboard.job(job)
+    assert _line_targets(loop.tx_buffer) == [
+        (5.0, 5.0),
+        (15.0, 5.0),
+        (200.0, 200.0),
+        (210.0, 200.0),
+    ]
+
+
+def test_pass_items_reorder_considers_the_next_pass(loop):
+    # two items equidistant from the start, the one nearer the next pass'
+    # first item goes last
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [
+            {"items": [0, 1], "air_assist": "off"},
+            {"items": [2], "air_assist": "off"},
+        ],
+        "items": [{"def": 0}, {"def": 1}, {"def": 2}],
+        "defs": [
+            {"kind": "path", "data": [[[0.0, 100.0], [0.0, 110.0]]]},
+            {"kind": "path", "data": [[[100.0, 0.0], [110.0, 0.0]]]},
+            {"kind": "path", "data": [[[0.0, 200.0], [0.0, 210.0]]]},
+        ],
+    }
+    driveboard.job(job)
+    assert _line_targets(loop.tx_buffer)[0][0] >= 100.0
+
+
+def test_relative_pass_keeps_item_order(loop):
+    # a relative pass has no known geometry, the listed order stands
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0, 1], "air_assist": "off", "relative": True}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "path", "data": [[[20.0, 20.0], [21.0, 20.0]]]},
+            {"kind": "path", "data": [[[5.0, 5.0], [6.0, 5.0]]]},
+        ],
+    }
+    driveboard.job(job)
+    assert _line_targets(loop.tx_buffer)[0] == (20.0, 20.0)
+
+
+def test_job_seek_preview_matches_item_reordering():
+    # the preview walks items in the same re-sequenced order as dispatch
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0, 1]}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "path", "data": [[[200.0, 200.0], [210.0, 200.0]]]},
+            {"kind": "path", "data": [[[5.0, 5.0], [15.0, 5.0]]]},
+        ],
+    }
+    seeks = driveboard.job_seek_preview(job)
+    assert seeks[0] == [[0.0, 0.0], [5.0, 5.0]]
+    assert seeks[1] == [[15.0, 5.0], [200.0, 200.0]]
 
 
 def test_job_dispatch_validates_before_lasing(loop):

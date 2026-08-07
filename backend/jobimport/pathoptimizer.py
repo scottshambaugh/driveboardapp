@@ -405,6 +405,11 @@ def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRA
     return seek_cost(seekrate, feedrate)(p0, d0, p1, d1)
 
 
+def stop_seek_time(length, seekrate=DEFAULT_SEEKRATE):
+    """Planner-model time (s) of a stop-to-stop seek of `length` mm."""
+    return _trapezoid_time(length, seekrate / 60.0, ACCEL, 0.0, 0.0)
+
+
 def _knn_ids(points, k):
     """For each 2D point, ids of up to k nearest other points.
 

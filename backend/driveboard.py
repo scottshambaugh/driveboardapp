@@ -2343,6 +2343,78 @@ def _item_seek_rect(jobdict, itemidx):
     return None
 
 
+def _order_pass_items(jobdict, pass_, head_pos, end_rect, seekrate):
+    """A pass' item indices re-sequenced for minimal planner-model seek time
+    from head_pos towards end_rect, each item costed as its seek extent.
+    Relative passes, an unknown head position, and items without an extent
+    keep the listed order."""
+    items = pass_.get("items") or []
+    if len(items) < 2 or pass_.get("relative") or head_pos is None:
+        return items
+    rects = []
+    for itemidx in items:
+        rect = _item_seek_rect(jobdict, itemidx)
+        if rect is None:
+            return items
+        rects.append(rect)
+    from jobimport import pathoptimizer
+
+    def leg(r1, r2):
+        # closest approach between the two extents, stop to stop
+        dx = max(r1[0] - r2[2], r2[0] - r1[2], 0.0)
+        dy = max(r1[1] - r2[3], r2[1] - r1[3], 0.0)
+        return pathoptimizer.stop_seek_time((dx * dx + dy * dy) ** 0.5, seekrate)
+
+    start_rect = [head_pos[0], head_pos[1], head_pos[0], head_pos[1]]
+    # greedy construction from the head position
+    order = []
+    left = list(range(len(items)))
+    cur = start_rect
+    while left:
+        best = min(left, key=lambda j: leg(cur, rects[j]))
+        left.remove(best)
+        order.append(best)
+        cur = rects[best]
+
+    def bound(pos):
+        if pos < 0:
+            return start_rect
+        if pos >= len(order):
+            return end_rect
+        return rects[order[pos]]
+
+    # 2-opt, legs are symmetric so a reversal only changes its boundary legs
+    improved = True
+    while improved:
+        improved = False
+        for i in range(len(order) - 1):
+            for j in range(i + 1, len(order)):
+                a, d = bound(i - 1), bound(j + 1)
+                b, c = rects[order[i]], rects[order[j]]
+                before = leg(a, b)
+                after = leg(a, c)
+                if d is not None:
+                    before += leg(c, d)
+                    after += leg(b, d)
+                if after + 1e-9 < before:
+                    order[i : j + 1] = order[i : j + 1][::-1]
+                    improved = True
+    return [items[k] for k in order]
+
+
+def _next_pass_rect(jobdict, passes, passidx):
+    """Extent the head makes for once the pass at passidx ends, None if
+    unknown. The next pass is anchored by its first listed item. The job's
+    closing seek home is deliberately left out of the model, so ordering
+    favors a first cut near the origin, a useful diagnostic that the job
+    sits where intended."""
+    if passidx + 1 < len(passes):
+        nxt = passes[passidx + 1]
+        if not nxt.get("relative") and nxt.get("items"):
+            return _item_seek_rect(jobdict, nxt["items"][0])
+    return None
+
+
 def job_seek_preview(jobdict):
     """Seek lines [[x0,y0],[x1,y1]] of a job as dispatch will order it.
 
@@ -2364,7 +2436,8 @@ def job_seek_preview(jobdict):
     for passidx, pass_ in enumerate(passes):
         seekrate = pass_.get("seekrate", conf["seekrate"])
         feedrate_ = pass_.get("feedrate", conf["feedrate"])
-        pass_items = pass_.get("items", [])
+        pass_end_rect = _next_pass_rect(jobdict, passes, passidx)
+        pass_items = _order_pass_items(jobdict, pass_, head_pos, pass_end_rect, seekrate)
         for i, itemidx in enumerate(pass_items):
             def_ = jobdict["defs"][jobdict["items"][itemidx]["def"]]
             kind = def_["kind"]
@@ -2372,12 +2445,8 @@ def job_seek_preview(jobdict):
             if not pass_.get("relative"):
                 if i + 1 < len(pass_items):
                     next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
-                elif passidx + 1 < len(passes):
-                    nxt = passes[passidx + 1]
-                    if not nxt.get("relative") and nxt.get("items"):
-                        next_rect = _item_seek_rect(jobdict, nxt["items"][0])
-                elif returns_home:
-                    next_rect = [0.0, 0.0, 0.0, 0.0]
+                else:
+                    next_rect = pass_end_rect
             if kind == "image":
                 pos, size = def_["pos"], def_["size"]
                 rect = [pos[0], pos[1], pos[0] + size[0], pos[1] + size[1]]
@@ -2409,9 +2478,6 @@ def _job_laser_passes(jobdict):
     # a job starts with the head at the offset origin, seek-optimized ordering
     # anchors on the emitted position from there (None once it is unknown)
     head_pos = [0.0, 0.0]
-    # the job's closing seek back to the origin counts towards ordering too
-    noreturn = bool(jobdict.get("head", {}).get("noreturn"))
-    returns_home = not noreturn and target_in_workarea(0.0, 0.0)
     passes = jobdict["passes"]
     for passidx, pass_ in enumerate(passes):
         requested_pxsize = float(pass_.setdefault("pxsize", conf["pxsize"]))
@@ -2434,8 +2500,9 @@ def _job_laser_passes(jobdict):
             absolute()
         else:
             relative()
-        # loop pass' items
-        pass_items = pass_["items"]
+        # loop pass' items, themselves re-sequenced for minimal seek time
+        pass_end_rect = _next_pass_rect(jobdict, passes, passidx)
+        pass_items = _order_pass_items(jobdict, pass_, head_pos, pass_end_rect, seekrate)
         for i, itemidx in enumerate(pass_items):
             item = jobdict["items"][itemidx]
             def_ = jobdict["defs"][item["def"]]
@@ -2444,12 +2511,8 @@ def _job_laser_passes(jobdict):
             if not pass_["relative"]:
                 if i + 1 < len(pass_items):
                     next_rect = _item_seek_rect(jobdict, pass_items[i + 1])
-                elif passidx + 1 < len(passes):
-                    nxt = passes[passidx + 1]
-                    if not nxt.get("relative") and nxt.get("items"):
-                        next_rect = _item_seek_rect(jobdict, nxt["items"][0])
-                elif returns_home:
-                    next_rect = [0.0, 0.0, 0.0, 0.0]
+                else:
+                    next_rect = pass_end_rect
             if kind == "image":
                 head_pos = _job_laser_image(
                     def_,
