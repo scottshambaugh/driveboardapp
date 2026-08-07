@@ -2,29 +2,24 @@
 
 ## Unreleased
 ### New Features
-- Jog moves are now clamped to the work area so the head cannot hit a limit switch. Toggled with the new `jog_soft_limits` config setting
-- Speed up loading svg files with raster images (esp ducplicates)
+- Speed up loading svg files with raster images (esp. duplicates)
 - Seek-optimized ordering (NearestNeighbor rasters and vector path sorting) now runs a 2-opt untangling pass to further improve job time
 - Bidirectional rasters now start from whichever of the four image corners is closest
 - Seek ordering now minimizes machine time under the firmware's trapezoidal speed profiles and junction speeds
-- Raster ordering also accounts for the seek onwards to the next item or pass, and for the job's final return to origin
-- Vector paths get a second seek optimization at job time, re-sequencing their polylines from the head's actual position towards what follows (fills keep their fill_mode order)
 - Closed contours are now entered at whichever point along the loop is fastest to reach
-- Closed contours can be burned as two arcs when that saves travel, eg the near sides of a row of shapes on the way out and the far sides on the way back. Arcs kept adjacent still burn as one continuous move. Toggled with the new `split_closed_paths` config setting
-- A split contour resuming on an already-cut point skips its pierce dwell, toggled with the new `skip_pierce_on_resume` config setting
-- The job view's seek lines now show the true dispatch-time ordering instead of the stored file order
-- Loading a file now shows the job as soon as it is parsed, the seek optimization finishes in the background and the view refreshes when it lands
-- Selecting an item now also selects everything sharing its pass entry (copies of the same raster, paths of the same color) and highlights that entry in the pass list
-- The seek line preview only shows items assigned to a pass, and updates when assignments change
+- Closed contours can be burned as two arcs when that saves travel, eg the near sides of a row of shapes on the way out and the far sides on the way back. Arcs kept adjacent still burn as one continuous move. Toggled with the new `split_closed_paths` config setting, and `skip_pierce_on_resume` will skip the pierce dwell on these already-cut segments
 - The items within a pass are also re-sequenced at job time for minimal seek time, on top of the per-item optimizations
+- Selecting an item now also selects everything sharing its pass entry (copies of the same raster, paths of the same color) and highlights that entry in the pass list
 - Lasso select multiple items in the job view, to bulk-assign to a pass or fill
+- Shift-click or shift-lasso adds to the current selection, ctrl-click or ctrl-lasso takes away
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out
 - Job import now runs in a worker process, so parsing a big file cannot starve the serial link
-- The firmware serial watchdog now only stops the machine when it has motion to halt, (kills the beam regardless)
+- The firmware serial watchdog now only stops the machine when it has motion to halt (kills the beam regardless)
 - Fixed importing a dba job with 3D vertices crashing during path optimization
-- The UI's seek lines now show the true post-optimizer path
+- The UI's seek lines now show the true post-optimizer path, and only includes items that have passes
+- Jog moves are now clamped to the work area so the head cannot hit a limit switch. Toggled with the new `jog_soft_limits` config setting
 
 ### Development
 - 
