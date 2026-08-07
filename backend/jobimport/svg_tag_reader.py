@@ -1,5 +1,6 @@
 __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
+import hashlib
 import logging
 import re
 
@@ -353,6 +354,9 @@ class SVGTagReader:
         raster["size"] = [width, height]
         # raster['image'] = converted_image
         raster["data"] = image
+        raster["source"] = hashlib.md5(image.encode("utf-8")).hexdigest()
+        # kept so the original survives clip cropping, same string until then
+        raster["source_data"] = image
         node["rasters"].append(raster)
 
     def defs(self, node):

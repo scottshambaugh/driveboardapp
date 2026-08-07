@@ -26,7 +26,7 @@
 //     "defs": [
 //        {"kind":"path", "data":[[[0,10,0]]]},
 //        {"kind":"fill", "data":[[[0,10,0]]], "pxsize":0.4},
-//        {"kind":"image", "data":<data in base64>, "pos":[0,0], "size":[300,200]},
+//        {"kind":"image", "data":<data in base64>, "pos":[0,0], "size":[300,200], "source":<hash of pre-clip data>},
 //     ],
 //     "stats":{"items":[{"bbox":[x1,y1,x2,y2], "len":100}], "all":{}}
 // }
@@ -39,6 +39,7 @@ jobhandler = {
   itemidx2group: [],
   image_group_rep: {},
   image_group_members: {},
+  sources: {},
   name: "",
   path_group: undefined,
   fill_group: undefined,
@@ -52,6 +53,7 @@ jobhandler = {
     this.itemidx2group = [];
     this.image_group_rep = {};
     this.image_group_members = {};
+    this.sources = {};
     this.name = "";
     jobview_clear();
     passes_clear();
@@ -140,6 +142,11 @@ jobhandler = {
           image_to_load += 1;
         }
       }
+      if ("sources" in job) {
+        for (var key in job.sources) {
+          image_to_load += 1;
+        }
+      }
       for (var i = 0; i < this.defs.length; i++) {
         var def = this.defs[i];
         if (def.kind == "image") {
@@ -153,6 +160,16 @@ jobhandler = {
             allImagesLoaded();
           };
           def.data.src = img_base64; // NOTE: this is async
+        }
+      }
+      if ("sources" in job) {
+        for (var key in job.sources) {
+          var srcimg = new Image();
+          srcimg.onload = allImagesLoaded;
+          // previews fall back to the clipped data, so fail quietly
+          srcimg.onerror = allImagesLoaded;
+          srcimg.src = job.sources[key];
+          this.sources[key] = srcimg;
         }
       }
 
@@ -187,23 +204,37 @@ jobhandler = {
     for (var i = 0; i < this.defs.length; i++) {
       var def = this.defs[i];
       if (def.kind == "image") {
-        defs_out.push({
+        var def_out = {
           kind: "image",
           pos: def.pos,
           size: def.size,
           data: def.data.src,
-        });
+        };
+        if (def.source) {
+          def_out.source = def.source;
+        }
+        defs_out.push(def_out);
       } else {
         defs_out.push(def);
       }
     }
-    return {
+    var job_out = {
       head: this.head,
       passes: this.passes,
       items: this.items,
       defs: defs_out,
       stats: this.stats,
     };
+    var sources_out = {};
+    var have_sources = false;
+    for (var key in this.sources) {
+      sources_out[key] = this.sources[key].src;
+      have_sources = true;
+    }
+    if (have_sources) {
+      job_out.sources = sources_out;
+    }
+    return job_out;
   },
 
   getJson: function (whitespace) {
@@ -231,6 +262,19 @@ jobhandler = {
   getImageThumb: function (imgitem, width, height) {
     var img = this.defs[imgitem.def];
 
+    // preview the unclipped source when the import cropped this image
+    if (img.source && img.source in this.sources) {
+      var source = this.sources[img.source];
+      if (source.width > 0 && source.height > 0) {
+        return this.renderThumb(
+          source,
+          [source.width, source.height],
+          width,
+          height,
+        );
+      }
+    }
+
     // Safety check for valid size values
     if (
       !img.size ||
@@ -248,9 +292,13 @@ jobhandler = {
       }
     }
 
+    return this.renderThumb(img.data, img.size, width, height);
+  },
+
+  renderThumb: function (image, aspect, width, height) {
     if (width <= 0) {
       // scale proportionally by height
-      var w = img.size[0] * (height / img.size[1]);
+      var w = aspect[0] * (height / aspect[1]);
       if (width < 0) {
         // use this negative value for max width
         width = Math.min(w, -width);
@@ -259,7 +307,7 @@ jobhandler = {
       }
     } else if (height <= 0) {
       // scale proportionally by width
-      var h = img.size[1] * (width / img.size[0]);
+      var h = aspect[1] * (width / aspect[0]);
       if (height < 0) {
         // use this negative value for max height
         height = Math.min(h, -height);
@@ -272,22 +320,22 @@ jobhandler = {
     width = Math.max(1, Math.round(width));
     height = Math.max(1, Math.round(height));
 
-    // cache the rendered data URL per size (lives on the def, get() ignores it)
+    // cache the rendered data URL per size (lives on the Image, get() ignores it)
     var key = width + "x" + height;
-    if (!img._thumbCache) {
-      img._thumbCache = {};
+    if (!image._thumbCache) {
+      image._thumbCache = {};
     }
-    if (!(key in img._thumbCache)) {
+    if (!(key in image._thumbCache)) {
       var canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
       canvas
         .getContext("2d", { willReadFrequently: true })
-        .drawImage(img.data, 0, 0, width, height);
-      img._thumbCache[key] = canvas.toDataURL("image/png");
+        .drawImage(image, 0, 0, width, height);
+      image._thumbCache[key] = canvas.toDataURL("image/png");
     }
     var thumb = new Image();
-    thumb.src = img._thumbCache[key];
+    thumb.src = image._thumbCache[key];
     return thumb;
   },
 
@@ -433,8 +481,11 @@ jobhandler = {
     this.image_group_members = {};
     var data2rep = {};
     this.loopItems(function (item, i) {
-      var data = jobhandler.defs[item.def].data;
-      var key = typeof data === "string" ? data : data.src;
+      var def = jobhandler.defs[item.def];
+      var key = def.source;
+      if (!key) {
+        key = typeof def.data === "string" ? def.data : def.data.src;
+      }
       if (key in data2rep) {
         var rep = data2rep[key];
         jobhandler.image_group_rep[i] = rep;

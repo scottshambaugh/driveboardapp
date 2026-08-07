@@ -216,6 +216,39 @@ def test_raster_arbitrary_transform_resampled(transform, pos, size, blank_corner
     assert px[len(px) // 2][len(px[0]) // 2][3] == 255, "the centre should be covered"
 
 
+def test_raster_clipped_copies_share_source():
+    """Copies of one image keep a common source id even when clipping crops
+    their data apart, and the original rides along once for previews."""
+    uri = _png_data_uri(MARKER)
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        '<defs><clipPath id="c1"><rect x="10" y="50" width="20" height="10"/></clipPath></defs>'
+        f'<image x="10" y="20" width="40" height="20" xlink:href="{uri}"/>'
+        f'<image x="10" y="50" width="40" height="20" clip-path="url(#c1)" xlink:href="{uri}"/>'
+        "</svg>"
+    )
+    job = jobimport.convert(svg, optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 2
+    full, clipped = defs
+    assert full["source"] == clipped["source"]
+    assert full["data"] == uri
+    assert clipped["data"] != uri
+    assert clipped["pos"] == pytest.approx([10.0, 50.0])
+    assert clipped["size"] == pytest.approx([20.0, 10.0])
+    # the original is kept once, keyed by the shared source id
+    assert job["sources"] == {full["source"]: uri}
+
+
+def test_raster_unclipped_has_no_sources():
+    # nothing was cropped, so there is no original to carry along
+    job = jobimport.convert(_raster_svg(), optimize=False)
+    assert "sources" not in job
+
+
 def test_raster_transparency_survives_a_non_png_source():
     """Reorienting a gif must not re-encode it as JPEG. JPEG carries no alpha
     channel, so flattening a transparent image into one turns every clear pixel

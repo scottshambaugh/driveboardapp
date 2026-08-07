@@ -71,6 +71,8 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
     for def_ in job.get("defs", []):
         if def_.get("kind") == "image" and def_.get("data"):
             def_["data"] = normalize_image_data(def_["data"])
+    for key, data in job.get("sources", {}).items():
+        job["sources"][key] = normalize_image_data(data)
     return job
 
 
@@ -112,16 +114,24 @@ def read_svg(svg_string, tolerance, forced_dpi=None, optimize=True):
     # TODO: reader should generate an dba job to begin with
     job = {"head": {}, "passes": [], "items": [], "defs": []}
     if "rasters" in res:
+        sources = {}
         for raster in res["rasters"]:
-            job["defs"].append(
-                {
-                    "kind": "image",
-                    "data": raster["data"],
-                    "pos": raster["pos"],
-                    "size": raster["size"],
-                }
-            )
+            def_ = {
+                "kind": "image",
+                "data": raster["data"],
+                "pos": raster["pos"],
+                "size": raster["size"],
+            }
+            if "source" in raster:
+                def_["source"] = raster["source"]
+                # keep the original data when clipping cropped this copy,
+                # so the frontend can preview the unclipped image
+                if raster["data"] != raster.get("source_data"):
+                    sources[raster["source"]] = raster["source_data"]
+            job["defs"].append(def_)
             job["items"].append({"def": len(job["defs"]) - 1})
+        if sources:
+            job["sources"] = sources
 
     if "boundarys" in res:
         if "dpi" in res:
