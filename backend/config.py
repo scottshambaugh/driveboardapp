@@ -43,6 +43,7 @@ conf = {
     "firmware": None,  # defined further down
     "tolerance": 0.01,
     "workspace": [1220, 610, 0],
+    "jog_soft_limits": True,
     "grid_mm": 100,
     "seekrate": 6000,
     "feedrate": 2000,
@@ -81,6 +82,7 @@ conf_defaults = copy.deepcopy(conf)
 
 userconfigurable = {
     "workspace": "[x,y,z] dimensions of machine's work area in mm.",
+    "jog_soft_limits": "Hold jog moves inside the work area so they cannot run into a limit switch.",
     "grid_mm": "Visual grid of UI in mm.",
     "seekrate": "Seek rate in mm/min.",
     "feedrate": "Default feed rate in mm/min.",

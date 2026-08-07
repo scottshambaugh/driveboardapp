@@ -23,6 +23,7 @@ __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 DEBUG = False
 bottle.BaseRequest.MEMFILE_MAX = 1024 * 1024 * 100  # max 100Mb files
 time_reconnect_last = 0
+jog_target_last = None  # last jog target commanded, in offset coordinates
 
 if conf["mill_mode"]:
     frontend_path = "frontend_mill"
@@ -224,16 +225,57 @@ def retract():
     return "{}"
 
 
+def _jog_target(dx, dy, dz):
+    """Absolute target for a jog step, held inside the work area.
+
+    Positions and move() targets share the same offset coordinates, in which
+    the work area spans [-offset, workspace - offset] on each axis. Z is only
+    bounded when the config gives it a non-zero work area, matching
+    target_in_workarea, since a machine with no Z axis still has to be able to
+    jog the focus.
+    """
+    global jog_target_last
+    stats = driveboard.status()
+    pos = stats.get("pos") or [0.0, 0.0, 0.0]
+    offset = stats.get("offset") or [0.0, 0.0, 0.0]
+    # An idle machine has drained both buffers, so its reported position has
+    # settled and is what the next move starts from. While it is still moving
+    # the position lags behind, and a burst of jogs has to accumulate onto the
+    # last target commanded or every step of the burst clamps against the same
+    # stale position.
+    if stats.get("ready") or jog_target_last is None:
+        base = pos
+    else:
+        base = jog_target_last
+    requested = [base[i] + d for i, d in enumerate((dx, dy, dz))]
+    target = list(requested)
+    for i in range(3):
+        if i == 2 and not conf["workspace"][2]:
+            continue
+        target[i] = max(-offset[i], min(target[i], conf["workspace"][i] - offset[i]))
+    jog_target_last = target
+    return target, target != requested
+
+
 @bottle.route("/jog/<x:float>/<y:float>/<z:float>")
 @bottle.auth_basic(checkuser)
 @checkserial
 def jog(x, y, z):
+    global jog_target_last
     driveboard.intensity(0)
     driveboard.feedrate(conf["seekrate"])
-    driveboard.relative()
-    driveboard.move(x, y, z)
+    if not conf["jog_soft_limits"]:
+        jog_target_last = None  # a relative jog leaves the tracked target behind
+        driveboard.relative()
+        driveboard.move(x, y, z)
+        driveboard.absolute()
+        return "{}"
+    # Sent absolute, so the commanded target is inside the work area by
+    # construction even if the position it was derived from was stale.
+    target, clamped = _jog_target(x, y, z)
     driveboard.absolute()
-    return "{}"
+    driveboard.move(*target)
+    return json.dumps({"clamped": clamped})
 
 
 @bottle.route("/move/<x:float>/<y:float>/<z:float>")

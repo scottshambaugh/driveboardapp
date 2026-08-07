@@ -151,19 +151,132 @@ def test_supermove_uses_machine_coords_bounds(auth_app, monkeypatch):
     assert seen.get("machine_coords") is True
 
 
-def test_jog_forces_zero_intensity(auth_app, monkeypatch):
-    monkeypatch.setattr(driveboard, "connected", lambda: True)
+# ---------------------------------------------------------------------------
+# Jogging
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def jog(auth_app, monkeypatch):
+    """Wire /jog to fakes and record what reaches the driveboard.
+
+    Yields the fake machine status the route reads, so a test can set position,
+    offset and readiness, along with the recorded calls.
+    """
+    web.jog_target_last = None
     calls = []
+    stats = {
+        "serial": True,
+        "ready": True,
+        "pos": [0.0, 0.0, 0.0],
+        "offset": [0.0, 0.0, 0.0],
+    }
+    monkeypatch.setattr(driveboard, "connected", lambda: True)
+    monkeypatch.setattr(driveboard, "status", lambda: stats)
     monkeypatch.setattr(driveboard, "intensity", lambda v: calls.append(("intensity", v)))
     monkeypatch.setattr(driveboard, "feedrate", lambda v: calls.append(("feedrate", v)))
     monkeypatch.setattr(driveboard, "relative", lambda: calls.append(("relative",)))
     monkeypatch.setattr(driveboard, "absolute", lambda: calls.append(("absolute",)))
     monkeypatch.setattr(driveboard, "move", lambda *a, **k: calls.append(("move", a)))
-    resp = auth_app.get("/jog/1/1/0")
+    monkeypatch.setitem(conf, "workspace", [1220, 610, 0])
+    monkeypatch.setitem(conf, "jog_soft_limits", True)
+    yield {"app": auth_app, "calls": calls, "stats": stats}
+    web.jog_target_last = None
+
+
+def _jog_moves(calls):
+    return [call[1] for call in calls if call[0] == "move"]
+
+
+def test_jog_forces_zero_intensity_and_absolute_targets(jog):
+    resp = jog["app"].get("/jog/1/1/0")
     assert resp.status_int == 200
-    # The beam must be commanded to 0% before any jog motion.
-    assert calls[0] == ("intensity", 0)
-    assert ("move", (1.0, 1.0, 0.0)) in calls
+    # The beam must be commanded to 0% before any jog motion, and the target
+    # goes out absolute so it cannot land outside the work area whatever the
+    # controller's own idea of where it is.
+    assert jog["calls"][0] == ("intensity", 0)
+    assert ("relative",) not in jog["calls"]
+    assert ("absolute",) in jog["calls"]
+
+
+@pytest.mark.parametrize(
+    "workspace,pos,offset,delta,expected,clamped",
+    [
+        # inside the work area a step lands exactly where it was asked to
+        ([1220, 610, 0], [100, 100, 0], [0, 0, 0], (10, -50, 0), (110, 50, 0), False),
+        # would have run into the x2/y2 switches at 1250/650
+        ([1220, 610, 0], [1200, 600, 0], [0, 0, 0], (50, 50, 0), (1220, 610, 0), True),
+        # and into the origin-side switches at -40/-45
+        ([1220, 610, 0], [10, 5, 0], [0, 0, 0], (-50, -50, 0), (0, 0, 0), True),
+        # a table offset shifts the range to [-offset, workspace-offset]
+        ([1220, 610, 0], [-190, 0, 0], [200, 0, 0], (-50, 0, 0), (-200, 0, 0), True),
+        # no z work area configured leaves the focus axis free to jog
+        ([1220, 610, 0], [0, 0, 40], [0, 0, 0], (0, 0, 50), (0, 0, 90), False),
+        ([1220, 610, 60], [0, 0, 40], [0, 0, 0], (0, 0, 50), (0, 0, 60), True),
+        # fresh power-up reports 0,0 whether or not that is true, and clamping
+        # at least keeps the jog off the origin-side switch
+        ([1220, 610, 0], [0, 0, 0], [0, 0, 0], (-10, -10, 0), (0, 0, 0), True),
+    ],
+)
+def test_jog_clamps_to_workarea(jog, monkeypatch, workspace, pos, offset, delta, expected, clamped):
+    monkeypatch.setitem(conf, "workspace", workspace)
+    jog["stats"]["pos"] = pos
+    jog["stats"]["offset"] = offset
+    resp = jog["app"].get(f"/jog/{delta[0]}/{delta[1]}/{delta[2]}")
+    assert _jog_moves(jog["calls"]) == [expected]
+    assert json.loads(resp.body)["clamped"] is clamped
+
+
+@pytest.mark.parametrize(
+    "pos,expected",
+    [
+        ([0.0, 0.0, 0.0], [(50, 0, 0), (100, 0, 0), (150, 0, 0)]),
+        ([1150.0, 0.0, 0.0], [(1200, 0, 0), (1220, 0, 0), (1220, 0, 0)]),
+    ],
+)
+def test_jog_burst_accumulates_while_moving(jog, pos, expected):
+    # The reported position lags a move in flight, so successive jogs have to
+    # build on the last target commanded rather than re-clamp against a stale
+    # position.
+    jog["stats"]["ready"] = False
+    jog["stats"]["pos"] = pos
+    for _ in range(3):
+        jog["app"].get("/jog/50/0/0")
+    assert _jog_moves(jog["calls"]) == expected
+
+
+def test_jog_reseeds_from_position_once_idle(jog):
+    jog["stats"]["ready"] = False
+    jog["app"].get("/jog/50/0/0")
+    # Machine settled somewhere else, e.g. after a job or a /move.
+    jog["stats"]["ready"] = True
+    jog["stats"]["pos"] = [300.0, 0.0, 0.0]
+    jog["app"].get("/jog/50/0/0")
+    assert _jog_moves(jog["calls"])[-1] == (350.0, 0.0, 0.0)
+
+
+def test_jog_tolerates_status_without_position(jog):
+    # A disconnect between the connection check and the status read leaves the
+    # short status dict, which must not break the route.
+    jog["stats"].clear()
+    jog["stats"].update({"serial": False, "ready": False})
+    resp = jog["app"].get("/jog/10/10/0")
+    assert resp.status_int == 200
+    assert _jog_moves(jog["calls"]) == [(10.0, 10.0, 0.0)]
+
+
+def test_jog_soft_limits_off_restores_relative_passthrough(jog, monkeypatch):
+    monkeypatch.setitem(conf, "jog_soft_limits", False)
+    jog["stats"]["ready"] = False
+    jog["stats"]["pos"] = [1200.0, 600.0, 0.0]
+    jog["app"].get("/jog/50/50/0")
+    assert ("relative",) in jog["calls"]
+    assert _jog_moves(jog["calls"]) == [(50.0, 50.0, 0.0)]
+    # Turning it back on must not build on what the relative jog left behind.
+    monkeypatch.setitem(conf, "jog_soft_limits", True)
+    jog["stats"]["pos"] = [400.0, 0.0, 0.0]
+    jog["app"].get("/jog/50/0/0")
+    assert _jog_moves(jog["calls"])[-1] == (450.0, 0.0, 0.0)
 
 
 # ---------------------------------------------------------------------------

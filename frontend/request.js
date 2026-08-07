@@ -136,7 +136,11 @@ function request_jog(x, y, z, success_msg) {
   request_get({
     url: "/jog/" + x + "/" + y + "/" + z,
     success: function (data) {
-      $().uxmessage("notice", success_msg);
+      if (data && data.clamped) {
+        $().uxmessage("warning", "Jog held at the edge of the work area.");
+      } else {
+        $().uxmessage("notice", success_msg);
+      }
     },
   });
 }
