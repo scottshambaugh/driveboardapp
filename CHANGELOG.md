@@ -14,6 +14,7 @@
 - A split contour resuming on an already-cut point skips its pierce dwell, toggled with the new `skip_pierce_on_resume` config setting
 - The job view's seek lines now show the true dispatch-time ordering instead of the stored file order
 - Loading a file now shows the job as soon as it is parsed, the seek optimization finishes in the background and the view refreshes when it lands
+- Selecting an item now also selects everything sharing its pass entry (copies of the same raster, paths of the same color) and highlights that entry in the pass list
 
 ### Bug Fixes
 - Fixed loading a large file tripping the controller's serial watchdog, which turned the status red and left homing as the only way out

@@ -517,7 +517,7 @@ jobhandler = {
   },
 
   selectItem: function (idx) {
-    var idxs = this.groupMembers(idx);
+    var idxs = this.matchingItems(idx);
     var groups = [];
     for (var i = 0; i < idxs.length; i++) {
       var group = this.itemidx2group[idxs[i]];
@@ -526,15 +526,55 @@ jobhandler = {
         groups.push(group);
       }
     }
+    this.highlightPassEntries(idxs);
     jobview_item_selected = idx;
     setTimeout(function () {
       for (var i = 0; i < groups.length; i++) {
         groups[i].selected = false;
       }
+      jobhandler.clearPassHighlights();
       jobview_item_selected = undefined;
       paper.view.draw();
     }, 1500);
     paper.view.draw();
+  },
+
+  matchingItems: function (idx) {
+    // selection extends to everything sharing a pass entry, image items
+    // with the same raster and path or fill items with the same color
+    var item = this.items[idx];
+    var kind = this.defs[item.def].kind;
+    if (kind === "image") {
+      return this.groupMembers(this.groupRep(idx));
+    }
+    var idxs = [];
+    this.loopItems(function (other, i) {
+      if (other.color === item.color) {
+        idxs.push(i);
+      }
+    }, kind);
+    return idxs;
+  },
+
+  highlightPassEntries: function (idxs) {
+    // visible pass entries are the assigned ones
+    var reps = [];
+    for (var i = 0; i < idxs.length; i++) {
+      reps.push(this.groupRep(idxs[i]));
+    }
+    $("div.pass_colors")
+      .children("div")
+      .filter(":visible")
+      .each(function () {
+        var idx = parseFloat($(this).find(".idxmem").text());
+        if (reps.indexOf(idx) != -1) {
+          $(this).addClass("pass_entry_highlight");
+        }
+      });
+  },
+
+  clearPassHighlights: function () {
+    $(".pass_entry_highlight").removeClass("pass_entry_highlight");
   },
 
   // passes and colors //////////////////////////

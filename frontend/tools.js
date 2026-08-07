@@ -15,13 +15,20 @@ function tools_tselect_init() {
       tolerance: 10,
     };
     var hitResult = jobview_feedLayer.hitTest(event.point, hitOptions);
+    jobview_deselect_all();
+    jobhandler.clearPassHighlights();
     if (hitResult) {
-      jobview_deselect_all();
-      path = hitResult.item;
-      path.parent.selected = !path.parent.selected;
-      jobview_item_selected = path.parent.itemidx;
+      var idx = hitResult.item.parent.itemidx;
+      var idxs = jobhandler.matchingItems(idx);
+      for (var i = 0; i < idxs.length; i++) {
+        var group = jobhandler.itemidx2group[idxs[i]];
+        if (group) {
+          group.selected = true;
+        }
+      }
+      jobhandler.highlightPassEntries(idxs);
+      jobview_item_selected = idx;
     } else {
-      jobview_deselect_all();
       jobview_item_selected = undefined;
     }
   };
