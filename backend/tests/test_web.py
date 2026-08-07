@@ -6,7 +6,10 @@ status codes, and the work-area safety wiring - not driveboard internals (those
 are covered in test_driveboard_safety.py).
 """
 
+import gzip
+import io
 import json
+import os
 
 import driveboard
 import pytest
@@ -402,3 +405,65 @@ def test_delete_preset_still_works(auth_app, presets_dir):
     auth_app.get("/save_preset/cut/2000/80/0.2/0.4")
     auth_app.get("/save_preset/cut/0/0/0/0")
     assert _presets_on_disk(presets_dir) == {}
+
+
+# ---------------------------------------------------------------------------
+# /load upload forms
+# ---------------------------------------------------------------------------
+
+MINIMAL_DBA = json.dumps(
+    {
+        "head": {},
+        "passes": [],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[0, 0, 0], [10, 0, 0]]]}],
+    }
+)
+
+
+def _stored_job(isolated_config, name):
+    path = os.path.join(isolated_config.conf["stordir"], name + ".dba")
+    with open(path) as fp:
+        return json.load(fp)
+
+
+def test_load_accepts_inline_job_field(auth_app, isolated_config):
+    body = {"load_request": json.dumps({"job": MINIMAL_DBA, "name": "inline", "optimize": False})}
+    resp = auth_app.post("/load", body)
+    assert json.loads(resp.body) == "inline"
+    assert _stored_job(isolated_config, "inline")["defs"][0]["kind"] == "path"
+
+
+def test_load_accepts_gzip_file_upload(auth_app, isolated_config):
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+        gz.write(MINIMAL_DBA.encode("utf-8"))
+    body = {"load_request": json.dumps({"job": "upload", "name": "gz", "optimize": False})}
+    resp = auth_app.post("/load", body, upload_files=[("job", "upload.gz", buf.getvalue())])
+    assert json.loads(resp.body) == "gz"
+    assert _stored_job(isolated_config, "gz")["defs"][0]["kind"] == "path"
+
+
+def test_load_accepts_raw_file_upload(auth_app, isolated_config):
+    body = {"load_request": json.dumps({"job": "upload_raw", "name": "raw", "optimize": False})}
+    resp = auth_app.post(
+        "/load", body, upload_files=[("job", "upload.dba", MINIMAL_DBA.encode("utf-8"))]
+    )
+    assert json.loads(resp.body) == "raw"
+    assert _stored_job(isolated_config, "raw")["defs"][0]["kind"] == "path"
+
+
+def test_load_raw_file_upload_sniffs_svg(auth_app, isolated_config, testjobs_dir):
+    # type detection has to work on the uploaded bytes, not just on a str
+    with open(os.path.join(testjobs_dir, "full-bed.svg"), "rb") as fp:
+        svg = fp.read()
+    body = {"load_request": json.dumps({"job": "upload_raw", "name": "svgraw", "optimize": False})}
+    resp = auth_app.post("/load", body, upload_files=[("job", "full-bed.svg", svg)])
+    assert json.loads(resp.body) == "svgraw"
+    assert _stored_job(isolated_config, "svgraw")["defs"]
+
+
+def test_load_upload_marker_without_a_file_is_rejected(auth_app, isolated_config):
+    body = {"load_request": json.dumps({"job": "upload_raw", "name": "nofile"})}
+    resp = auth_app.post("/load", body, expect_errors=True)
+    assert resp.status_int == 400

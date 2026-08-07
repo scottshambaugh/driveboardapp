@@ -43,15 +43,99 @@ function request_get(args) {
 function request_post(args) {
   // args items: url, data, success, error, complete
 
-  // special case load job, use file upload with compression
-  var formData = new FormData();
-  if (args.url == "/load" && app_config_main.enable_gzip) {
-    job = new File([pako.gzip(args.data.job)], "upload.gz");
-    formData.append("job", job);
-    args.data.job = "upload";
+  // special case load job: the job travels as its own file part so the
+  // megabytes never go through JSON.stringify
+  if (args.url == "/load") {
+    request_load_part(args.data.job, function (part) {
+      var formData = new FormData();
+      formData.append("job", part.file);
+      args.data.job = part.marker;
+      formData.append("load_request", JSON.stringify(args.data));
+      request_post_send(args, formData);
+    });
+    return;
   }
+  var formData = new FormData();
   formData.append("load_request", JSON.stringify(args.data));
+  request_post_send(args, formData);
+}
 
+function request_use_gzip() {
+  // gzip trades about two seconds of cpu per 40MB against a third fewer
+  // bytes, which only pays for itself under roughly 50Mbit, so it is worth
+  // it on a phone link and a waste on anything local or on a lan
+  if (!app_config_main.enable_gzip) {
+    return false;
+  }
+  var host = window.location.hostname;
+  if (
+    host == "" ||
+    host == "localhost" ||
+    host == "127.0.0.1" ||
+    host == "::1" ||
+    host == "[::1]"
+  ) {
+    return false;
+  }
+  var net =
+    navigator.connection ||
+    navigator.mozConnection ||
+    navigator.webkitConnection;
+  if (!net || !net.effectiveType) {
+    return false;
+  }
+  return ["slow-2g", "2g", "3g"].indexOf(net.effectiveType) != -1;
+}
+
+function request_load_part(job, done) {
+  // job is either a File the user picked or a job string
+  if (!request_use_gzip()) {
+    var raw = job instanceof File ? job : new File([job], "upload.dba");
+    done({ file: raw, marker: "upload_raw" });
+    return;
+  }
+  request_gzip(job, function (bytes) {
+    done({ file: new File([bytes], "upload.gz"), marker: "upload" });
+  });
+}
+
+function request_gzip(job, done) {
+  // gzip in a worker so a big job does not freeze the interface, and at
+  // level 1 because the extra levels cost far more time than bytes
+  function on_main_thread() {
+    if (job instanceof File) {
+      var fr = new FileReader();
+      fr.onload = function (e) {
+        done(pako.gzip(new Uint8Array(e.target.result), { level: 1 }));
+      };
+      fr.readAsArrayBuffer(job);
+    } else {
+      done(pako.gzip(job, { level: 1 }));
+    }
+  }
+  if (typeof Worker === "undefined") {
+    on_main_thread();
+    return;
+  }
+  var worker;
+  try {
+    worker = new Worker("js/gzip_worker.js");
+  } catch (e) {
+    on_main_thread();
+    return;
+  }
+  worker.onmessage = function (e) {
+    worker.terminate();
+    done(e.data);
+  };
+  worker.onerror = function () {
+    worker.terminate();
+    on_main_thread();
+  };
+  worker.postMessage(job);
+}
+
+function request_post_send(args, formData) {
   $.ajax({
     type: "POST",
     url: args.url,

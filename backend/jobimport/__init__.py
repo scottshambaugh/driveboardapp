@@ -211,8 +211,10 @@ def get_type(job):
         type_ = "dba"
     elif type(job) in [str, bytes]:
         if type(job) is bytes:
-            job = job.decode("utf-8")
-        jobheader = job[:1024].lstrip()
+            # only the header is inspected, so a whole-job decode is wasted
+            jobheader = job[:1024].decode("utf-8", "ignore").lstrip()
+        else:
+            jobheader = job[:1024].lstrip()
         if jobheader and jobheader[0] == "{":
             type_ = "dba"
         elif "<?xml" in jobheader and "<svg" in jobheader:

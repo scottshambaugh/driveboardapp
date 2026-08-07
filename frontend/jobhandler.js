@@ -124,7 +124,19 @@ jobhandler = {
       // group identical images while data is still base64
       this.groupIdenticalImages();
 
-      var image_to_load = -1;
+      // one Image per distinct raster, so a job that places the same picture
+      // many times decodes and holds it once instead of once per placement
+      var data2img = {};
+      var distinct_data = [];
+      for (var i = 0; i < this.defs.length; i++) {
+        var def = this.defs[i];
+        if (def.kind == "image" && !(def.data in data2img)) {
+          data2img[def.data] = null;
+          distinct_data.push(def.data);
+        }
+      }
+
+      var image_to_load = distinct_data.length - 1;
       function allImagesLoaded() {
         if (image_to_load <= 0) {
           // passes, show in gui
@@ -135,31 +147,30 @@ jobhandler = {
         }
       }
 
-      // convert base64 image data to Image objects
-      for (var i = 0; i < this.defs.length; i++) {
-        var def = this.defs[i];
-        if (def.kind == "image") {
-          image_to_load += 1;
-        }
-      }
       if ("sources" in job) {
         for (var key in job.sources) {
           image_to_load += 1;
         }
       }
+
+      // convert base64 image data to Image objects
+      for (var i = 0; i < distinct_data.length; i++) {
+        var img_base64 = distinct_data[i];
+        var img = new Image();
+        img.onload = allImagesLoaded;
+        img.onerror = function () {
+          // a raster the browser cannot decode still has to release the
+          // counter, otherwise the job never finishes loading at all
+          $().uxmessage("warning", "An image could not be displayed.");
+          allImagesLoaded();
+        };
+        data2img[img_base64] = img;
+        img.src = img_base64; // NOTE: this is async
+      }
       for (var i = 0; i < this.defs.length; i++) {
         var def = this.defs[i];
         if (def.kind == "image") {
-          var img_base64 = def.data;
-          def.data = new Image();
-          def.data.onload = allImagesLoaded;
-          def.data.onerror = function () {
-            // a raster the browser cannot decode still has to release the
-            // counter, otherwise the job never finishes loading at all
-            $().uxmessage("warning", "An image could not be displayed.");
-            allImagesLoaded();
-          };
-          def.data.src = img_base64; // NOTE: this is async
+          def.data = data2img[def.data];
         }
       }
       if ("sources" in job) {

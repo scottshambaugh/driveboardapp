@@ -18,12 +18,14 @@ $(document).ready(function () {
       browser_supports_file_api = false;
     }
 
-    // setup onload handler
+    // name the job before sending, the send is no longer deferred by a read
+    import_name = import_basename($("#open_file_fld").val());
+
+    // the file goes to the backend as it is on disk, reading it into a
+    // string here only to hand it straight back out is pure overhead
     if (browser_supports_file_api) {
       if (input.files[0]) {
-        var fr = new FileReader();
-        fr.onload = sendToBackend;
-        fr.readAsText(input.files[0]);
+        sendToBackend(input.files[0]);
       } else {
         $().uxmessage("error", "No file was selected.");
       }
@@ -33,10 +35,6 @@ $(document).ready(function () {
     }
 
     // reset file input form field so change event also triggers again
-    var file_fld = $("#open_file_fld").val();
-    file_fld = file_fld.slice(file_fld.lastIndexOf("\\") + 1) || file_fld; // drop unix path
-    file_fld = file_fld.slice(file_fld.lastIndexOf("/") + 1) || file_fld; // drop windows path
-    import_name = file_fld.slice(0, file_fld.lastIndexOf(".")) || file_fld; // drop extension
     $("#open_file_fld").val("");
   });
 
@@ -56,12 +54,11 @@ $(document).ready(function () {
       browser_supports_file_api = false;
     }
 
-    // setup onload handler
+    import_name = import_basename($("#open_align_file_fld").val());
+
     if (browser_supports_file_api) {
       if (input.files[0]) {
-        var fr = new FileReader();
-        fr.onload = sendToBackendWithAlignment;
-        fr.readAsText(input.files[0]);
+        sendToBackendWithAlignment(input.files[0]);
       } else {
         $().uxmessage("error", "No file was selected.");
       }
@@ -71,20 +68,23 @@ $(document).ready(function () {
     }
 
     // reset file input form field so change event also triggers again
-    var file_fld = $("#open_align_file_fld").val();
-    file_fld = file_fld.slice(file_fld.lastIndexOf("\\") + 1) || file_fld; // drop unix path
-    file_fld = file_fld.slice(file_fld.lastIndexOf("/") + 1) || file_fld; // drop windows path
-    import_name = file_fld.slice(0, file_fld.lastIndexOf(".")) || file_fld; // drop extension
     $("#open_align_file_fld").val("");
   });
 
-  function sendToBackend(e) {
-    var job = e.target.result;
+  function import_basename(file_fld) {
+    // job name from a file input value, without path or extension
+    file_fld = file_fld.slice(file_fld.lastIndexOf("\\") + 1) || file_fld; // drop windows path
+    file_fld = file_fld.slice(file_fld.lastIndexOf("/") + 1) || file_fld; // drop unix path
+    return file_fld.slice(0, file_fld.lastIndexOf(".")) || file_fld; // drop extension
+  }
+
+  function sendToBackend(job) {
+    // job is the picked File, uploaded as is
 
     // notify parsing started
     $().uxmessage("notice", "parsing " + import_name + " ...");
     // large file note
-    if (job.length > 102400) {
+    if (job.size > 102400) {
       $().uxmessage("notice", "Big file! May take a few minutes.");
     }
 
@@ -108,13 +108,13 @@ $(document).ready(function () {
     });
   }
 
-  function sendToBackendWithAlignment(e) {
-    var job = e.target.result;
+  function sendToBackendWithAlignment(job) {
+    // job is the picked File, uploaded as is
 
     // notify parsing started
     $().uxmessage("notice", "parsing " + import_name + " ...");
     // large file note
-    if (job.length > 102400) {
+    if (job.size > 102400) {
       $().uxmessage("notice", "Big file! May take a few minutes.");
     }
 

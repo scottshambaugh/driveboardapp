@@ -573,7 +573,8 @@ def load():
 
     Args:
         (Args come in through the POST request.)
-        job: Parsed dba or job string (dba, svg, dxf, or gcode).
+        job: Parsed dba or job string (dba, svg, dxf, or gcode), or the marker
+             "upload" / "upload_raw" when it comes as a separate file part.
         name: name of the job (string)
         optimize: flag whether to optimize (bool)
         overwrite: flag whether to overwite file if present (bool)
@@ -581,9 +582,14 @@ def load():
     """
     load_request = json.loads(bottle.request.forms.get("load_request"))
     job = load_request.get("job")  # always a string
-    if job == "upload":  # data was passed as gzip file upload
+    if job in ("upload", "upload_raw"):  # data was passed as a file upload
         upload = bottle.request.files.get("job", None)
-        job = gzip.GzipFile(fileobj=upload.file, mode="rb").read()
+        if upload is None:
+            raise bottle.HTTPResponse("Invalid request data.", 400)
+        if job == "upload":  # gzip compressed
+            job = gzip.GzipFile(fileobj=upload.file, mode="rb").read()
+        else:  # uncompressed, the browser streams the file as it is on disk
+            job = upload.file.read()
 
     name = load_request.get("name")
     # optimize defaults
