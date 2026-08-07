@@ -575,7 +575,18 @@ def improve_seek_order(
         i, rev = tour[t]
         return neg(entry_dirs[i]) if rev else exit_dirs[i]
 
-    cost = seek_cost(seekrate, feedrate)
+    raw_cost = seek_cost(seekrate, feedrate)
+
+    # the planner cost only sees the displacement and the two directions, and
+    # the sweeps revisit the same few displacements over and over (raster
+    # scanlines especially repeat them line for line), so each unique one is
+    # computed once. Local to the call, so the cache dies with it
+    @functools.cache
+    def _shift_cost(dx, dy, d0, d1):
+        return raw_cost((0.0, 0.0), d0, (dx, dy), d1)
+
+    def cost(p0, d0, p1, d1):
+        return _shift_cost(p1[0] - p0[0], p1[1] - p0[1], d0, d1)
 
     def end_cost(p, d):
         towards = [
@@ -613,6 +624,10 @@ def improve_seek_order(
         # optionally flipped. Escapes plateaus 2-opt reversals cannot cross.
         seg = tour[i][0]
         rem = link(i - 1, i + 1) - link(i - 1, i) - link(i, i + 1)
+        ways = (
+            (False, entry(i), entry_dir(i), exit_(i), exit_dir(i)),
+            (True, exit_(i), neg(exit_dir(i)), entry(i), neg(entry_dir(i))),
+        )
         tried = set()
         for e in nbrs[2 * seg] + nbrs[2 * seg + 1]:
             j = pos.get(e // 2)
@@ -621,13 +636,7 @@ def improve_seek_order(
             tried.add(j)
             base = link(j, j + 1)
             pj, dj = exit_state(j)
-            for flip in (False, True):
-                if flip:
-                    e_pt, e_dir = exit_(i), neg(exit_dir(i))
-                    x_pt, x_dir = entry(i), neg(entry_dir(i))
-                else:
-                    e_pt, e_dir = entry(i), entry_dir(i)
-                    x_pt, x_dir = exit_(i), exit_dir(i)
+            for flip, e_pt, e_dir, x_pt, x_dir in ways:
                 ins = cost(pj, dj, e_pt, e_dir) - base
                 if j + 1 >= n:
                     ins += end_cost(x_pt, x_dir) if end_rect is not None else 0.0
@@ -666,7 +675,10 @@ def improve_seek_order(
                 prev = exit_(i - 1)
                 prevdir = exit_dir(i - 1)
                 cand = nbrs[2 * previdx if prevrev else 2 * previdx + 1]
-            t_prev_entry = cost(prev, prevdir, entry(i), entry_dir(i))
+            ei = entry(i)
+            edi = entry_dir(i)
+            nedi = neg(edi)
+            t_prev_entry = cost(prev, prevdir, ei, edi)
             applied = False
             tried = set()
             for e in cand:
@@ -676,13 +688,15 @@ def improve_seek_order(
                 tried.add(j)
                 # reversal makes segment j's exit the new stretch entry and
                 # segment i's entry the new stretch exit, with flipped dirs
-                delta = cost(prev, prevdir, exit_(j), neg(exit_dir(j))) - t_prev_entry
+                xj = exit_(j)
+                xdj = exit_dir(j)
+                delta = cost(prev, prevdir, xj, neg(xdj)) - t_prev_entry
                 if j + 1 < n:
-                    delta += cost(entry(i), neg(entry_dir(i)), entry(j + 1), entry_dir(j + 1))
-                    delta -= cost(exit_(j), exit_dir(j), entry(j + 1), entry_dir(j + 1))
+                    delta += cost(ei, nedi, entry(j + 1), entry_dir(j + 1))
+                    delta -= cost(xj, xdj, entry(j + 1), entry_dir(j + 1))
                 elif end_rect is not None:
-                    delta += end_cost(entry(i), neg(entry_dir(i)))
-                    delta -= end_cost(exit_(j), exit_dir(j))
+                    delta += end_cost(ei, nedi)
+                    delta -= end_cost(xj, xdj)
                 if delta < -1e-9:
                     wake((i - 1, i, i + 1, j, j + 1))
                     tour[i : j + 1] = [[s, not r] for s, r in reversed(tour[i : j + 1])]
