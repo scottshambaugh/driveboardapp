@@ -605,6 +605,8 @@ function passes_update_handler() {
     }
     // bounds
     jobhandler.renderBounds();
+    // seek preview follows the new assignments
+    jobhandler.renderSeeks();
     jobhandler.draw();
   }, 2000);
 }

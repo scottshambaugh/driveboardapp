@@ -44,6 +44,7 @@ jobhandler = {
   path_group: undefined,
   fill_group: undefined,
   image_group: undefined,
+  seek_preview_seq: 0,
 
   clear: function () {
     this.passes = [];
@@ -443,6 +444,20 @@ jobhandler = {
   renderSeeks: function () {
     // seek lines as dispatch will order the job, drawn when the backend
     // preview arrives. Images travel as their extent only.
+    // only items assigned to a pass run, so only they are previewed
+    var passes = [];
+    for (var i = 0; i < this.passes.length; i++) {
+      var pass = this.passes[i];
+      if (pass.items && pass.items.length > 0) {
+        passes.push(pass);
+      }
+    }
+    var seq = ++jobhandler.seek_preview_seq;
+    if (passes.length === 0) {
+      jobview_seekLayer.removeChildren();
+      paper.view.draw();
+      return;
+    }
     var slim_defs = [];
     for (var i = 0; i < this.defs.length; i++) {
       var def = this.defs[i];
@@ -451,21 +466,6 @@ jobhandler = {
       } else {
         slim_defs.push({ kind: def.kind, data: def.data });
       }
-    }
-    var passes = this.passes;
-    if (
-      !passes ||
-      passes.length === 0 ||
-      !passes.some(function (p) {
-        return p.items.length > 0;
-      })
-    ) {
-      // nothing assigned yet, preview all items in listed order
-      var all_items = [];
-      for (var i = 0; i < this.items.length; i++) {
-        all_items.push(i);
-      }
-      passes = [{ items: all_items }];
     }
     $.ajax({
       type: "POST",
@@ -476,6 +476,10 @@ jobhandler = {
       }),
       dataType: "json",
       success: function (result) {
+        // a slower response from an older request must not win
+        if (seq !== jobhandler.seek_preview_seq) {
+          return;
+        }
         jobview_seekLayer.activate();
         jobview_seekLayer.removeChildren();
         var seeks = result.seeks;
