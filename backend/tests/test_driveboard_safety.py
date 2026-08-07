@@ -640,7 +640,9 @@ def _raster_runs(buf):
     return runs
 
 
-def _emit_image(loop, monkeypatch, dark, raster_mode, width=40, height=3, pxsize=0.4):
+def _emit_image(
+    loop, monkeypatch, dark, raster_mode, width=40, height=3, pxsize=0.4, head_pos=None
+):
     """Engrave a one-image job, returning (_raster_runs(...), pxsize_x).
 
     The image is sized so it maps one-to-one onto the raster grid, leaving the
@@ -657,7 +659,7 @@ def _emit_image(loop, monkeypatch, dark, raster_mode, width=40, height=3, pxsize
         "data": _dots_png(dark, width, height),
     }
     pass_ = {"air_assist": "off", "pxsize": pxsize}
-    driveboard._job_laser_image(def_, pass_, pxsize_x, pxsize_y, 6000.0, 2000.0, 25.5)
+    driveboard._job_laser_image(def_, pass_, pxsize_x, pxsize_y, 6000.0, 2000.0, 25.5, head_pos)
     return _raster_runs(loop.tx_buffer), pxsize_x
 
 
@@ -693,6 +695,55 @@ def test_raster_lead_in_is_the_configured_length(loop, monkeypatch, raster_mode)
     runs, _pxsize_x = _emit_image(loop, monkeypatch, dark, raster_mode)
     assert len(runs) == 1
     assert runs[0][0] == pytest.approx(conf["raster_leadin"], abs=1e-6)
+
+
+def test_nn_ordering_starts_from_the_given_head_position(loop, monkeypatch):
+    from config import conf
+
+    # short lead-ins keep the seek entry points near the segment edges,
+    # making the nearest segment unambiguous
+    monkeypatch.setitem(conf, "raster_leadin", 1.0)
+    # a 3 pixel run top-left and a 5 pixel run bottom-right
+    dark = [(x, 0) for x in (2, 3, 4)] + [(x, 2) for x in (30, 31, 32, 33, 34)]
+
+    # no head position: ordering anchors at the image corner, top-left first
+    runs, _pxsize_x = _emit_image(loop, monkeypatch, dark, "NearestNeighbor")
+    assert [pixels for _leadin, _span, pixels in runs] == [3, 5]
+
+    # head arriving right of the bottom line: bottom-right first
+    loop.tx_buffer.clear()
+    runs, _pxsize_x = _emit_image(
+        loop, monkeypatch, dark, "NearestNeighbor", head_pos=[110.0, 101.1]
+    )
+    assert [pixels for _leadin, _span, pixels in runs] == [5, 3]
+
+
+def test_job_threads_head_position_between_items(loop, monkeypatch):
+    # a path ending right of the image's bottom line makes the NN ordering
+    # engrave the bottom segment first
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_leadin", 1.0)
+    monkeypatch.setitem(conf, "raster_mode", "NearestNeighbor")
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    dark = [(x, 0) for x in (2, 3, 4)] + [(x, 2) for x in (30, 31, 32, 33, 34)]
+    job = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0, 1], "air_assist": "off", "pxsize": 0.4}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "path", "data": [[[10.0, 10.0], [110.0, 101.1]]]},
+            {
+                "kind": "image",
+                "pos": [100.0, 100.0],
+                "size": [40 * 0.2, 3 * 0.4],
+                "data": _dots_png(dark, 40, 3),
+            },
+        ],
+    }
+    driveboard.job(job)
+    runs = _raster_runs(loop.tx_buffer)
+    assert [pixels for _leadin, _span, pixels in runs] == [5, 3]
 
 
 def test_job_dispatch_validates_before_lasing(loop):

@@ -89,3 +89,74 @@ def test_sort_by_seektime_orders_by_proximity():
     pathoptimizer.sort_by_seektime(path)
     assert path[0] == [[1.0, 1.0], [40.0, 40.0]]
     assert path[1] == [[50.0, 50.0], [100.0, 100.0]]
+
+
+def _seek_length(starts, ends, tour, start):
+    import math
+
+    total = 0.0
+    pos = start
+    for i, rev in tour:
+        entry, exit_ = (ends[i], starts[i]) if rev else (starts[i], ends[i])
+        total += math.dist(pos, entry)
+        pos = exit_
+    return total
+
+
+def test_improve_seek_order_flips_a_backwards_segment():
+    starts = [[0.0, 0.0], [20.0, 0.0]]
+    ends = [[10.0, 0.0], [11.0, 0.0]]
+    tour = [[0, False], [1, False]]
+    pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0])
+    # entering the second segment at x=11 beats seeking out to x=20
+    assert tour == [[0, False], [1, True]]
+
+
+def test_improve_seek_order_untangles_a_crossing():
+    # two columns of segments, interleaved so the seeks zigzag between them
+    starts = [[0.0, 0.0], [100.0, 0.0], [0.0, 1.0], [100.0, 1.0]]
+    ends = [[10.0, 0.0], [110.0, 0.0], [10.0, 1.0], [110.0, 1.0]]
+    tour = [[0, False], [1, False], [2, False], [3, False]]
+    before = _seek_length(starts, ends, tour, [0.0, 0.0])
+    pathoptimizer.improve_seek_order(starts, ends, tour, [0.0, 0.0])
+    after = _seek_length(starts, ends, tour, [0.0, 0.0])
+    assert after < before
+    assert sorted(i for i, _rev in tour) == [0, 1, 2, 3]
+    # both left column segments come before the right column
+    order = [i for i, _rev in tour]
+    assert order.index(2) < order.index(1)
+    assert order.index(2) < order.index(3)
+
+
+def test_improve_seek_order_never_worsens_random_tours():
+    import math
+    import random
+
+    rng = random.Random(42)
+    for _trial in range(10):
+        n = rng.randrange(2, 40)
+        starts = [[rng.uniform(0, 100), rng.uniform(0, 100)] for _ in range(n)]
+        ends = [[s[0] + rng.uniform(-5, 5), s[1] + rng.uniform(-5, 5)] for s in starts]
+        tour = [[i, bool(rng.getrandbits(1))] for i in rng.sample(range(n), n)]
+        start = [rng.uniform(0, 100), rng.uniform(0, 100)]
+        before = _seek_length(starts, ends, tour, start)
+        pathoptimizer.improve_seek_order(starts, ends, tour, start)
+        after = _seek_length(starts, ends, tour, start)
+        assert after <= before + 1e-9
+        assert sorted(i for i, _rev in tour) == list(range(n))
+        assert math.isfinite(after)
+
+
+def test_knn_ids_matches_brute_force():
+    import random
+
+    rng = random.Random(7)
+    points = [[rng.uniform(0, 50), rng.uniform(0, 50)] for _ in range(60)]
+    k = 5
+    got = pathoptimizer._knn_ids(points, k)
+    for i, p in enumerate(points):
+        want = sorted(
+            (j for j in range(len(points)) if j != i),
+            key=lambda j: (p[0] - points[j][0]) ** 2 + (p[1] - points[j][1]) ** 2,
+        )[:k]
+        assert got[i] == want

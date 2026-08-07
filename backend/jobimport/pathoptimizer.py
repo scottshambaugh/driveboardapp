@@ -15,6 +15,8 @@ __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 
 
 import logging
+import math
+import time
 
 from . import kdtree
 
@@ -175,6 +177,127 @@ def simplify_all(path, tolerance2):
             log.info("INFO: polylines optimized by " + str(int(diffpct)) + "%")
 
 
+def _knn_ids(points, k):
+    """For each 2D point, ids of up to k nearest other points.
+
+    Grid bucketed, so near-linear in the number of points. The lists are
+    candidate sets for local search, exactness is not required.
+    """
+    n = len(points)
+    if n <= k + 1:
+        out = []
+        for i in range(n):
+            ds = sorted((d2(points[i], points[j]), j) for j in range(n) if j != i)
+            out.append([j for _dist, j in ds])
+        return out
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    span = max(max(xs) - min(xs), max(ys) - min(ys), 1e-9)
+    cell = span / math.sqrt(n)
+    grid = {}
+    for i, p in enumerate(points):
+        grid.setdefault((int(p[0] // cell), int(p[1] // cell)), []).append(i)
+    max_ring = int(span / cell) + 2
+    out = []
+    for i, p in enumerate(points):
+        cx, cy = int(p[0] // cell), int(p[1] // cell)
+        best = []  # (distance squared, id)
+        for ring in range(max_ring + 1):
+            # cells beyond this ring hold no point closer than (ring-1)*cell
+            if ring > 0 and len(best) >= k and best[k - 1][0] <= ((ring - 1) * cell) ** 2:
+                break
+            if ring == 0:
+                cells = ((cx, cy),)
+            else:
+                xr = range(cx - ring, cx + ring + 1)
+                cells = (
+                    [(x, cy - ring) for x in xr]
+                    + [(x, cy + ring) for x in xr]
+                    + [(cx - ring, y) for y in range(cy - ring + 1, cy + ring)]
+                    + [(cx + ring, y) for y in range(cy - ring + 1, cy + ring)]
+                )
+            grown = False
+            for key in cells:
+                for j in grid.get(key, ()):
+                    if j != i:
+                        best.append((d2(p, points[j]), j))
+                        grown = True
+            if grown:
+                best.sort()
+                del best[k:]
+        out.append([j for _dist, j in best])
+    return out
+
+
+def improve_seek_order(starts, ends, tour, start, k=96, max_passes=50, time_budget=3.0):
+    """2-opt improvement of an open seek tour over reversible segments.
+
+    starts, ends ... per-segment endpoint coords (entry/exit when not reversed)
+    tour         ... visit order as [seg_index, reversed] pairs, improved in place
+    start        ... head position before the first seek
+
+    Reversing a stretch of the tour flips each segment in it, which leaves
+    the seeks inside the stretch unchanged and only rewires its two boundary
+    seeks. Candidate stretches come from k-nearest endpoint lists, so a pass
+    is near-linear. Greedy nearest-neighbor tours lose most of their excess
+    seek travel to a handful of such untangling moves. Raster scanline
+    endpoints stack in near-identical columns, so the candidate lists need a
+    generous k to contain the useful reconnections.
+    """
+    n = len(tour)
+    if n < 2:
+        return
+    dist = math.dist
+    points = []
+    for i in range(len(starts)):
+        points.append(starts[i][:2])
+        points.append(ends[i][:2])
+    nbrs = _knn_ids(points, k)
+    start = start[:2]
+    start_nbrs = sorted(range(len(points)), key=lambda j: d2(start, points[j]))[:k]
+    pos = {}
+    for t in range(n):
+        pos[tour[t][0]] = t
+
+    def entry(t):
+        i, rev = tour[t]
+        return points[2 * i + 1] if rev else points[2 * i]
+
+    def exit_(t):
+        i, rev = tour[t]
+        return points[2 * i] if rev else points[2 * i + 1]
+
+    deadline = time.monotonic() + time_budget
+    for _pass in range(max_passes):
+        improved = False
+        for i in range(n):
+            if time.monotonic() > deadline:
+                return
+            if i == 0:
+                prev = start
+                cand = start_nbrs
+            else:
+                previdx, prevrev = tour[i - 1]
+                prev = exit_(i - 1)
+                cand = nbrs[2 * previdx if prevrev else 2 * previdx + 1]
+            d_prev_entry = dist(prev, entry(i))
+            for e in cand:
+                j = pos.get(e // 2)
+                if j is None or j < i:
+                    continue
+                delta = dist(prev, exit_(j)) - d_prev_entry
+                if j + 1 < n:
+                    delta += dist(entry(i), entry(j + 1)) - dist(exit_(j), entry(j + 1))
+                if delta < -1e-9:
+                    tour[i : j + 1] = [[s, not r] for s, r in reversed(tour[i : j + 1])]
+                    for t in range(i, j + 1):
+                        pos[tour[t][0]] = t
+                    improved = True
+                    break
+        if not improved:
+            break
+
+
 def sort_by_seektime(path, start=None):
     if start is None:
         start = [0.0, 0.0]
@@ -192,19 +315,29 @@ def sort_by_seektime(path, start=None):
 
     # sort by proximity, greedy
     endpoint = start
-    newIdx = 0
+    tour = []
     usedIdxs = {}
     for _p in range(2 * len(path_unsorted)):
         node, distsq = tree.nearest(endpoint[:2], checkempty=True)
         i, rev = node.data
         node.data = None
         if i not in usedIdxs:
-            path[newIdx] = path_unsorted[i]
-            if rev:
-                path[newIdx].reverse()
-            endpoint = path[newIdx][-1]  # prime for next iteration
-            newIdx += 1
+            tour.append([i, rev])
+            endpoint = path_unsorted[i][0] if rev else path_unsorted[i][-1]
             usedIdxs[i] = True
+
+    # untangle greedy crossings
+    improve_seek_order(
+        [seg[0] for seg in path_unsorted],
+        [seg[-1] for seg in path_unsorted],
+        tour,
+        start,
+    )
+
+    for t, (i, rev) in enumerate(tour):
+        path[t] = path_unsorted[i]
+        if rev:
+            path[t].reverse()
 
 
 def remove_waypoints(path):

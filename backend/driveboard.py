@@ -1575,8 +1575,7 @@ def _raster_orientations(
 
 def _emit_raster_nn(
     segments,
-    start_x,
-    start_y,
+    start,
     posx,
     pxsize_x,
     leadin,
@@ -1589,13 +1588,16 @@ def _emit_raster_nn(
     feedrate_,
     intensity_,
 ):
-    """Emit collected raster segments in greedy nearest-neighbor order, choosing
-    each segment's orientation by whichever end the head reaches first. Minimizes
-    seek travel between segments (useful for sparse / large-whitespace images)."""
-    from jobimport import kdtree
+    """Emit collected raster segments ordered for minimal seek travel from
+    `start`, choosing each segment's orientation by whichever end the head
+    enters. A greedy nearest-neighbor tour is built first, then a 2-opt pass
+    untangles the crossings greedy leaves behind (useful for sparse /
+    large-whitespace images). Returns the head position after the last
+    segment, or None if there were none."""
+    from jobimport import kdtree, pathoptimizer
 
     if not segments:
-        return
+        return None
     orients = []
     tree = kdtree.Tree(2)
     for idx, (lo, hi, line_start, line_y) in enumerate(segments):
@@ -1618,7 +1620,8 @@ def _emit_raster_nn(
             tree.insert([rev["leadin"], line_y], (idx, 1)),
         )
         orients.append(((fwd, rev), nodes))
-    current = [start_x, start_y]
+    current = list(start)
+    tour = []
     for _ in range(len(segments)):
         node, _distsq = tree.nearest(current, checkempty=True)
         if node is None:
@@ -1628,8 +1631,23 @@ def _emit_raster_nn(
         node_fwd.data = None  # consume both orientations of this segment
         node_rev.data = None
         orientation = fwd if which == 0 else rev
-        _emit_raster_segment(orientation, seekrate, feedrate_, intensity_)
+        tour.append([idx, which == 1])
         current = [orientation["leadout"], orientation["line_y"]]
+
+    # a segment's two lead-in points are where a seek can enter or leave it
+    pathoptimizer.improve_seek_order(
+        [[o[0][0]["leadin"], o[0][0]["line_y"]] for o in orients],
+        [[o[0][1]["leadin"], o[0][1]["line_y"]] for o in orients],
+        tour,
+        list(start),
+    )
+
+    last = None
+    for idx, reverse in tour:
+        fwd, rev = orients[idx][0]
+        last = rev if reverse else fwd
+        _emit_raster_segment(last, seekrate, feedrate_, intensity_)
+    return [last["leadout"], last["line_y"]] if last else None
 
 
 def _pass_pxsize(pass_):
@@ -1781,7 +1799,13 @@ def _raster_line_segments(line, line_start, line_end, direction, pxsize_x, raste
             whitespace_counter = 0
 
 
-def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_):
+def _job_laser_image(
+    def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_, head_pos=None
+):
+    """Engrave one image def. head_pos is the planar head position on entry
+    (used to anchor seek-optimized ordering), the image corner if unknown.
+    Returns the head position after the last emitted segment, or head_pos if
+    nothing engraves."""
     pos = def_["pos"]
     size = def_["size"]
     data = def_["data"]  # in base64, format: jpg, png, gif
@@ -1832,6 +1856,7 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
     # NearestNeighbor collects segments (found in forward direction) and emits
     # them reordered after the scanline loop
     nn_segments = []
+    last = None
 
     for _ in range(line_count):
         line_end += px_w
@@ -1875,6 +1900,7 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
                 if raster_mode == "NearestNeighbor":
                     nn_segments.append((segment_start, segment_end, line_start, line_y))
                 else:
+                    last = orientation
                     _emit_raster_segment(orientation, seekrate, feedrate_, intensity_)
 
         # prime for next line
@@ -1886,10 +1912,9 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
         line_y += pxsize_y
 
     if raster_mode == "NearestNeighbor":
-        _emit_raster_nn(
+        nn_last = _emit_raster_nn(
             nn_segments,
-            posx,
-            posy,
+            head_pos[:2] if head_pos else [posx, posy],
             posx,
             pxsize_x,
             conf["raster_leadin"],
@@ -1902,8 +1927,11 @@ def _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, inten
             feedrate_,
             intensity_,
         )
+        if nn_last:
+            return nn_last
 
     # left on for the next item, the pass end switches it off
+    return [last["leadout"], last["line_y"]] if last else head_pos
 
 
 # Which scopes currently want each assist output energised. An output is on
@@ -1960,9 +1988,13 @@ def _feed_assists(pass_, on):
     _switch_assists([pass_], "feed", on)
 
 
-def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
+def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_, head_pos=None):
+    """Emit one path def. Returns the planar head position after the last
+    emitted vertex, head_pos if nothing was emitted, or None if the pass is
+    relative (the emitted targets are offsets, so the position is unknown)."""
     path = def_["data"]
     pierce_time = pass_["pierce_time"]
+    last = None
     for polyline in path:
         if len(polyline) > 0:
             # a lone vertex with no pierce only seeks, so it needs no assist
@@ -2001,6 +2033,10 @@ def _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_):
                     for i in range(1, len(polyline)):
                         move(polyline[i][0], polyline[i][1], polyline[i][2])
             # left on for the next contour, the pass end switches it off
+            last = polyline[-1]
+    if pass_.get("relative"):
+        return None if last else head_pos
+    return [last[0], last[1]] if last else head_pos
 
 
 def job_laser(jobdict):
@@ -2087,6 +2123,9 @@ def job_laser(jobdict):
 
 def _job_laser_passes(jobdict):
     """Emit every pass of a laser job, in order."""
+    # a job starts with the head at the offset origin, seek-optimized ordering
+    # anchors on the emitted position from there (None once it is unknown)
+    head_pos = [0.0, 0.0]
     for pass_ in jobdict["passes"]:
         requested_pxsize = float(pass_.setdefault("pxsize", conf["pxsize"]))
         pxsize_x, pxsize_y = _pass_pxsize(pass_)  # x is 2x horiz resolution
@@ -2114,9 +2153,11 @@ def _job_laser_passes(jobdict):
             def_ = jobdict["defs"][item["def"]]
             kind = def_["kind"]
             if kind == "image":
-                _job_laser_image(def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_)
+                head_pos = _job_laser_image(
+                    def_, pass_, pxsize_x, pxsize_y, seekrate, feedrate_, intensity_, head_pos
+                )
             elif kind == "fill" or kind == "path":
-                _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_)
+                head_pos = _job_laser_path(def_, pass_, seekrate, feedrate_, intensity_, head_pos)
 
         # assists off, end of pass for both 'feed' and 'pass'
         _feed_assists(pass_, False)
