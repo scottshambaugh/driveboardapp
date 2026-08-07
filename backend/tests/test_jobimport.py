@@ -14,6 +14,7 @@ import os
 import jobimport
 import pytest
 from jobimport.gcode_reader import GcodeReader
+from jobimport.svg_text_converter import convert_text_to_paths
 from PIL import Image
 
 # ---------------------------------------------------------------------------
@@ -249,6 +250,86 @@ def test_raster_unclipped_has_no_sources():
     assert "sources" not in job
 
 
+def _group_images_like_frontend(job):
+    """Group image items by the key jobhandler.groupIdenticalImages uses:
+    the source id, falling back to the raster data when there is none."""
+    groups = {}
+    for i, item in enumerate(job["items"]):
+        def_ = job["defs"][item["def"]]
+        if def_["kind"] != "image":
+            continue
+        key = def_.get("source") or def_["data"]
+        groups.setdefault(key, []).append(i)
+    return groups
+
+
+def _copies_svg(uri, second_uri=None):
+    """One image placed five times: three clipped to different widths, one
+    plain, and one turned a quarter. Every copy but the plain one comes out
+    with different bytes, so only the source id can hold them together."""
+    clips = "".join(
+        f'<clipPath id="c{i}"><rect x="{10 + 20 * i}" y="10" width="{5 + i}" height="8"/></clipPath>'
+        for i in range(3)
+    )
+    clipped = "".join(
+        f'<image x="{10 + 20 * i}" y="10" width="16" height="8" '
+        f'clip-path="url(#c{i})" xlink:href="{uri}"/>'
+        for i in range(3)
+    )
+    other = (
+        f'<image x="10" y="80" width="16" height="8" xlink:href="{second_uri}"/>'
+        if second_uri
+        else ""
+    )
+    return (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        f"<defs>{clips}</defs>"
+        f"{clipped}"
+        f'<image x="10" y="60" width="16" height="8" xlink:href="{uri}"/>'
+        f'<image x="10" y="20" width="40" height="20" transform="translate(60,0) rotate(90)" '
+        f'xlink:href="{uri}"/>'
+        f"{other}"
+        "</svg>"
+    )
+
+
+def test_clipped_copies_group_as_one_through_the_load_round_trip():
+    """The path a browser import actually takes: the gzip upload hands convert
+    a bytes job, /load writes it as json and /get reads it back, then the
+    frontend keys its passes entries off what survived."""
+    uri = _png_data_uri(MARKER)
+    job = jobimport.convert(_copies_svg(uri).encode("utf-8"), optimize=False)
+    job = json.loads(json.dumps(job))  # what /load stores and /get returns
+
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 5
+    # clipping and the quarter turn leave the copies genuinely different, so a
+    # frontend keying on the data alone would split them into several entries
+    assert len({d["data"] for d in defs}) > 1
+    assert all(d.get("source") for d in defs)
+
+    groups = _group_images_like_frontend(job)
+    assert len(groups) == 1, "identical images must collapse to one pass entry"
+    assert len(next(iter(groups.values()))) == 5
+    # the uncropped original rides along once, for the entry's thumbnail
+    assert list(job["sources"]) == [defs[0]["source"]]
+
+
+def test_different_images_stay_separate_entries():
+    # two unrelated images must never share a pass entry
+    uri = _png_data_uri(MARKER)
+    other = _png_data_uri(((G, B), (K, R)))
+    job = jobimport.convert(_copies_svg(uri, second_uri=other), optimize=False)
+    job = json.loads(json.dumps(job))
+
+    groups = _group_images_like_frontend(job)
+    assert len(groups) == 2
+    assert sorted(len(v) for v in groups.values()) == [1, 5]
+
+
 def test_raster_transparency_survives_a_non_png_source():
     """Reorienting a gif must not re-encode it as JPEG. JPEG carries no alpha
     channel, so flattening a transparent image into one turns every clear pixel
@@ -321,6 +402,124 @@ def test_raster_opaque_jpeg_stays_jpeg():
     px = _pixels(img)
     assert px[0][0][0] > 128, "left column should now be white"
     assert px[0][-1][0] < 128, "right column should now be black"
+
+
+# ---------------------------------------------------------------------------
+# repeated placements of one image
+#
+# A document that stamps the same picture down many times is the common heavy
+# case, so the importer decodes, transforms and encodes each distinct result
+# once and shares it between the copies.
+# ---------------------------------------------------------------------------
+
+
+def _decode(def_):
+    """The image def's raster data as a PIL image."""
+    return Image.open(io.BytesIO(base64.b64decode(def_["data"].split(",", 1)[1])))
+
+
+def _quadrants(n):
+    """An n x n image split into four solid colored quadrants."""
+    half = n // 2
+    return tuple(
+        tuple((R if x < half else G) if y < half else (B if x < half else K) for x in range(n))
+        for y in range(n)
+    )
+
+
+def _stamped_svg(uri, clips, transform=""):
+    """One image placed once per entry in `clips`, each with its own clip rect
+    given as (x, y, w, h) in mm."""
+    defs = "".join(
+        f'<clipPath id="k{i}"><rect x="{c[0]}" y="{c[1]}" width="{c[2]}" height="{c[3]}"/></clipPath>'
+        for i, c in enumerate(clips)
+    )
+    images = "".join(
+        f'<image x="0" y="0" width="40" height="40" clip-path="url(#k{i})" '
+        f'transform="{transform}" xlink:href="{uri}"/>'
+        for i in range(len(clips))
+    )
+    return (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        f"<defs>{defs}</defs>{images}</svg>"
+    )
+
+
+def test_copies_clipped_alike_share_one_encoding():
+    """Placements that land on the same pixels come back as the identical
+    string, and ones that do not stay distinct."""
+    uri = _png_data_uri(_quadrants(8))
+    # three copies clipped to the top-left quadrant, one to the bottom-right
+    job = jobimport.convert(
+        _stamped_svg(uri, [(0, 0, 20, 20)] * 3 + [(20, 20, 20, 20)]), optimize=False
+    )
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 4
+    # one encoding between them, so the copies hold the very same string
+    assert defs[0]["data"] is defs[1]["data"] is defs[2]["data"]
+    assert defs[3]["data"] != defs[0]["data"]
+    # and the shared crop is still the right corner of the picture
+    for def_ in defs[:3]:
+        assert def_["pos"] == pytest.approx([0.0, 0.0])
+        assert _pixels(_decode(def_)) == [(R,) * 4] * 4
+    assert defs[3]["pos"] == pytest.approx([20.0, 20.0])
+    assert _pixels(_decode(defs[3])) == [(K,) * 4] * 4
+
+
+def test_copies_clipped_alike_after_a_quarter_turn():
+    """Reorienting and clipping compose into one pass over the pixels, so the
+    turned copies have to come out both shared and correct."""
+    uri = _png_data_uri(_quadrants(8))
+    # the turn lands the image back over the same 40x40 box and takes the clip
+    # rect with it, so the crop is the top-right quadrant of the turned picture
+    job = jobimport.convert(
+        _stamped_svg(uri, [(0, 0, 20, 20)] * 2, transform="translate(40,0) rotate(90)"),
+        optimize=False,
+    )
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 2
+    assert defs[0]["data"] is defs[1]["data"]
+    assert defs[0]["pos"] == pytest.approx([20.0, 0.0])
+    assert _pixels(_decode(defs[0])) == [(R,) * 4] * 4
+
+
+def test_clip_smaller_than_a_pixel_leaves_the_image_alone():
+    # the crop rounds away to nothing, so the data has to pass through
+    uri = _png_data_uri(MARKER)
+    job = jobimport.convert(_stamped_svg(uri, [(0, 0, 0.4, 0.4)]), optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 1
+    assert defs[0]["data"] == uri
+
+
+# ---------------------------------------------------------------------------
+# text to path conversion
+# ---------------------------------------------------------------------------
+
+
+def test_text_conversion_skips_documents_without_text():
+    # nothing to convert, so the document is handed back untouched rather than
+    # parsed and reserialized
+    svg = _raster_svg()
+    assert convert_text_to_paths(svg) is svg
+    assert convert_text_to_paths(svg.encode()) is not None
+
+
+@pytest.mark.parametrize(
+    "element",
+    ['<text x="5" y="5">hi</text>', '<svg:text x="5" y="5">hi</svg:text>'],
+)
+def test_text_conversion_still_sees_text(element):
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        f"{element}</svg>"
+    )
+    assert convert_text_to_paths(svg) is not svg
 
 
 # ---------------------------------------------------------------------------

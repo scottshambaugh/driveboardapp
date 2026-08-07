@@ -29,6 +29,10 @@ except ImportError:
 # This is reset at the start of each convert_text_to_paths call
 _conversion_warnings = []
 
+# a text element, with or without a namespace prefix, matched against the raw
+# document so one with none never has to be parsed and reserialized
+_re_text_element = re.compile(r"<\s*(?:[\w.-]+:)?(?:text|tspan)[\s/>]")
+
 
 def get_conversion_warnings():
     """Get the list of warnings from the last conversion."""
@@ -588,18 +592,22 @@ def convert_text_to_paths(svg_string):
     global _conversion_warnings
     _conversion_warnings = []  # Reset warnings for this conversion
 
-    try:
-        import fontTools.ttLib  # noqa: F401
-    except ImportError:
-        log.warning("fonttools not installed, text will not be converted to paths")
-        return svg_string
-
     # Ensure we're working with a string
     is_bytes = isinstance(svg_string, bytes)
     if is_bytes:
         svg_str = svg_string.decode("utf-8")
     else:
         svg_str = svg_string
+
+    if not _re_text_element.search(svg_str):
+        log.debug("No text elements found in SVG")
+        return svg_string
+
+    try:
+        import fontTools.ttLib  # noqa: F401
+    except ImportError:
+        log.warning("fonttools not installed, text will not be converted to paths")
+        return svg_string
 
     try:
         # Parse the SVG

@@ -15,6 +15,7 @@ log = logging.getLogger("svg_reader")
 
 class SVGTagReader:
     def __init__(self, svgreader):
+        self._svgreader = svgreader
         # init helper for attribute reading
         self._attribReader = SVGAttributeReader(svgreader)
         # init helper for path handling
@@ -349,12 +350,21 @@ class SVGTagReader:
         else:
             image = data
 
+        # one image is often placed many times over, so every copy shares a
+        # single string and a single hash of it
+        uris = self._svgreader._image_uris
+        entry = uris.get(image)
+        if entry is None:
+            entry = (image, hashlib.md5(image.encode("utf-8")).hexdigest())
+            uris[image] = entry
+        image, source = entry
+
         raster = {}
         raster["pos"] = [x, y]
         raster["size"] = [width, height]
         # raster['image'] = converted_image
         raster["data"] = image
-        raster["source"] = hashlib.md5(image.encode("utf-8")).hexdigest()
+        raster["source"] = source
         # kept so the original survives clip cropping, same string until then
         raster["source_data"] = image
         node["rasters"].append(raster)

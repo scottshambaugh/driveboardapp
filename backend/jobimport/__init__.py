@@ -68,11 +68,18 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
     if matrix:
         apply_alignment_matrix(job, matrix)
     # whatever the source, hand the frontend a raster it can actually display
+    # (copies of one image share a string, so each is only looked at once)
+    normalized = {}
     for def_ in job.get("defs", []):
         if def_.get("kind") == "image" and def_.get("data"):
-            def_["data"] = normalize_image_data(def_["data"])
+            data = def_["data"]
+            if data not in normalized:
+                normalized[data] = normalize_image_data(data)
+            def_["data"] = normalized[data]
     for key, data in job.get("sources", {}).items():
-        job["sources"][key] = normalize_image_data(data)
+        if data not in normalized:
+            normalized[data] = normalize_image_data(data)
+        job["sources"][key] = normalized[data]
     return job
 
 

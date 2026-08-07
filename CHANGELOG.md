@@ -3,6 +3,7 @@
 ## Unreleased
 ### New Features
 - Jog moves are now clamped to the work area so the head cannot hit a limit switch. Toggled with the new `jog_soft_limits` config setting
+- Speed up loading svg files with raster images (esp ducplicates)
 
 ### Bug Fixes
 -

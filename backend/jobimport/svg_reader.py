@@ -107,6 +107,12 @@ class SVGReader:
         # (clipPath elements are not otherwise traversed; collected up front)
         self._clip_rects = {}
 
+        # per parse image caches, see _decode_image and _apply_image_ops
+        self._image_uris = {}
+        self._decoded_images = {}
+        self._decoded_px = 0
+        self._derived_images = {}
+
     @staticmethod
     def _encode_image_data(img, header):
         """Re-encode a PIL image into a base64 data URI.
@@ -128,86 +134,168 @@ class SVGReader:
         img.save(buffer, format=img_format)
         return header + "," + base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    def _reorient_image_data(self, data_uri, transpose=False, flip_h=False, flip_v=False):
-        """Reorient image data by an optional transpose (a reflection about the
-        main diagonal) and then optional horizontal and vertical flips.
+    # ceiling on decoded pixels kept in the cache below, so a document full of
+    # distinct large images cannot pile them all up in memory at once
+    _decode_cache_px_max = 32000000
 
-        Returns a new data URI, or the original if processing fails.
+    def _decode_image(self, data_uri, to_rgba):
+        """Decode a data URI, returning (header, image).
+
+        One embedded image is commonly placed many times over, so decodes are
+        cached for the parse and callers treat the image as read only. `to_rgba`
+        forces an alpha channel, otherwise only the modes the ops cannot work in
+        are converted.
         """
-        try:
-            if "," not in data_uri:
-                return data_uri
-            header, b64data = data_uri.split(",", 1)
-            img = Image.open(io.BytesIO(base64.b64decode(b64data)))
-            if img.mode in ("P", "1", "L", "LA", "PA"):
-                img = img.convert("RGBA")
-            if transpose:
-                img = img.transpose(Image.Transpose.TRANSPOSE)
-            if flip_h:
-                img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-            if flip_v:
-                img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-            return self._encode_image_data(img, header)
-        except Exception as e:
-            log.warning(f"Failed to reorient image: {e}")
-            return data_uri
+        key = (data_uri, to_rgba)
+        entry = self._decoded_images.get(key)
+        if entry is not None:
+            self._decoded_images[key] = self._decoded_images.pop(key)
+            return entry
+
+        header, b64data = data_uri.split(",", 1)
+        img = Image.open(io.BytesIO(base64.b64decode(b64data)))
+        if to_rgba or img.mode in ("P", "1", "L", "LA", "PA"):
+            img = img.convert("RGBA")
+        else:
+            img.load()
+        entry = (header, img)
+        self._decoded_images[key] = entry
+        self._decoded_px += img.width * img.height
+        while len(self._decoded_images) > 1 and self._decoded_px > self._decode_cache_px_max:
+            dropped = self._decoded_images.pop(next(iter(self._decoded_images)))[1]
+            self._decoded_px -= dropped.width * dropped.height
+        return entry
 
     # ceiling on the pixel count of a resampled image, so an extreme skew
     # cannot blow up memory (24 megapixels is past any engravable detail)
     _resample_px_max = 24000000
 
-    def _resample_image_data(self, data_uri, origin, u, v, pos, size):
-        """Resample a rotated or skewed image onto the axis-aligned mm box
-        (`pos`, `size`).
+    def _plan_resample(self, src_size, origin, u, v, pos, size):
+        """Work out the output size and inverse map for resampling a rotated or
+        skewed image onto the axis-aligned mm box (`pos`, `size`).
 
         `origin`, `u` and `v` say where the image lands in mm. `origin` is its
         (0,0) pixel corner, `u` the vector along a pixel row and `v` the vector
         down a pixel column. The parts of the box the image does not cover come
         out transparent, so they never engrave.
 
-        Returns a new data URI, always PNG so the alpha channel survives, or
-        the original if processing fails.
+        Returns (out_w, out_h, affine), or None if the placement is degenerate.
         """
-        try:
-            if "," not in data_uri:
-                return data_uri
-            _, b64data = data_uri.split(",", 1)
-            img = Image.open(io.BytesIO(base64.b64decode(b64data))).convert("RGBA")
-            src_w, src_h = img.size
-            det = u[0] * v[1] - v[0] * u[1]
-            if not det or not src_w or not src_h:
-                return data_uri
+        src_w, src_h = src_size
+        det = u[0] * v[1] - v[0] * u[1]
+        if not det or not src_w or not src_h:
+            return None
 
-            # keep the finer of the two source pixel densities so rotating
-            # cannot soften the image, then clamp the resulting pixel count
-            density = max(src_w / math.hypot(*u), src_h / math.hypot(*v))
-            out_w = max(1, round(size[0] * density))
-            out_h = max(1, round(size[1] * density))
-            if out_w * out_h > self._resample_px_max:
-                shrink = math.sqrt(self._resample_px_max / (out_w * out_h))
-                out_w = max(1, int(out_w * shrink))
-                out_h = max(1, int(out_h * shrink))
+        # keep the finer of the two source pixel densities so rotating
+        # cannot soften the image, then clamp the resulting pixel count
+        density = max(src_w / math.hypot(*u), src_h / math.hypot(*v))
+        out_w = max(1, round(size[0] * density))
+        out_h = max(1, round(size[1] * density))
+        if out_w * out_h > self._resample_px_max:
+            shrink = math.sqrt(self._resample_px_max / (out_w * out_h))
+            out_w = max(1, int(out_w * shrink))
+            out_h = max(1, int(out_h * shrink))
 
-            # Image.transform wants the inverse map, output pixel to source pixel
-            sx = size[0] / out_w
-            sy = size[1] / out_h
-            ox = pos[0] - origin[0]
-            oy = pos[1] - origin[1]
-            affine = (
-                src_w * v[1] * sx / det,
-                -src_w * v[0] * sy / det,
-                src_w * (v[1] * ox - v[0] * oy) / det,
-                -src_h * u[1] * sx / det,
-                src_h * u[0] * sy / det,
-                src_h * (u[0] * oy - u[1] * ox) / det,
-            )
-            img = img.transform(
-                (out_w, out_h), Image.Transform.AFFINE, affine, resample=Image.BICUBIC
-            )
-            return self._encode_image_data(img, "data:image/png;base64")
-        except Exception as e:
-            log.warning(f"Failed to resample rotated image: {e}")
+        # Image.transform wants the inverse map, output pixel to source pixel
+        sx = size[0] / out_w
+        sy = size[1] / out_h
+        ox = pos[0] - origin[0]
+        oy = pos[1] - origin[1]
+        affine = (
+            src_w * v[1] * sx / det,
+            -src_w * v[0] * sy / det,
+            src_w * (v[1] * ox - v[0] * oy) / det,
+            -src_h * u[1] * sx / det,
+            src_h * u[0] * sy / det,
+            src_h * (u[0] * oy - u[1] * ox) / det,
+        )
+        return out_w, out_h, affine
+
+    def _resolve_image_ops(self, src_size, ops):
+        """Pin the queued operations to pixels for an image of `src_size`.
+
+        Clips arrive as fractions of the image extent, so turning them into
+        integer boxes here is also what lets two placements that land on the
+        very same pixels share one decode, transform and encode.
+
+        Returns a tuple of resolved ops, with the ones that do nothing dropped.
+        """
+        w, h = src_size
+        resolved = []
+        for op in ops:
+            if op[0] == "reorient":
+                if op[1]:  # transpose swaps the axes
+                    w, h = h, w
+                resolved.append(op)
+            elif op[0] == "resample":
+                plan = self._plan_resample((w, h), *op[1:])
+                if plan is None:
+                    continue
+                w, h = plan[0], plan[1]
+                resolved.append(("resample",) + plan)
+            else:
+                box = (
+                    max(0, min(w, round(op[1] * w))),
+                    max(0, min(h, round(op[2] * h))),
+                    max(0, min(w, round(op[3] * w))),
+                    max(0, min(h, round(op[4] * h))),
+                )
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    continue
+                w, h = box[2] - box[0], box[3] - box[1]
+                resolved.append(("crop", box))
+        return tuple(resolved)
+
+    @staticmethod
+    def _run_image_ops(img, resolved):
+        """Apply resolved ops to an image, returning a new image."""
+        for op in resolved:
+            if op[0] == "reorient":
+                if op[1]:
+                    img = img.transpose(Image.Transpose.TRANSPOSE)
+                if op[2]:
+                    img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                if op[3]:
+                    img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            elif op[0] == "resample":
+                img = img.transform(
+                    (op[1], op[2]), Image.Transform.AFFINE, op[3], resample=Image.BICUBIC
+                )
+            else:
+                img = img.crop(op[1])
+        return img
+
+    def _apply_image_ops(self, data_uri, ops):
+        """Bake the operations queued by placement and clipping into the pixels.
+
+        The whole chain runs off a single decode and ends in a single encode,
+        and the result is cached, so repeated placements of one image cost one
+        pass between them.
+
+        Returns a new data URI, or the original if there is nothing to do or
+        processing fails. Resampling always goes out as PNG so the alpha
+        channel it introduces survives.
+        """
+        if not ops or "," not in data_uri:
             return data_uri
+        try:
+            to_rgba = any(op[0] == "resample" for op in ops)
+            header, img = self._decode_image(data_uri, to_rgba)
+            resolved = self._resolve_image_ops(img.size, ops)
+            if not resolved:
+                return data_uri
+            key = (data_uri, resolved)
+            cached = self._derived_images.get(key)
+            if cached is not None:
+                return cached
+            if to_rgba:
+                header = "data:image/png;base64"
+            result = self._encode_image_data(self._run_image_ops(img, resolved), header)
+        except Exception as e:
+            log.warning(f"Failed to transform image: {e}")
+            return data_uri
+        self._derived_images[key] = result
+        return result
 
     def _place_raster(self, raster, mat):
         """Place a raster in mm space, given its element's transform to world.
@@ -215,8 +303,9 @@ class SVGReader:
         The engraver only runs axis-aligned images, so any rotation or skew has
         to be baked into the pixel data instead. Quarter turns are exact
         transposes, anything else is resampled onto the transform's bounding
-        box. On return `raster['pos']` is the top-left mm corner and
-        `raster['size']` the positive mm extent.
+        box. The pixel work is queued in `raster['ops']` for _render_raster. On
+        return `raster['pos']` is the top-left mm corner and `raster['size']`
+        the positive mm extent.
         """
         # where the image's box lands in mm: its (0,0) pixel corner, plus the
         # vectors along a pixel row (local +x) and down a pixel column (local +y)
@@ -256,40 +345,24 @@ class SVGReader:
 
         if not (upright or quarter_turn):
             # arbitrary rotation or skew, so resample onto the bounding box
-            raster["data"] = self._resample_image_data(
-                raster["data"], origin, u, v, raster["pos"], raster["size"]
+            raster.setdefault("ops", []).append(
+                (
+                    "resample",
+                    tuple(origin),
+                    tuple(u),
+                    tuple(v),
+                    tuple(raster["pos"]),
+                    tuple(raster["size"]),
+                )
             )
         elif transpose or flip_h or flip_v:
-            raster["data"] = self._reorient_image_data(
-                raster["data"], transpose=transpose, flip_h=flip_h, flip_v=flip_v
-            )
+            raster.setdefault("ops", []).append(("reorient", transpose, flip_h, flip_v))
 
-    def _crop_image_data(self, data_uri, fx0, fy0, fx1, fy1):
-        """Crop image to the fractional box (fx0,fy0)-(fx1,fy1) of its extent.
-
-        Returns a new data URI, or the original if processing fails.
-        """
-        try:
-            if "," not in data_uri:
-                return data_uri
-            header, b64data = data_uri.split(",", 1)
-            img = Image.open(io.BytesIO(base64.b64decode(b64data)))
-            if img.mode in ("P", "1", "L", "LA", "PA"):
-                img = img.convert("RGBA")
-            w, h = img.size
-            box = (
-                max(0, min(w, round(fx0 * w))),
-                max(0, min(h, round(fy0 * h))),
-                max(0, min(w, round(fx1 * w))),
-                max(0, min(h, round(fy1 * h))),
-            )
-            if box[2] <= box[0] or box[3] <= box[1]:
-                return data_uri
-            img = img.crop(box)
-            return self._encode_image_data(img, header)
-        except Exception as e:
-            log.warning(f"Failed to crop image: {e}")
-            return data_uri
+    def _render_raster(self, raster):
+        """Bake the pixel operations queued by placement and clipping."""
+        ops = tuple(raster.pop("ops", ()))
+        if ops:
+            raster["data"] = self._apply_image_ops(raster["data"], ops)
 
     def _prescan_clip_rects(self, root):
         """Collect rectangular clipPaths (a single child <rect>) keyed by id.
@@ -341,8 +414,9 @@ class SVGReader:
         return min(xs), min(ys), max(xs), max(ys)
 
     def _apply_clips(self, raster, clips):
-        """Crop raster in-place to the intersection of its clip boxes and image
-        box. Returns False if the clip removes the image entirely (drop it)."""
+        """Shrink raster in-place to the intersection of its clip boxes and
+        image box, queuing the matching crop in `raster['ops']`. Returns False
+        if the clip removes the image entirely (drop it)."""
         px0, py0 = raster["pos"][0], raster["pos"][1]
         pw, ph = raster["size"][0], raster["size"][1]
         ix0, iy0, ix1, iy1 = px0, py0, px0 + pw, py0 + ph
@@ -355,12 +429,14 @@ class SVGReader:
         if ix0 <= px0 and iy0 <= py0 and ix1 >= px0 + pw and iy1 >= py0 + ph:
             return True  # clip contains the image; no crop
         if Image is not None and raster["data"]:
-            raster["data"] = self._crop_image_data(
-                raster["data"],
-                (ix0 - px0) / pw,
-                (iy0 - py0) / ph,
-                (ix1 - px0) / pw,
-                (iy1 - py0) / ph,
+            raster.setdefault("ops", []).append(
+                (
+                    "crop",
+                    (ix0 - px0) / pw,
+                    (iy0 - py0) / ph,
+                    (ix1 - px0) / pw,
+                    (iy1 - py0) / ph,
+                )
             )
         raster["pos"] = [ix0, iy0]
         raster["size"] = [ix1 - ix0, iy1 - iy0]
@@ -410,6 +486,10 @@ class SVGReader:
         self.boundarys = {}
         self.lasertags = []
         self.rasters = []
+        self._image_uris = {}
+        self._decoded_images = {}
+        self._decoded_px = 0
+        self._derived_images = {}
 
         # Convert text elements to paths before parsing
         svgstring = convert_text_to_paths(svgstring)
@@ -652,6 +732,7 @@ class SVGReader:
                     if node["clips"] and not self._apply_clips(raster, node["clips"]):
                         continue  # fully clipped away -> drop the image
 
+                    self._render_raster(raster)
                     self.rasters.append(raster)
 
                 # recursive call
