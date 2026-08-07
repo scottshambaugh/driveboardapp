@@ -531,7 +531,16 @@ class SerialLoopClass(threading.Thread):
                 elif data_char == INFO_POS_Z:
                     self._s["pos"][2] = num
                 elif data_char == INFO_VERSION:
-                    num = str(int(num) / 100.0)
+                    # an integer, old firmware sends major.minor in
+                    # hundredths, values of 10000 and up are scaled by a
+                    # further 10 with a patch digit last, 26081 reads 26.08.1
+                    num = int(round(num))
+                    patch = 0
+                    if num >= 10000:
+                        num, patch = divmod(num, 10)
+                    num = str(num / 100.0)
+                    if patch:
+                        num += f".{patch}"
                     self._s["firmver"] = num
                 elif data_char == INFO_BUFFER_UNDERRUN:
                     self._s["underruns"] = num

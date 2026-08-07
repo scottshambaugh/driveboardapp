@@ -1959,6 +1959,16 @@ def test_rx_param_decode_roundtrip(loop, marker, value, getter):
     assert getter(loop._s) == pytest.approx(value, abs=1e-3)
 
 
+def test_rx_version_decoded_with_patch_digit(loop):
+    # old firmware sends hundredths, x10 values carry a patch digit last
+    feed(loop, encode_param(driveboard.INFO_VERSION, 2608.0))
+    assert loop._s["firmver"] == "26.08"
+    feed(loop, encode_param(driveboard.INFO_VERSION, 26081.0))
+    assert loop._s["firmver"] == "26.08.1"
+    feed(loop, encode_param(driveboard.INFO_VERSION, 26090.0))
+    assert loop._s["firmver"] == "26.09"
+
+
 def test_rx_intensity_scaled_to_percent(loop):
     # Firmware reports raw 0..255; the host rescales to 0..100%.
     feed(loop, encode_param(driveboard.INFO_INTENSITY, 255.0))

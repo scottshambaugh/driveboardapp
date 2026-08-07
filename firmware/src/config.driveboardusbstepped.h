@@ -23,7 +23,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
-#define VERSION 2608               // int or float
+#define VERSION 26081              // version x10, 26081 reads 26.08.1
 #define BAUD_RATE 57600
 // #define ENABLE_3AXES            // enable/disable 3-axis mode (vs 2-axis)
 #define ENABLE_INTERLOCKS          // enable/disable all interlocks

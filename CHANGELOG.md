@@ -1,6 +1,6 @@
 # DriveboardApp Changelog
 
-## Unreleased
+## v26.08.1 (August 2026)
 ### New Features
 - Speed up loading svg files with raster images (esp. duplicates)
 - Seek-optimized ordering (NearestNeighbor rasters and vector path sorting) now runs a 2-opt untangling pass to further improve job time
@@ -20,9 +20,6 @@
 - Fixed importing a dba job with 3D vertices crashing during path optimization
 - The UI's seek lines now show the true post-optimizer path, and only includes items that have passes
 - Jog moves are now clamped to the work area so the head cannot hit a limit switch. Toggled with the new `jog_soft_limits` config setting
-
-### Development
-- 
 
 ## v26.08 (August 2026)
 
