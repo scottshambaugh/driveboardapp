@@ -252,6 +252,97 @@ def test_raster_unclipped_has_no_sources():
     assert "sources" not in job
 
 
+def _use_svg(body, defs=""):
+    """A 100x100mm svg whose defs hold one 40x20 image with id "img0"."""
+    return (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        f'<defs><image id="img0" x="0" y="0" width="40" height="20" '
+        f'xlink:href="{_png_data_uri(MARKER)}"/>{defs}</defs>'
+        f"{body}"
+        "</svg>"
+    )
+
+
+def test_use_places_a_referenced_image():
+    """A 'use' draws the image it points at, offset by its own x/y."""
+    job = jobimport.convert(_use_svg('<use xlink:href="#img0" x="10" y="20"/>'), optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 1
+    assert defs[0]["pos"] == pytest.approx([10.0, 20.0])
+    assert defs[0]["size"] == pytest.approx([40.0, 20.0])
+    # nothing to reorient, so the pixels must not be re-encoded
+    assert defs[0]["data"] == _png_data_uri(MARKER)
+
+
+def test_use_takes_the_transform_and_clip_of_its_group():
+    """The referencing element's frame and clip apply to what it draws."""
+    svg = _use_svg(
+        '<g transform="translate(0,50)" clip-path="url(#c1)">'
+        '<use xlink:href="#img0" x="10" y="0"/>'
+        "</g>",
+        # the rect is in the group's own frame, which the translate moved
+        defs='<clipPath id="c1"><rect x="10" y="0" width="20" height="10"/></clipPath>',
+    )
+    job = jobimport.convert(svg, optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 1
+    assert defs[0]["pos"] == pytest.approx([10.0, 50.0])
+    assert defs[0]["size"] == pytest.approx([20.0, 10.0])
+
+
+def test_use_copies_share_one_source():
+    """Two 'use' tags of one image are copies of a single original."""
+    svg = _use_svg(
+        '<use xlink:href="#img0" x="10" y="0" clip-path="url(#c1)"/>'
+        '<use xlink:href="#img0" x="10" y="50" clip-path="url(#c2)"/>',
+        defs=(
+            '<clipPath id="c1"><rect x="10" y="0" width="20" height="10"/></clipPath>'
+            '<clipPath id="c2"><rect x="10" y="50" width="20" height="10"/></clipPath>'
+        ),
+    )
+    job = jobimport.convert(svg, optimize=False)
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 2
+    assert defs[0]["source"] == defs[1]["source"]
+    assert job["sources"] == {defs[0]["source"]: _png_data_uri(MARKER)}
+
+
+def test_use_draws_a_referenced_group():
+    """A 'use' of a group draws the whole group, offset by its x/y."""
+    svg = _use_svg(
+        '<use xlink:href="#g0" x="10" y="10"/>',
+        defs='<g id="g0"><path d="M 0,0 L 20,0" stroke="#ff0000" fill="none"/></g>',
+    )
+    job = jobimport.convert(svg, optimize=False)
+    paths = [d["data"] for d in job["defs"] if d["kind"] == "path"]
+    assert len(paths) == 1
+    assert paths[0] == [[pytest.approx([10.0, 10.0]), pytest.approx([30.0, 10.0])]]
+
+
+def test_defs_are_only_drawn_where_used():
+    # the image sits in defs and nothing references it
+    job = jobimport.convert(_use_svg(""), optimize=False)
+    assert not [d for d in job["defs"] if d["kind"] == "image"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '<use xlink:href="#nope" x="10" y="20"/>',
+        '<use xlink:href="other.svg#img0" x="10" y="20"/>',
+        # a self reference must not recurse forever
+        '<g id="g0"><use xlink:href="#g0"/></g>',
+    ],
+    ids=["unknown-id", "external-file", "cycle"],
+)
+def test_use_skips_what_it_cannot_draw(body):
+    job = jobimport.convert(_use_svg(body), optimize=False)
+    assert not [d for d in job["defs"] if d["kind"] == "image"]
+
+
 def _group_images_like_frontend(job):
     """Group image items by the key jobhandler.groupIdenticalImages uses:
     the source id, falling back to the raster data when there is none."""

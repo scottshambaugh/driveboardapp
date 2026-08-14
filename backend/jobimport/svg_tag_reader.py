@@ -31,6 +31,8 @@ class SVGTagReader:
             "circle": self.circle,
             "ellipse": self.ellipse,
             "image": self.image,
+            "use": self.use,
+            "symbol": self.symbol,
             "defs": self.defs,
             "style": self.style,
             "text": True,  # text is special, see read_tag func
@@ -369,11 +371,22 @@ class SVGTagReader:
         raster["source_data"] = image
         node["rasters"].append(raster)
 
+    def use(self, node):
+        # http://www.w3.org/TR/SVG11/struct.html#UseElement
+        # the referenced element is resolved and traversed by the reader,
+        # here only the attributes matter (href, x, y, transform, style)
+        pass
+
+    def symbol(self, node):
+        # http://www.w3.org/TR/SVG11/struct.html#SymbolElement
+        # a container, only drawn where a 'use' tag references it
+        pass
+
     def defs(self, node):
-        # not supported (contains gradients, patterns, symbols, etc.)
         # http://www.w3.org/TR/SVG11/struct.html#Head
-        # has transform and style attributes
-        log.debug("'defs' tag is not supported, ignored")
+        # a container, its content is only drawn where referenced
+        # gradients and patterns in here stay unsupported
+        log.debug("'defs' content is only drawn where a 'use' tag references it")
 
     def style(self, node):
         # not supported: embedded style sheets

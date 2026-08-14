@@ -7,7 +7,7 @@ import math
 
 from .svg_tag_reader import SVGTagReader
 from .svg_text_converter import convert_text_to_paths, get_conversion_warnings
-from .utilities import matrixApply, parseFloats, parseScalar, vertexScale
+from .utilities import matrixApply, matrixMult, parseFloats, parseScalar, vertexScale
 
 try:
     from PIL import Image
@@ -50,6 +50,7 @@ except ImportError:
 #   * curves, arcs, cirles, ellipses tesellated according to tolerance
 #   * raster images
 #   * text (automatically converted to paths using system fonts)
+#   * 'use' tags referencing an element of the same document
 #
 # Intentionally not Supported:
 #   * markers
@@ -68,6 +69,10 @@ class SVGReader:
     reader = SVGReader(0.08, [1220,610])
     boundarys = reader.parse(open('filename').read())
     """
+
+    # how far 'use' tags may reference each other before the chain is dropped,
+    # also what keeps a self referencing chain from recursing forever
+    MAX_USE_DEPTH = 10
 
     def __init__(self, tolerance, target_size):
         # parsed path data, paths by color
@@ -106,6 +111,9 @@ class SVGReader:
         # rectangular clipPaths, by id: {"corners": [[x,y],[x2,y2]], "local": xform}
         # (clipPath elements are not otherwise traversed; collected up front)
         self._clip_rects = {}
+
+        # every element that carries an id, for resolving 'use' references
+        self._elements_by_id = {}
 
         # per parse image caches, see _decode_image and _apply_image_ops
         self._image_uris = {}
@@ -396,6 +404,17 @@ class SVGReader:
                 "local": tmp["xform"],
             }
 
+    def _prescan_ids(self, root):
+        """Map every id to its element so 'use' references resolve.
+
+        The first element wins when an id repeats, which matches how a browser
+        resolves a duplicate id.
+        """
+        for el in root.iter():
+            eid = el.get("id")
+            if eid and eid not in self._elements_by_id:
+                self._elements_by_id[eid] = el
+
     def _clip_box_mm(self, clip):
         """Axis-aligned mm bounding box of a clip context's rect, after applying
         the rect's own transform, the referencing element's frame, and px2mm."""
@@ -490,6 +509,8 @@ class SVGReader:
         self._decoded_images = {}
         self._decoded_px = 0
         self._derived_images = {}
+        self._clip_rects = {}
+        self._elements_by_id = {}
 
         # Convert text elements to paths before parsing
         svgstring = convert_text_to_paths(svgstring)
@@ -632,6 +653,7 @@ class SVGReader:
             "opacity": 1.0,
         }
         self._prescan_clip_rects(svgRootElement)
+        self._prescan_ids(svgRootElement)
         self.parse_children(svgRootElement, node)
 
         # build result dictionary
@@ -653,90 +675,129 @@ class SVGReader:
 
         return parse_results
 
-    def parse_children(self, domNode, parentNode):
+    def parse_children(self, domNode, parentNode, use_depth=0):
         for child in domNode:
-            # log.debug("considering tag: " + child.tag)
-            if self._tagReader.has_handler(child):
-                # 1. setup a new node
-                # and inherit from parent
-                node = {
-                    "paths": [],
-                    "rasters": [],
-                    "xform": [1, 0, 0, 1, 0, 0],
-                    "xformToWorld": parentNode["xformToWorld"],
-                    "display": parentNode.get("display"),
-                    "visibility": parentNode.get("visibility"),
-                    "fill": parentNode.get("fill"),
-                    "stroke": parentNode.get("stroke"),
-                    "color": parentNode.get("color"),
-                    "fill-opacity": parentNode.get("fill-opacity"),
-                    "stroke-opacity": parentNode.get("stroke-opacity"),
-                    "opacity": parentNode.get("opacity"),
-                    # active rectangular clip contexts inherited from ancestors
-                    # (clip-path is not an inherited property, but the clipped
-                    # region still constrains descendants)
-                    "clips": list(parentNode.get("clips", [])),
-                }
+            self.parse_element(child, parentNode, use_depth)
 
-                # 2. parse child
-                # with current attributes and transformation
-                self._tagReader.read_tag(child, node)
+    def parse_element(self, child, parentNode, use_depth=0, from_use=False):
+        # log.debug("considering tag: " + child.tag)
+        if not self._tagReader.has_handler(child):
+            return
 
-                # 2b. if this element carries its own clip-path that resolves to
-                # a supported rect, add it as a clip context in this element's
-                # own frame (xformToWorld now includes the element's transform)
-                own_clip = node.get("clip-path")
-                if own_clip:
-                    if own_clip in self._clip_rects:
-                        node["clips"].append(
-                            {
-                                "rect": self._clip_rects[own_clip],
-                                "frame": list(node["xformToWorld"]),
-                            }
-                        )
-                    else:
-                        log.info(
-                            f"clip-path #{own_clip} is not a supported rectangular clip; ignored"
-                        )
+        tagName = self._tagReader._get_tag(child)
+        if tagName in ("defs", "symbol") and not from_use:
+            # containers, their content is only drawn where a 'use' references it
+            return
 
-                # 3. compile boundarys + conversions
-                for path_entry in node["paths"]:
-                    # path_entry is {'data': [...], 'color': '#...'}
-                    path = path_entry["data"]
-                    hexcolor = path_entry["color"]
-                    if path:  # skip if empty subpath
-                        # 3a.) convert to world coordinates and then to mm units
-                        for vert in path:
-                            # print isinstance(vert[0],float) and isinstance(vert[1],float)
-                            matrixApply(node["xformToWorld"], vert)
-                            vertexScale(vert, self.px2mm)
-                        # 3b.) sort output by color
-                        if hexcolor in self.boundarys:
-                            self.boundarys[hexcolor].append(path)
-                        else:
-                            self.boundarys[hexcolor] = [path]
+        # 1. setup a new node
+        # and inherit from parent
+        node = {
+            "paths": [],
+            "rasters": [],
+            "xform": [1, 0, 0, 1, 0, 0],
+            "xformToWorld": parentNode["xformToWorld"],
+            "display": parentNode.get("display"),
+            "visibility": parentNode.get("visibility"),
+            "fill": parentNode.get("fill"),
+            "stroke": parentNode.get("stroke"),
+            "color": parentNode.get("color"),
+            "fill-opacity": parentNode.get("fill-opacity"),
+            "stroke-opacity": parentNode.get("stroke-opacity"),
+            "opacity": parentNode.get("opacity"),
+            # active rectangular clip contexts inherited from ancestors
+            # (clip-path is not an inherited property, but the clipped
+            # region still constrains descendants)
+            "clips": list(parentNode.get("clips", [])),
+        }
 
-                # 4. any lasertags (cut settings)?
-                if "lasertags" in node:
-                    self.lasertags.extend(node["lasertags"])
+        # 2. parse child
+        # with current attributes and transformation
+        self._tagReader.read_tag(child, node)
 
-                # 5. Raster Data [(x, y, size, data)]
-                for raster in node["rasters"]:
-                    # to world coordinates and mm units, baking any rotation,
-                    # skew or mirroring into the pixel data (pos/size come back
-                    # as the top-left corner and a positive extent)
-                    self._place_raster(raster, node["xformToWorld"])
+        # 2b. if this element carries its own clip-path that resolves to
+        # a supported rect, add it as a clip context in this element's
+        # own frame (xformToWorld now includes the element's transform)
+        own_clip = node.get("clip-path")
+        if own_clip:
+            if own_clip in self._clip_rects:
+                node["clips"].append(
+                    {
+                        "rect": self._clip_rects[own_clip],
+                        "frame": list(node["xformToWorld"]),
+                    }
+                )
+            else:
+                log.info(f"clip-path #{own_clip} is not a supported rectangular clip; ignored")
 
-                    # Crop to any active rectangular clip-path (pos/size are now
-                    # the normalized top-left + positive extent in mm)
-                    if node["clips"] and not self._apply_clips(raster, node["clips"]):
-                        continue  # fully clipped away -> drop the image
+        # 3. compile boundarys + conversions
+        for path_entry in node["paths"]:
+            # path_entry is {'data': [...], 'color': '#...'}
+            path = path_entry["data"]
+            hexcolor = path_entry["color"]
+            if path:  # skip if empty subpath
+                # 3a.) convert to world coordinates and then to mm units
+                for vert in path:
+                    # print isinstance(vert[0],float) and isinstance(vert[1],float)
+                    matrixApply(node["xformToWorld"], vert)
+                    vertexScale(vert, self.px2mm)
+                # 3b.) sort output by color
+                if hexcolor in self.boundarys:
+                    self.boundarys[hexcolor].append(path)
+                else:
+                    self.boundarys[hexcolor] = [path]
 
-                    self._render_raster(raster)
-                    self.rasters.append(raster)
+        # 4. any lasertags (cut settings)?
+        if "lasertags" in node:
+            self.lasertags.extend(node["lasertags"])
 
-                # recursive call
-                self.parse_children(child, node)
+        # 5. Raster Data [(x, y, size, data)]
+        for raster in node["rasters"]:
+            # to world coordinates and mm units, baking any rotation,
+            # skew or mirroring into the pixel data (pos/size come back
+            # as the top-left corner and a positive extent)
+            self._place_raster(raster, node["xformToWorld"])
+
+            # Crop to any active rectangular clip-path (pos/size are now
+            # the normalized top-left + positive extent in mm)
+            if node["clips"] and not self._apply_clips(raster, node["clips"]):
+                continue  # fully clipped away -> drop the image
+
+            self._render_raster(raster)
+            self.rasters.append(raster)
+
+        # 6. recursive call, a 'use' draws its referenced element instead of
+        # its own children
+        if tagName == "use":
+            self.parse_use(node, use_depth)
+        else:
+            self.parse_children(child, node, use_depth)
+
+    def parse_use(self, node, use_depth):
+        """Draw the element a 'use' tag references, in the frame of the tag.
+
+        Only same document references are supported. The reference is resolved
+        against the id map collected before the traversal, so it works no
+        matter where the referenced element sits in the document.
+        """
+        if use_depth >= self.MAX_USE_DEPTH:
+            log.warn("'use' tags nested too deeply, ignored")
+            return
+        href = node.get("href")
+        if not href or not href.startswith("#"):
+            log.warn("'use' tag skipped: only same document references are supported")
+            return
+        target = self._elements_by_id.get(href[1:])
+        if target is None:
+            log.warn(f"'use' tag skipped: no element with id {href[1:]}")
+            return
+
+        # x/y on the tag translate the referenced element, after its transform
+        x = node.get("x") or 0
+        y = node.get("y") or 0
+        if x or y:
+            node["xformToWorld"] = matrixMult(node["xformToWorld"], [1, 0, 0, 1, x, y])
+
+        self.parse_element(target, node, use_depth + 1, from_use=True)
 
 
 # if __name__ == "__main__":
