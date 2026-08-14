@@ -1215,12 +1215,20 @@ def supermove(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_LINE)
 
 
-def rastermove(x, y, z=0.0):
+def rastermove(x, y, z=None):
+    """A raster move, like move() but latching pixel data along the way.
+
+    An axis left as None keeps the target the controller already holds, so a
+    raster does not disturb a focus the head was jogged to.
+    """
     global SerialLoop
     with SerialLoop.lock:
-        SerialLoop.send_param(PARAM_TARGET_X, x)
-        SerialLoop.send_param(PARAM_TARGET_Y, y)
-        SerialLoop.send_param(PARAM_TARGET_Z, z)
+        if x is not None:
+            SerialLoop.send_param(PARAM_TARGET_X, x)
+        if y is not None:
+            SerialLoop.send_param(PARAM_TARGET_Y, y)
+        if z is not None:
+            SerialLoop.send_param(PARAM_TARGET_Z, z)
         SerialLoop.send_command(CMD_RASTER)
 
 

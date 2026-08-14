@@ -1756,6 +1756,14 @@ def test_rastermove_encodes_targets_and_raster_cmd(loop):
     assert cmds[-1] == ord(driveboard.CMD_RASTER)
 
 
+def test_rastermove_leaves_unnamed_axes_alone(loop):
+    # a raster line only names x and y, so a z the head was jogged to (e.g. a
+    # focus) must not be commanded back to the offset origin on every line
+    driveboard.rastermove(5.0, 6.0)
+    cmds = bytes(loop.tx_buffer)
+    assert ord(driveboard.PARAM_TARGET_Z) not in cmds
+
+
 def test_rasterdata_brackets_pixels(loop):
     driveboard.rasterdata([0, 128, 255], 0, 3)
     cmds = bytes(loop.tx_buffer)
