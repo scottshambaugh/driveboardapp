@@ -1,5 +1,10 @@
 # DriveboardApp Changelog
 
+## Unreleased
+### Bug Fixes
+- Raster lines no longer command z, so engraving keeps the focus the head was jogged to instead of driving it back to the offset origin on every line
+- Raster scanlines now advance y during the lead-out instead of as a standalone hop between lines, to avoid harsh y accelerations at every new line
+
 ## v26.08.1 (August 2026)
 ### New Features
 - Speed up loading svg files with raster images (esp. duplicates)

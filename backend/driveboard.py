@@ -1520,7 +1520,7 @@ def job_laser_validate(jobdict):
                             check_point(pos, passidx, kind)
 
 
-def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_):
+def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_, exit_y=None):
     """Stream one raster segment: seek to lead-in, ramp in, raster move with
     pixel data, ramp out. `orientation` describes one engraving direction of a
     segment: absolute mm positions (leadin/start/end/leadout, line_y) and the
@@ -1530,6 +1530,10 @@ def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_):
     n pixels travels n pixel widths. The controller latches a pixel every pixel
     width from the start of the move, so each pixel burns over its own extent,
     and even a lone pixel gets a move long enough for the planner to keep.
+
+    exit_y ends the lead-out on the next segment's scanline instead of this
+    one, see _raster_exit_y. The beam is already off by then, so the tilt only
+    changes where the head comes to rest.
     """
     line_y = orientation["line_y"]
     intensity(0.0)  # intensity for seek and lead-in
@@ -1541,7 +1545,54 @@ def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_):
     rastermove(orientation["end"], line_y)  # raster move
     rasterdata(orientation["data"], orientation["lo"], orientation["hi"])  # stream raster data
     intensity(0.0)  # intensity for lead-out
-    move(orientation["leadout"], line_y)  # lead-out
+    move(orientation["leadout"], line_y if exit_y is None else exit_y)  # lead-out
+
+
+# How far off its own scanline a lead-out may finish, as a fraction of the x
+# travel it has to get there. The controller takes a junction at full speed
+# while the turn into it stays under about 18 degrees (a 0.32 slope), so this
+# keeps the tilt well inside the corner it will not brake for.
+_RASTER_TILT_MAX_SLOPE = 0.1
+
+
+def _raster_exit_y(orientation, next_orientation):
+    """The y to end `orientation`'s lead-out on, None to leave it on its own
+    scanline.
+
+    A scanline's y advance is otherwise a standalone hop of a fraction of a
+    millimetre: the whole gantry accelerates and stops for it, once per line,
+    always in the same direction within an image. Ending the lead-out on the
+    next scanline spreads that advance over the lead-out's x travel instead, so
+    y is only ever the minor axis of a long move and never starts and stops on
+    its own. Only a shallow tilt qualifies, so the corner out of the raster
+    move stays straight enough to take at full speed, which also rules out
+    tilting towards a scanline that is far away or a lead-out clamped to no x
+    travel at all.
+    """
+    if next_orientation is None:
+        return None
+    dy = next_orientation["line_y"] - orientation["line_y"]
+    if dy == 0.0:
+        return None
+    if abs(dy) > _RASTER_TILT_MAX_SLOPE * abs(orientation["leadout"] - orientation["end"]):
+        return None
+    return next_orientation["line_y"]
+
+
+def _emit_raster_run(orientations, seekrate, feedrate_, intensity_):
+    """Emit raster segments in the order given, each lead-out tilted onto the
+    next segment's scanline where it can be, see _raster_exit_y. Returns the
+    last orientation emitted, or None if there were none."""
+    prev = None
+    for orientation in orientations:
+        if prev is not None:
+            _emit_raster_segment(
+                prev, seekrate, feedrate_, intensity_, _raster_exit_y(prev, orientation)
+            )
+        prev = orientation
+    if prev is not None:
+        _emit_raster_segment(prev, seekrate, feedrate_, intensity_)  # nothing left to tilt onto
+    return prev
 
 
 def _raster_orientations(
@@ -1692,13 +1743,18 @@ def _emit_raster_bidi(
             )
         )
         line_of.append(line_start // px_w)
-    last = None
-    for i, d in _order_raster_bidi(
-        orients, line_of, start, line_count, next_rect, seekrate, feedrate_
-    ):
-        last = orients[i][0] if d == 1 else orients[i][1]
-        _emit_raster_segment(last, seekrate, feedrate_, intensity_)
-    return [last["leadout"], last["line_y"]]
+    last = _emit_raster_run(
+        (
+            orients[i][0] if d == 1 else orients[i][1]
+            for i, d in _order_raster_bidi(
+                orients, line_of, start, line_count, next_rect, seekrate, feedrate_
+            )
+        ),
+        seekrate,
+        feedrate_,
+        intensity_,
+    )
+    return [last["leadout"], last["line_y"]] if last else None
 
 
 def _emit_raster_nn(
@@ -1779,11 +1835,12 @@ def _emit_raster_nn(
         end_rect=next_rect,
     )
 
-    last = None
-    for idx, reverse in tour:
-        fwd, rev = orients[idx][0]
-        last = rev if reverse else fwd
-        _emit_raster_segment(last, seekrate, feedrate_, intensity_)
+    last = _emit_raster_run(
+        (orients[idx][0][1] if reverse else orients[idx][0][0] for idx, reverse in tour),
+        seekrate,
+        feedrate_,
+        intensity_,
+    )
     return [last["leadout"], last["line_y"]] if last else None
 
 
@@ -2041,8 +2098,17 @@ def _job_laser_image(
                 if collect:
                     collected.append((segment_start, segment_end, line_start, line_y))
                 else:
+                    # emit one segment behind, so each lead-out can end on the
+                    # scanline that follows it, see _raster_exit_y
+                    if last is not None:
+                        _emit_raster_segment(
+                            last,
+                            seekrate,
+                            feedrate_,
+                            intensity_,
+                            _raster_exit_y(last, orientation),
+                        )
                     last = orientation
-                    _emit_raster_segment(orientation, seekrate, feedrate_, intensity_)
 
         # prime for next line, collection always scans forward
         if collect:
@@ -2051,6 +2117,9 @@ def _job_laser_image(
             direction = -1  # switch to rev
         elif (raster_mode == "Bidirectional") and (direction == -1):  # rev
             direction = 1  # switch to fwd
+
+    if last is not None:
+        _emit_raster_segment(last, seekrate, feedrate_, intensity_)  # nothing left to tilt onto
 
     common = (
         posx,

@@ -510,6 +510,101 @@ def test_raster_leadout_stays_within_travel_under_an_offset(loop, offset):
     assert min(xs) >= x_min - 1e-6, f"lead-in ran {x_min - min(xs):.1f}mm past travel"
 
 
+def _commanded_moves(buf):
+    """Every motion command in a program as (command, x, y).
+
+    Parameters latch until a command consumes them. Raster pixel payloads are
+    skipped, their bytes are in the same range as parameter data.
+    """
+    buf = bytes(buf)
+    moves = []
+    params = {}
+    i = 0
+    while i < len(buf):
+        b = buf[i]
+        if b == ord(driveboard.CMD_RASTER_DATA_START):
+            i = buf.index(ord(driveboard.CMD_RASTER_DATA_END), i) + 1
+        elif b >= 128:
+            marker, value = decode_param(buf, i)
+            params[marker] = value
+            i += 5
+        else:
+            if chr(b) in (driveboard.CMD_LINE, driveboard.CMD_RASTER):
+                moves.append(
+                    (
+                        chr(b),
+                        params.get(driveboard.PARAM_TARGET_X),
+                        params.get(driveboard.PARAM_TARGET_Y),
+                    )
+                )
+            i += 1
+    return moves
+
+
+@pytest.mark.parametrize(
+    "raster_mode", ["Forward", "Bidirectional", "NearestNeighbor"], ids=str.lower
+)
+def test_raster_advances_y_along_the_leadout(loop, monkeypatch, raster_mode):
+    """A scanline's y advance rides the lead-out rather than standing alone.
+
+    On its own it is a hop of a fraction of a millimetre that the controller
+    accelerates and stops the whole gantry for, once per scanline and always
+    the same way within an image, which is how a raster loses y steps a vector
+    pass never does. Spread over the lead-out's x travel, y is only ever the
+    minor axis of a long move.
+    """
+    from config import conf
+
+    monkeypatch.setitem(conf, "raster_mode", raster_mode)
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = {
+        # noreturn keeps the trip home out of the measurement
+        "head": {"noreturn": True},
+        "passes": [
+            {
+                "items": [0],
+                "feedrate": 2000,
+                "intensity": 80,
+                "air_assist": "off",
+                "pxsize": 0.2,
+            }
+        ],
+        "items": [{"def": 0}],
+        # solid, and tall enough for a good few scanlines
+        "defs": [
+            {
+                "kind": "image",
+                "pos": [100.0, 100.0],
+                "size": [40.0, 4.0],
+                "data": _margin_png((0.0, 1.0)),
+            }
+        ],
+    }
+    driveboard.job(job)
+    moves = _commanded_moves(loop.tx_buffer)
+    assert len(moves) > 8, "expected several scanlines"
+
+    scanlines = set()
+    prev = None
+    for cmd, x, y in moves:
+        if prev is not None and y != prev[1]:
+            dx, dy = abs(x - prev[0]), abs(y - prev[1])
+            assert dx > 1.0, f"y advanced {dy:.3f}mm over only {dx:.3f}mm of x travel"
+            assert dy <= driveboard._RASTER_TILT_MAX_SLOPE * dx + 1e-9, (
+                f"y advance of {dy:.3f}mm over {dx:.3f}mm of x is too steep a corner"
+            )
+        if cmd == driveboard.CMD_RASTER:
+            scanlines.add(round(y, 6))
+            # the burn itself has to stay on its scanline, whatever the
+            # lead-out either side of it does
+            assert y == prev[1], "raster move is not axis aligned"
+        prev = (x, y)
+
+    # every scanline is still engraved exactly once, at its own y
+    assert len(scanlines) > 4
+    assert scanlines == {round(100.0 + (i + 0.5) * 0.2, 6) for i in range(len(scanlines))}
+
+
 @pytest.mark.parametrize(
     "offset,returns",
     [(0.0, True), (100.0, True), (-50.0, False)],
