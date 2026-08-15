@@ -2,9 +2,9 @@
 
 ## Unreleased
 ### Bug Fixes
-- SVG import now supports Inkscape clones (in `use` tags) (Inkscape clones)
-- Raster lines no longer command z, so engraving keeps the focus the head was jogged to instead of driving it back to the offset origin on every line
-- Raster scanlines now advance y during the lead-out instead of as a standalone hop between lines, to avoid harsh y accelerations at every new line
+- SVG import now supports Inkscape cloned opbjects
+- Raster lines no longer command z
+- Raster scanlines now advance y during the lead-out instead of as a standalone hop between scanlines, to avoid y acceleration jumps
 
 ## v26.08.1 (August 2026)
 ### New Features
@@ -50,23 +50,26 @@
 ### New Features
 - Added a NearestNeighbor raster mode that reorders engraved segments to minimize seek travel, speeding up sparse/large-whitespace images.
 - Engrave only the visible part of a cropped (rectangular clip-path) image from an SVG, including clips on a wrapping group.
-- Pausing now freezes the machine in place (beam off) and keeps its job, so it resumes exactly where it left off.
 - Auto-reconnect to the controller after a serial disconnect.
 
-### Bug Fixes
-- Fixed raster engraving freezing mid-job. A firmware data race on the serial
-  chunk-acknowledgement counters (shared between the main loop and the stepper
-  interrupt) dropped CMD_CHUNK_PROCESSED acks under sustained rastering, causing
-  the host's buffer tally to desync and deadlock. The accounting is now atomic,
-  with a host-side resync as a safety net.
+### Safety
+- Pausing now freezes the machine in place (beam off) and keeps its job, so it resumes exactly where it left off.
 - Fixed the low-memory safety stop never triggering.
+- Fixed move commands firing the laser with leftover intensity from a prior job.
+- Added a firmware serial watchdog that stops the laser if the host connection is lost.
+- Fixed a serial write error being swallowed mid-job instead of stopping the laser.
+- Fixed a possible firmware buffer overflow when a job was paused for an open door or chiller fault.
+- Fixed out-of-range coordinates and feedrates wrapping to wildly wrong values instead of being clamped.
+- Fixed a corrupted serial byte still being acted on after failing the transmission-error check (could undo the resulting stop).
+- Mill jobs are now validated against the work area (like laser jobs).
+
+### Bug Fixes
+- Fixed raster engraving freezing mid-job due to a data race condition.
 - Fixed job import failing on segments longer than the max segment length.
 - Fixed incorrect job bounding boxes from the first point of each shape.
 - Fixed exported jobs missing their stats.
 - Fixed the job name not resetting when clearing a job.
 - Improved raster streaming performance by reducing serial lock contention.
-- Fixed move commands firing the laser with leftover intensity from a prior job.
-- Added a firmware serial watchdog that stops the laser if the host connection is lost.
 - Sped up path optimization for large vector jobs.
 - Sped up reverse and bidirectional ordering of large fills, which was quadratic in the number of segments.
 - Cut memory use of large jobs by storing the outgoing serial buffer as bytes.
@@ -80,10 +83,6 @@
 - Fixed distorted corners on rounded rectangles with a large ry.
 - Fixed running or exporting a job failing when it contained an empty field.
 - Fixed the python client's run_file ignoring the local flag and any non-default host.
-- Fixed a serial write error being swallowed mid-job instead of stopping the laser; the job no longer skips past the un-sent commands.
-- Fixed a possible firmware buffer overflow when a job was paused for an open door or chiller fault.
-- Fixed out-of-range coordinates and feedrates wrapping to wildly wrong values instead of being clamped; out-of-bounds move requests are now rejected.
-- Fixed a corrupted serial byte still being acted on after failing the transmission-error check (could undo the resulting stop).
 - Fixed reordering passes scrambling color assignments on jobs with ten or more colors.
 - Fixed raster engraving firing slightly low at high power, caused by a 16-bit overflow in the firmware intensity calculation.
 - Fixed DXF import bounds and placement using a fixed bed size instead of the configured workspace.
@@ -98,7 +97,6 @@
 - Raster and fill mode settings are now dropdowns in the config UI instead of free text.
 - Quieted noisy systemctl errors when the app can't disable system sleep (e.g. on Crostini).
 - Starting the server with no controller connected no longer crashes: the air/aux commands are now safe no-ops while disconnected.
-- Mill jobs are now validated against the work area (like laser jobs); an off-bed G0/G1 move is rejected instead of being sent to the machine.
 
 ### Development
 - Add CHANGELOG.md
@@ -208,7 +206,7 @@
 - Fixed crash when sorting lasertags
 - Prevent raster images from getting cut off short
 - Fixed race condition that could lock up firmware after instant-stop (thanks to Martin Renold)
-- Server-side verification of movement values; only allow movement within limit switches
+- Server-side verification of movement values - only allow movement within limit switches
 - Turn off air assist after homing to prevent air stuck on after power cycle
 
 
