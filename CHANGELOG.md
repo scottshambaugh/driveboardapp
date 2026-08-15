@@ -2,7 +2,7 @@
 
 ## Unreleased
 ### Bug Fixes
-- SVG import now supports Inkscape cloned opbjects
+- SVG import now supports Inkscape cloned objects and patterns
 - Raster lines no longer command z
 - Raster scanlines now advance y during the lead-out instead of as a standalone hop between scanlines, to avoid y acceleration jumps
 

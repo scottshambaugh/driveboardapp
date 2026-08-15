@@ -55,6 +55,7 @@ class SVGAttributeReader:
         self.re_findall_unitparts = re.compile(
             r"(-?[0-9]*\.?[0-9]*(?:e-?[0-9]+)?)(cm|mm|pt|pc|in|%|em|ex)?"
         ).findall
+        self.re_match_painturl = re.compile(r"url\(\s*['\"]?#([^)'\"\s]+)['\"]?\s*\)").match
 
     def read_attrib(self, node, attr, value):
         """Read any attribute.
@@ -96,7 +97,17 @@ class SVGAttributeReader:
     def colorAttrib(self, node, attr, value):
         # http://www.w3.org/TR/SVG11/color.html
         # http://www.w3.org/TR/SVG11/painting.html#SpecifyingPaint
-        """Read a color attribute."""
+        """Read a color attribute, or a url(#id) paint server reference.
+
+        A paint server is kept as '<attr>-ref' for the reader to resolve, and
+        clears the plain color so the shape is not also painted flat.
+        """
+        ref = self.re_match_painturl(value.strip())
+        if ref:
+            node[attr + "-ref"] = ref.group(1)
+            node[attr] = None
+            return
+        node.pop(attr + "-ref", None)
         col = self._parseColor(value)
         if col != "inherit":
             node[attr] = col
@@ -289,7 +300,8 @@ class SVGAttributeReader:
         elif val.startswith("hsl"):
             log.warn("hsl/hsla color spaces are not supported")
         elif val.startswith("url"):
-            log.warn("defs are not supported")
+            # same document references are taken apart in colorAttrib
+            log.warn("only same document url(#id) paint references are supported")
         elif val in css3_names_to_hex:  # named colors
             return css3_names_to_hex[val]
         elif val in ["currentColor", "inherit"]:

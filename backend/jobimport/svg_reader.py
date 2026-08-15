@@ -51,8 +51,10 @@ except ImportError:
 #   * raster images
 #   * text (automatically converted to paths using system fonts)
 #   * 'use' tags referencing an element of the same document
+#   * 'pattern' fills, tiled into the shape they paint
 #
 # Intentionally not Supported:
+#   * gradient fills
 #   * markers
 #   * masking
 #   * em, ex, % units
@@ -73,6 +75,13 @@ class SVGReader:
     # how far 'use' tags may reference each other before the chain is dropped,
     # also what keeps a self referencing chain from recursing forever
     MAX_USE_DEPTH = 10
+
+    # how far a pattern may inherit from another pattern
+    MAX_PATTERN_DEPTH = 10
+
+    # how many tiles one pattern fill may lay down, so a tiny tile on a large
+    # shape cannot fill the job with copies of itself
+    MAX_PATTERN_TILES = 256
 
     def __init__(self, tolerance, target_size):
         # parsed path data, paths by color
@@ -114,6 +123,13 @@ class SVGReader:
 
         # every element that carries an id, for resolving 'use' references
         self._elements_by_id = {}
+
+        # 'pattern' elements by id, for resolving fill paint references
+        self._patterns = {}
+
+        # patterns currently being tiled, so a pattern that fills itself
+        # cannot recurse forever
+        self._active_patterns = set()
 
         # per parse image caches, see _decode_image and _apply_image_ops
         self._image_uris = {}
@@ -405,7 +421,7 @@ class SVGReader:
             }
 
     def _prescan_ids(self, root):
-        """Map every id to its element so 'use' references resolve.
+        """Map every id to its element so 'use' and paint references resolve.
 
         The first element wins when an id repeats, which matches how a browser
         resolves a duplicate id.
@@ -414,6 +430,264 @@ class SVGReader:
             eid = el.get("id")
             if eid and eid not in self._elements_by_id:
                 self._elements_by_id[eid] = el
+                if self._tagReader._get_tag(el) == "pattern":
+                    self._patterns[eid] = el
+
+    def is_pattern(self, ref):
+        """Whether a paint reference names a 'pattern' element."""
+        return ref in self._patterns
+
+    @staticmethod
+    def _attrib(el, name):
+        """An attribute by local name, whatever namespace prefix it carries."""
+        val = el.get(name)
+        if val is not None:
+            return val
+        for key, value in el.attrib.items():
+            if key.rpartition("}")[2] == name:
+                return value
+        return None
+
+    # the attributes a pattern inherits along its href chain
+    _pattern_attribs = (
+        "x",
+        "y",
+        "width",
+        "height",
+        "patternUnits",
+        "patternContentUnits",
+        "patternTransform",
+        "viewBox",
+    )
+
+    def _resolve_pattern(self, pid):
+        """Flatten a pattern and its href chain into (attributes, content).
+
+        A pattern may take both its attributes and its content from another
+        pattern, which is how Inkscape writes several copies of one tile. The
+        nearest definition of an attribute wins, and the first pattern in the
+        chain that has children provides the content.
+        """
+        attribs = {}
+        content = []
+        seen = {pid}
+        el = self._patterns.get(pid)
+        for _ in range(self.MAX_PATTERN_DEPTH):
+            if el is None:
+                break
+            for name in self._pattern_attribs:
+                if name not in attribs:
+                    val = self._attrib(el, name)
+                    if val is not None:
+                        attribs[name] = val
+            if not content:
+                content = list(el)
+            href = self._attrib(el, "href")
+            if not href or not href.startswith("#") or href[1:] in seen:
+                break
+            seen.add(href[1:])
+            el = self._patterns.get(href[1:])
+        return attribs, content
+
+    @staticmethod
+    def _matrixInvert(mat):
+        """The inverse of a 2x3 transform, or None if it is degenerate."""
+        det = mat[0] * mat[3] - mat[1] * mat[2]
+        if not det:
+            return None
+        return [
+            mat[3] / det,
+            -mat[1] / det,
+            -mat[2] / det,
+            mat[0] / det,
+            (mat[2] * mat[5] - mat[3] * mat[4]) / det,
+            (mat[1] * mat[4] - mat[0] * mat[5]) / det,
+        ]
+
+    def _shape_bbox(self, d, node):
+        """Bounding box of a shape outline, in the shape's own frame.
+
+        The outline goes through the regular path reader, so a curve is
+        measured on the same polyline the rest of the import would cut.
+        """
+        scratch = {"paths": [], "xformToWorld": node["xformToWorld"], "stroke": "#000000"}
+        self._tagReader._pathReader.add_path(d, scratch, color="#000000")
+        xs = [v[0] for entry in scratch["paths"] for v in entry["data"]]
+        ys = [v[1] for entry in scratch["paths"] for v in entry["data"]]
+        if not xs:
+            return None
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def _pattern_tile(self, attribs, bbox):
+        """The tile rectangle (x, y, w, h) in the frame of the filled shape,
+        or None when the pattern paints nothing."""
+        ar = self._tagReader._attribReader
+        units = attribs.get("patternUnits", "objectBoundingBox")
+        vals = {}
+        for name in ("x", "y", "width", "height"):
+            raw = attribs.get(name)
+            if raw is None:
+                vals[name] = 0.0
+                continue
+            num, unit = parseScalar(raw)
+            if num is None:
+                vals[name] = 0.0
+            elif unit == "%":
+                vals[name] = num / 100.0 if units == "objectBoundingBox" else None
+            elif unit:
+                vals[name] = ar._parseUnit(raw)
+            else:
+                vals[name] = num
+            if vals[name] is None:
+                log.warn(f"pattern {name} in '{raw}' is not supported, fill skipped")
+                return None
+        if units == "objectBoundingBox":
+            bw, bh = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            tile = (
+                bbox[0] + vals["x"] * bw,
+                bbox[1] + vals["y"] * bh,
+                vals["width"] * bw,
+                vals["height"] * bh,
+            )
+        else:
+            tile = (vals["x"], vals["y"], vals["width"], vals["height"])
+        if tile[2] <= 0 or tile[3] <= 0:
+            return None
+        return tile
+
+    def _pattern_content_xform(self, attribs, tile, bbox):
+        """The transform from pattern content coordinates to the tile at the
+        origin, honoring 'viewBox' and 'patternContentUnits'."""
+        vb = attribs.get("viewBox")
+        if vb:
+            vb_x, vb_y, vb_w, vb_h = parseFloats(vb)
+            if vb_w > 0 and vb_h > 0:
+                # preserveAspectRatio defaults to xMidYMid meet
+                scale = min(tile[2] / vb_w, tile[3] / vb_h)
+                return [
+                    scale,
+                    0,
+                    0,
+                    scale,
+                    0.5 * (tile[2] - vb_w * scale) - vb_x * scale,
+                    0.5 * (tile[3] - vb_h * scale) - vb_y * scale,
+                ]
+        if attribs.get("patternContentUnits") == "objectBoundingBox":
+            return [bbox[2] - bbox[0], 0, 0, bbox[3] - bbox[1], 0, 0]
+        return [1, 0, 0, 1, 0, 0]
+
+    def _pattern_tile_range(self, tile, xform, bbox):
+        """Which tile indices of the pattern grid can reach the shape.
+
+        The grid is laid out in the pattern's own space, so the shape's box is
+        mapped back through 'patternTransform' to index into it.
+        """
+        inverse = self._matrixInvert(xform)
+        if inverse is None:
+            return None
+        xs, ys = [], []
+        for px, py in (
+            (bbox[0], bbox[1]),
+            (bbox[2], bbox[1]),
+            (bbox[2], bbox[3]),
+            (bbox[0], bbox[3]),
+        ):
+            p = [px, py]
+            matrixApply(inverse, p)
+            xs.append(p[0])
+            ys.append(p[1])
+        # a sliver of a tile is rounding noise from the transforms, not a tile
+        eps = 1e-6
+        i0 = math.floor((min(xs) - tile[0]) / tile[2] + eps)
+        i1 = math.ceil((max(xs) - tile[0]) / tile[2] - eps) - 1
+        j0 = math.floor((min(ys) - tile[1]) / tile[3] + eps)
+        j1 = math.ceil((max(ys) - tile[1]) / tile[3] - eps) - 1
+        return i0, max(i0, i1), j0, max(j0, j1)
+
+    def _render_pattern_fill(self, node, fill, use_depth):
+        """Draw a pattern into the shape it fills.
+
+        The tile grid is laid out in the shape's frame, and every tile that
+        reaches the shape draws the pattern content once, clipped to the
+        shape's bounding box.
+        """
+        pid = fill["ref"]
+        if pid in self._active_patterns:
+            log.warn(f"pattern #{pid} fills itself, ignored")
+            return
+        bbox = self._shape_bbox(fill["d"], node)
+        if bbox is None or bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
+            return
+        attribs, content = self._resolve_pattern(pid)
+        if not content:
+            return
+        tile = self._pattern_tile(attribs, bbox)
+        if tile is None:
+            return
+
+        # patternTransform moves the whole grid, the tile index and the
+        # content transform then place one copy inside it
+        pattern_xform = [1, 0, 0, 1, 0, 0]
+        if attribs.get("patternTransform"):
+            tmp = {"xform": pattern_xform}
+            self._tagReader._attribReader.transformAttrib(
+                tmp, "transform", attribs["patternTransform"]
+            )
+            pattern_xform = tmp["xform"]
+        grid = matrixMult(node["xformToWorld"], pattern_xform)
+        content_xform = self._pattern_content_xform(attribs, tile, bbox)
+
+        span = self._pattern_tile_range(tile, pattern_xform, bbox)
+        if span is None:
+            return
+        i0, i1, j0, j1 = span
+        count = (i1 - i0 + 1) * (j1 - j0 + 1)
+        if count > self.MAX_PATTERN_TILES:
+            log.warn(
+                f"pattern #{pid} needs {count} tiles, only the first "
+                f"{self.MAX_PATTERN_TILES} are drawn"
+            )
+
+        # the shape only paints inside itself, and its box is what the
+        # rectangular clips this reader supports can express
+        clips = list(node["clips"])
+        clips.append(
+            {
+                "rect": {
+                    "corners": [[bbox[0], bbox[1]], [bbox[2], bbox[3]]],
+                    "local": [1, 0, 0, 1, 0, 0],
+                },
+                "frame": list(node["xformToWorld"]),
+            }
+        )
+
+        self._active_patterns.add(pid)
+        try:
+            drawn = 0
+            for j in range(j0, j1 + 1):
+                for i in range(i0, i1 + 1):
+                    if drawn >= self.MAX_PATTERN_TILES:
+                        return
+                    drawn += 1
+                    placed = matrixMult(
+                        grid, [1, 0, 0, 1, tile[0] + i * tile[2], tile[1] + j * tile[3]]
+                    )
+                    tile_node = {
+                        "xformToWorld": matrixMult(placed, content_xform),
+                        "display": node.get("display"),
+                        "visibility": node.get("visibility"),
+                        "fill": "#000000",
+                        "stroke": "#000000",
+                        "color": node.get("color"),
+                        "fill-opacity": 1.0,
+                        "stroke-opacity": 1.0,
+                        "opacity": node.get("opacity"),
+                        "clips": clips,
+                    }
+                    for child in content:
+                        self.parse_element(child, tile_node, use_depth)
+        finally:
+            self._active_patterns.discard(pid)
 
     def _clip_box_mm(self, clip):
         """Axis-aligned mm bounding box of a clip context's rect, after applying
@@ -511,6 +785,8 @@ class SVGReader:
         self._derived_images = {}
         self._clip_rects = {}
         self._elements_by_id = {}
+        self._patterns = {}
+        self._active_patterns = set()
 
         # Convert text elements to paths before parsing
         svgstring = convert_text_to_paths(svgstring)
@@ -694,6 +970,7 @@ class SVGReader:
         node = {
             "paths": [],
             "rasters": [],
+            "fill_patterns": [],
             "xform": [1, 0, 0, 1, 0, 0],
             "xformToWorld": parentNode["xformToWorld"],
             "display": parentNode.get("display"),
@@ -764,6 +1041,10 @@ class SVGReader:
 
             self._render_raster(raster)
             self.rasters.append(raster)
+
+        # 5b. pattern fills, tiled into the shape they paint
+        for fill in node["fill_patterns"]:
+            self._render_pattern_fill(node, fill, use_depth)
 
         # 6. recursive call, a 'use' draws its referenced element instead of
         # its own children

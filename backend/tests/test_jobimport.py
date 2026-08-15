@@ -16,6 +16,7 @@ import pytest
 from jobimport import imagedata
 from jobimport.gcode_reader import GcodeReader
 from jobimport.imagedata import preview_image_data
+from jobimport.svg_reader import SVGReader
 from jobimport.svg_text_converter import convert_text_to_paths
 from PIL import Image
 
@@ -341,6 +342,187 @@ def test_defs_are_only_drawn_where_used():
 def test_use_skips_what_it_cannot_draw(body):
     job = jobimport.convert(_use_svg(body), optimize=False)
     assert not [d for d in job["defs"] if d["kind"] == "image"]
+
+
+def _pattern_svg(defs, body):
+    """A 100x100mm svg, one svg user unit to the mm."""
+    return (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" '
+        'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'width="100mm" height="100mm" viewBox="0 0 100 100">'
+        f"<defs>{defs}</defs>{body}"
+        "</svg>"
+    )
+
+
+def _tile_pattern(pid="p", attribs='patternUnits="userSpaceOnUse" width="50" height="50"'):
+    """A 50x50 pattern tile holding one 40x20 image at (10, 20) of the tile."""
+    return (
+        f"<pattern id='{pid}' {attribs}>"
+        f'<image x="10" y="20" width="40" height="20" xlink:href="{_png_data_uri(MARKER)}"/>'
+        "</pattern>"
+    )
+
+
+def _pattern_images(defs, body):
+    """Convert a pattern fixture, returning its image defs by position."""
+    job = jobimport.convert(_pattern_svg(defs, body), optimize=False)
+    defs_out = [d for d in job["defs"] if d["kind"] == "image"]
+    return sorted(defs_out, key=lambda d: (round(d["pos"][1], 3), round(d["pos"][0], 3)))
+
+
+def test_pattern_fill_draws_the_tile():
+    """A shape filled with a pattern draws the pattern content, placed in the
+    tile's frame. This is what Inkscape's 'Objects to Pattern' leaves behind."""
+    defs = _tile_pattern()
+    imgs = _pattern_images(
+        defs, '<rect x="0" y="0" width="50" height="50" fill="url(#p)" stroke="none"/>'
+    )
+    assert len(imgs) == 1
+    assert imgs[0]["pos"] == pytest.approx([10.0, 20.0])
+    assert imgs[0]["size"] == pytest.approx([40.0, 20.0])
+    # nothing was cropped, so the pixels must not be re-encoded
+    assert imgs[0]["data"] == _png_data_uri(MARKER)
+
+
+def test_pattern_fill_repeats_over_the_shape():
+    """A tile smaller than the shape is laid down as often as it takes to
+    cover it."""
+    imgs = _pattern_images(
+        _tile_pattern(), '<rect x="0" y="0" width="100" height="100" fill="url(#p)" stroke="none"/>'
+    )
+    assert [(d["pos"][0], d["pos"][1]) for d in imgs] == [
+        pytest.approx(p) for p in ((10.0, 20.0), (60.0, 20.0), (10.0, 70.0), (60.0, 70.0))
+    ]
+    # one image placed four times stays one image
+    assert len({d["data"] for d in imgs}) == 1
+
+
+def test_pattern_fill_follows_the_href_chain():
+    """A pattern may take its content and size from another pattern and bring
+    only its own patternTransform, which is how repeated copies are written."""
+    defs = _tile_pattern() + '<pattern id="p2" xlink:href="#p" patternTransform="translate(50,0)"/>'
+    imgs = _pattern_images(
+        defs, '<rect x="50" y="0" width="50" height="50" fill="url(#p2)" stroke="none"/>'
+    )
+    assert len(imgs) == 1
+    assert imgs[0]["pos"] == pytest.approx([60.0, 20.0])
+    assert imgs[0]["size"] == pytest.approx([40.0, 20.0])
+
+
+def test_pattern_fill_is_clipped_to_the_shape():
+    """The pattern only paints inside the shape, so content that runs past it
+    is cropped rather than engraved."""
+    imgs = _pattern_images(
+        _tile_pattern(), '<rect x="0" y="0" width="30" height="50" fill="url(#p)" stroke="none"/>'
+    )
+    assert len(imgs) == 1
+    assert imgs[0]["pos"] == pytest.approx([10.0, 20.0])
+    assert imgs[0]["size"] == pytest.approx([20.0, 20.0])
+
+
+def test_pattern_fill_takes_the_frame_of_the_shape():
+    """The tile grid lives in the filled shape's own frame, so a transform on
+    the shape moves the pattern with it."""
+    imgs = _pattern_images(
+        _tile_pattern(),
+        '<g transform="translate(20,10)">'
+        '<rect x="0" y="0" width="50" height="50" fill="url(#p)" stroke="none"/>'
+        "</g>",
+    )
+    assert len(imgs) == 1
+    assert imgs[0]["pos"] == pytest.approx([30.0, 30.0])
+
+
+def test_pattern_fill_in_object_bounding_box_units():
+    """patternUnits defaults to objectBoundingBox, where the tile is a fraction
+    of the shape's box rather than a length."""
+    imgs = _pattern_images(
+        _tile_pattern(attribs='width="1" height="1"'),
+        '<rect x="20" y="20" width="50" height="50" fill="url(#p)" stroke="none"/>',
+    )
+    assert len(imgs) == 1
+    # the tile covers the whole box, and content is in user units from its corner
+    assert imgs[0]["pos"] == pytest.approx([30.0, 40.0])
+
+
+def test_pattern_fill_draws_vector_content():
+    """Pattern content is not only rasters; paths tile the same way."""
+    defs = (
+        '<pattern id="p" patternUnits="userSpaceOnUse" width="50" height="50">'
+        '<path d="M 0,0 L 20,0" stroke="#ff0000" fill="none"/>'
+        "</pattern>"
+    )
+    job = jobimport.convert(
+        _pattern_svg(
+            defs, '<rect x="0" y="0" width="100" height="50" fill="url(#p)" stroke="none"/>'
+        ),
+        optimize=False,
+    )
+    paths = [p for d in job["defs"] if d["kind"] == "path" for p in d["data"]]
+    assert sorted(p[0][0] for p in paths) == [pytest.approx(0.0), pytest.approx(50.0)]
+
+
+def test_pattern_fill_keeps_the_stroke_of_the_shape():
+    """Filling with a pattern says nothing about the outline, which still cuts."""
+    job = jobimport.convert(
+        _pattern_svg(
+            _tile_pattern(),
+            '<rect x="0" y="0" width="50" height="50" fill="url(#p)" stroke="#ff0000"/>',
+        ),
+        optimize=False,
+    )
+    kinds = sorted(d["kind"] for d in job["defs"])
+    assert kinds == ["image", "path"]
+
+
+@pytest.mark.parametrize(
+    "defs,body",
+    [
+        # a gradient is a paint server this reader has no geometry for
+        (
+            '<linearGradient id="g"><stop offset="0" stop-color="#ff0000"/></linearGradient>',
+            '<rect x="0" y="0" width="50" height="50" fill="url(#g)" stroke="none"/>',
+        ),
+        # nothing by that id
+        ("", '<rect x="0" y="0" width="50" height="50" fill="url(#nope)" stroke="none"/>'),
+        # an empty pattern paints nothing
+        (
+            '<pattern id="p" patternUnits="userSpaceOnUse" width="50" height="50"/>',
+            '<rect x="0" y="0" width="50" height="50" fill="url(#p)" stroke="none"/>',
+        ),
+        # a pattern whose content fills itself must not recurse forever
+        (
+            '<pattern id="p" patternUnits="userSpaceOnUse" width="50" height="50">'
+            '<rect x="0" y="0" width="50" height="50" fill="url(#p)" stroke="none"/>'
+            "</pattern>",
+            '<rect x="0" y="0" width="50" height="50" fill="url(#p)" stroke="none"/>',
+        ),
+    ],
+    ids=["gradient", "unknown-id", "empty-pattern", "cycle"],
+)
+def test_pattern_fill_skips_what_it_cannot_draw(defs, body):
+    job = jobimport.convert(_pattern_svg(defs, body), optimize=False)
+    assert job["defs"] == []
+
+
+def test_pattern_fill_stops_at_the_tile_limit():
+    """A tile far smaller than the shape is capped rather than filling the job
+    with copies of itself."""
+    defs = (
+        '<pattern id="p" patternUnits="userSpaceOnUse" width="1" height="1">'
+        '<path d="M 0,0 L 0.5,0" stroke="#ff0000" fill="none"/>'
+        "</pattern>"
+    )
+    job = jobimport.convert(
+        _pattern_svg(
+            defs, '<rect x="0" y="0" width="100" height="100" fill="url(#p)" stroke="none"/>'
+        ),
+        optimize=False,
+    )
+    paths = [p for d in job["defs"] if d["kind"] == "path" for p in d["data"]]
+    assert len(paths) == SVGReader.MAX_PATTERN_TILES
 
 
 def _group_images_like_frontend(job):

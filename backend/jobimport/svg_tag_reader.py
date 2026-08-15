@@ -98,6 +98,8 @@ class SVGTagReader:
             self._pathReader.add_path(d, node)
         if self._has_valid_fill(node):
             self._pathReader.add_path(d, node, color=node.get("fill"))
+        if d and self._has_pattern_fill(node):
+            self._queue_pattern_fill(node, d)
 
     def polygon(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#PolygonElement
@@ -108,6 +110,8 @@ class SVGTagReader:
             self._pathReader.add_path(d, node)
         if self._has_valid_fill(node):
             self._pathReader.add_path(d, node, color=node.get("fill"))
+        if self._has_pattern_fill(node):
+            self._queue_pattern_fill(node, d)
 
     def polyline(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#PolylineElement
@@ -118,13 +122,16 @@ class SVGTagReader:
             self._pathReader.add_path(d, node)
         if self._has_valid_fill(node):
             self._pathReader.add_path(d, node, color=node.get("fill"))
+        if self._has_pattern_fill(node):
+            self._queue_pattern_fill(node, d)
 
     def rect(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#RectElement
         # has transform and style attributes
         has_stroke = self._has_valid_stroke(node)
         has_fill = self._has_valid_fill(node)
-        if not has_stroke and not has_fill:
+        has_pattern = self._has_pattern_fill(node)
+        if not has_stroke and not has_fill and not has_pattern:
             return
         w = node.get("width") or 0.0
         h = node.get("height") or 0.0
@@ -193,6 +200,8 @@ class SVGTagReader:
             self._pathReader.add_path(d, node)
         if has_fill:
             self._pathReader.add_path(d, node, color=node.get("fill"))
+        if has_pattern:
+            self._queue_pattern_fill(node, d)
 
     def line(self, node):
         # http://www.w3.org/TR/SVG11/shapes.html#LineElement
@@ -217,7 +226,8 @@ class SVGTagReader:
         # has transform and style attributes
         has_stroke = self._has_valid_stroke(node)
         has_fill = self._has_valid_fill(node)
-        if not has_stroke and not has_fill:
+        has_pattern = self._has_pattern_fill(node)
+        if not has_stroke and not has_fill and not has_pattern:
             return
         r = node.get("r") or 0.0
         cx = node.get("cx") or 0.0
@@ -265,12 +275,15 @@ class SVGTagReader:
                 self._pathReader.add_path(d, node)
             if has_fill:
                 self._pathReader.add_path(d, node, color=node.get("fill"))
+            if has_pattern:
+                self._queue_pattern_fill(node, d)
 
     def ellipse(self, node):
         # has transform and style attributes
         has_stroke = self._has_valid_stroke(node)
         has_fill = self._has_valid_fill(node)
-        if not has_stroke and not has_fill:
+        has_pattern = self._has_pattern_fill(node)
+        if not has_stroke and not has_fill and not has_pattern:
             return
         rx = node.get("rx") or 0.0
         ry = node.get("ry") or 0.0
@@ -319,6 +332,8 @@ class SVGTagReader:
                 self._pathReader.add_path(d, node)
             if has_fill:
                 self._pathReader.add_path(d, node, color=node.get("fill"))
+            if has_pattern:
+                self._queue_pattern_fill(node, d)
 
     def image(self, node):
         # has transform and style attributes
@@ -438,6 +453,45 @@ class SVGTagReader:
         """Get tag name without possible namespace prefix."""
         tag = domNode.tag
         return tag[tag.rfind("}") + 1 :]
+
+    @staticmethod
+    def _is_shown(node):
+        """Whether the element is painted at all, going by display, visibility
+        and opacity."""
+        display = node.get("display")
+        visibility = node.get("visibility")
+        opacity = node.get("opacity")
+        return bool(
+            display
+            and display != "none"
+            and visibility
+            and visibility != "hidden"
+            and visibility != "collapse"
+            and opacity
+            and opacity != 0.0
+        )
+
+    def _has_pattern_fill(self, node):
+        """Whether the fill is a reference to a pattern this reader can tile.
+
+        Gradients and unknown ids come through the same url(#id) syntax and
+        leave the shape unpainted.
+        """
+        ref = node.get("fill-ref")
+        if not ref or not self._is_shown(node):
+            return False
+        fill_opacity = node.get("fill-opacity")
+        if not fill_opacity:
+            return False
+        if not self._svgreader.is_pattern(ref):
+            log.warn(f"fill url(#{ref}) is not a pattern, shape left unpainted")
+            return False
+        return True
+
+    def _queue_pattern_fill(self, node, d):
+        """Hand the shape outline to the reader, which tiles the pattern into
+        it once the element's frame and clips are known."""
+        node["fill_patterns"].append({"ref": node["fill-ref"], "d": list(d)})
 
     def _has_valid_stroke(self, node):
         # http://www.w3.org/TR/SVG11/styling.html#SVGStylingProperties
