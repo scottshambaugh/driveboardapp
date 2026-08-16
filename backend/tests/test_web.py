@@ -350,6 +350,20 @@ def test_run_maps_out_of_bounds_to_422(auth_app, monkeypatch):
     assert resp.status_int == 422  # validation failure surfaced to the client
 
 
+def test_direct_run_rejects_when_not_ready(auth_app, monkeypatch):
+    monkeypatch.setattr(driveboard, "connected", lambda: True)
+    monkeypatch.setattr(driveboard, "status", lambda: {"ready": False})
+    started = []
+    monkeypatch.setattr(driveboard, "job", lambda job: started.append(job))
+    resp = auth_app.post(
+        "/run",
+        {"load_request": json.dumps({"job": MINIMAL_DBA})},
+        expect_errors=True,
+    )
+    assert resp.status_int == 400
+    assert not started
+
+
 def test_offset_requires_ready(auth_app, monkeypatch):
     monkeypatch.setattr(driveboard, "connected", lambda: True)
     monkeypatch.setattr(driveboard, "status", lambda: {"ready": False})
@@ -675,6 +689,60 @@ def test_load_reports_a_truncated_svg_readably(auth_app):
     assert resp.status_int == 422
     assert "well-formed" in resp.body.decode("utf-8")
     assert "truncated" in resp.body.decode("utf-8")
+
+
+def test_queue_listing_never_changes_process_working_directory(isolated_config, monkeypatch):
+    path = os.path.join(isolated_config.conf["stordir"], "one.dba")
+    with open(path, "w") as fp:
+        fp.write(MINIMAL_DBA)
+
+    monkeypatch.setattr(os, "chdir", lambda path: (_ for _ in ()).throw(AssertionError(path)))
+    assert web._get_sorted("*.dba", stripext=True) == ["one"]
+
+
+def test_stale_progressive_result_cannot_overwrite_replacement(tmp_path, monkeypatch):
+    tmpdir = tmp_path / "pending"
+    tmpdir.mkdir()
+    out_path = tmpdir / "job.dba"
+    out_path.write_text("old")
+    future_ready = threading.Event()
+
+    class Future:
+        def result(self, timeout=None):
+            assert future_ready.wait(5)
+
+    old_add_started = threading.Event()
+    release_old_add = threading.Event()
+    additions = []
+
+    def controlled_add(job, name):
+        if job == "old":
+            old_add_started.set()
+            assert release_old_add.wait(5)
+        additions.append(job)
+
+    monkeypatch.setattr(web, "_add", controlled_add)
+    token = web._pending_register(Future(), str(out_path), str(tmpdir))
+    with web._load_pending_lock:
+        entry = web._load_pending[token]
+        entry["name"] = "same"
+    future_ready.set()
+    assert old_add_started.wait(5)
+
+    def replace():
+        with web._load_pending_lock:
+            entry["stale"] = True
+            web._add("new", "same")
+
+    replacement = threading.Thread(target=replace)
+    replacement.start()
+    assert replacement.is_alive(), "replacement slipped between stale check and old publication"
+    release_old_add.set()
+    replacement.join(5)
+    assert entry["event"].wait(5)
+    with web._load_pending_lock:
+        web._load_pending.pop(token, None)
+    assert additions == ["old", "new"]
 
 
 def test_load_stores_an_unchanged_dba_without_reconverting(auth_app, isolated_config, monkeypatch):

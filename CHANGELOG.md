@@ -15,10 +15,10 @@
 
 ### Safety
 - The stop button is no longer blocked during initial dispatch, and fix a race condition where the job could have resumed after. The pause command was similarly fixed
-- Jogs and other manual moves are now refused while a job is running
+- Jogs and other manual moves are now refused while a job is running, and block duplicate job submissions
+- Fixed several latent race conditions and concurrency issues
 
-
-## v26.08.1 (August 2026)
+## v26.08.1 (August 7, 2026)
 ### New Features
 - Speed up loading svg files with raster images (esp. duplicates)
 - Seek-optimized ordering (NearestNeighbor rasters and vector path sorting) now runs a 2-opt untangling pass to further improve job time
@@ -39,7 +39,7 @@
 - The UI's seek lines now show the true post-optimizer path, and only includes items that have passes
 - Jog moves are now clamped to the work area so the head cannot hit a limit switch. Toggled with the new `jog_soft_limits` config setting
 
-## v26.08 (August 2026)
+## v26.08 (August 6, 2026)
 
 ### New Features
 - `pierce_time` now works, to dwell at the beginning of cut paths to ensure the material is fully pierced before moving. Per-pass, selectable in the UI and savable in presets

@@ -72,6 +72,8 @@ def loop(monkeypatch):
     import driveboard
 
     sl = driveboard.SerialLoopClass()
+    # A controller accepting a new job has reported its buffers idle.
+    sl._status["ready"] = True
     monkeypatch.setattr(driveboard, "SerialLoop", sl)
     return sl
 

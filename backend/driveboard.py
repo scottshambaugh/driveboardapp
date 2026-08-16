@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 import base64
+import contextlib
 import copy
 import datetime
 import functools
@@ -250,6 +251,10 @@ fallback_msg_thread = None
 # from the job's own writes.
 _dispatch_lock = threading.Lock()
 _dispatch_thread = None
+# Serializes complete machine operations (including multi-command operations
+# such as a pulse or jog) against job admission. Stop/pause deliberately do
+# not take this lock, so they remain able to interrupt a long dispatch.
+_operation_lock = threading.RLock()
 
 
 class MachineBusy(ValueError):
@@ -261,6 +266,28 @@ def _dispatch_elsewhere():
     """Whether another thread is part way through queueing a job."""
     owner = _dispatch_thread
     return owner is not None and owner != threading.get_ident()
+
+
+@contextlib.contextmanager
+def machine_operation():
+    """Keep a complete manual operation contiguous in the command stream."""
+    if not _operation_lock.acquire(blocking=False):
+        raise MachineBusy("another machine operation is in progress")
+    try:
+        yield
+    finally:
+        _operation_lock.release()
+
+
+def _serialized_operation(func):
+    """Serialize one public machine operation against jobs and its peers."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with machine_operation():
+            return func(*args, **kwargs)
+
+    return wrapper
 
 
 class SerialLoopClass(threading.Thread):
@@ -295,14 +322,17 @@ class SerialLoopClass(threading.Thread):
 
         # used for calculating percentage done
         self.job_size = 0
-        # True from the moment a job starts being queued until the last of it
-        # has gone out or a stop drops it, so a jog or any other manual move
-        # arriving meanwhile can be told apart from the job itself.
+        # True from job admission until firmware idle proves its rx buffer and
+        # planner have drained, or until a stop drops it. This distinguishes a
+        # job from manual writes arriving while its last moves still execute.
         self.job_active = False
         # A stop empties the buffer, but whatever was still queueing the job
         # goes on emitting into it, and the resume that follows would run the
         # remainder. Set by stop(), cleared by unstop() and by the next job.
         self.discard_writes = False
+        # unstop may arrive while the cancelled dispatch is still producing.
+        # In that case writes stay discarded until that producer exits.
+        self.clear_discard_after_dispatch = False
         # run time of the buffered stream, and where each move sits in it
         self.timer = JobTimer(TIMED_COMMANDS, TIMED_PARAMS)
 
@@ -388,6 +418,11 @@ class SerialLoopClass(threading.Thread):
             return  # stopped, see discard_writes
         self._guard_foreign_write()
         self.tx_buffer.append(ord(command))
+        # Do not admit a job on the strength of a status frame from before
+        # this command was queued. Firmware idle will set ready again after
+        # both its receive buffer and motion planner have drained.
+        self._status["ready"] = False
+        self._s["ready"] = False
         self.job_size += 1
         self.timer.command(command, self.job_size)
 
@@ -429,6 +464,12 @@ class SerialLoopClass(threading.Thread):
             chunk.append(int((255 - val) / 2) + 128)
         chunk.append(ord(CMD_RASTER_DATA_END))
         with self.lock:
+            # Chunk construction is intentionally outside the lock and may
+            # take long enough for stop() to land. Recheck after acquiring it
+            # so an aborted raster cannot refill the purged queue.
+            if self.discard_writes:
+                return
+            self._guard_foreign_write()
             self.tx_buffer.extend(chunk)
             self.job_size += len(chunk)
 
@@ -596,6 +637,12 @@ class SerialLoopClass(threading.Thread):
                     self.last_firmware_idle = time.time()
                     if not self.tx_buffer:
                         self._s["ready"] = True
+                        # Only firmware idle proves its rx buffer and planner
+                        # have both drained. Do not clear this during the tiny
+                        # window before an active dispatcher emits its first
+                        # command.
+                        if _dispatch_thread is None:
+                            self.job_active = False
                 elif data_char == INFO_DOOR_OPEN:
                     self._s["info"]["door"] = True
                 elif data_char == INFO_CHILLER_OFF:
@@ -809,7 +856,6 @@ class SerialLoopClass(threading.Thread):
         else:
             if self.tx_buffer:  # job finished sending
                 self.job_size = 0
-                self.job_active = False
                 self.tx_buffer = bytearray()
                 self.tx_pos = 0
                 self.timer.reset()
@@ -1177,6 +1223,7 @@ def status():
         return {"serial": False, "ready": False}
 
 
+@_serialized_operation
 def homing():
     """Run homing cycle."""
     global SerialLoop
@@ -1200,6 +1247,7 @@ def _clamp_param(name, val, lo, hi):
     return clamped
 
 
+@_serialized_operation
 def feedrate(val):
     global SerialLoop
     with SerialLoop.lock:
@@ -1208,6 +1256,7 @@ def feedrate(val):
         SerialLoop.send_param(PARAM_FEEDRATE, val)
 
 
+@_serialized_operation
 def intensity(val):
     global SerialLoop
     with SerialLoop.lock:
@@ -1215,6 +1264,7 @@ def intensity(val):
         SerialLoop.send_param(PARAM_INTENSITY, val)
 
 
+@_serialized_operation
 def duration(val):
     global SerialLoop
     with SerialLoop.lock:
@@ -1223,6 +1273,7 @@ def duration(val):
         SerialLoop.send_param(PARAM_DURATION, val)
 
 
+@_serialized_operation
 def pixelwidth(val):
     global SerialLoop
     with SerialLoop.lock:
@@ -1231,6 +1282,7 @@ def pixelwidth(val):
         SerialLoop.send_param(PARAM_PIXEL_WIDTH, val)
 
 
+@_serialized_operation
 def mark_pass():
     """Note the pass boundary the stream has reached, see jobtime.JobTimer.
     Emits nothing, it only bookmarks where in the stream a pass starts."""
@@ -1239,12 +1291,14 @@ def mark_pass():
         SerialLoop.mark_pass()
 
 
+@_serialized_operation
 def relative():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_REF_RELATIVE)
 
 
+@_serialized_operation
 def absolute():
     global SerialLoop
     with SerialLoop.lock:
@@ -1276,6 +1330,7 @@ def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
     return True
 
 
+@_serialized_operation
 def move(x=None, y=None, z=None):
     global SerialLoop
     with SerialLoop.lock:
@@ -1288,6 +1343,7 @@ def move(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_LINE)
 
 
+@_serialized_operation
 def supermove(x=None, y=None, z=None):
     """Moves in machine coordinates bypassing any offsets.
 
@@ -1320,6 +1376,7 @@ def supermove(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_LINE)
 
 
+@_serialized_operation
 def rastermove(x, y, z=None):
     """A raster move, like move() but latching pixel data along the way.
 
@@ -1337,6 +1394,7 @@ def rastermove(x, y, z=None):
         SerialLoop.send_command(CMD_RASTER)
 
 
+@_serialized_operation
 def rasterdata(data, start, end):
     # NOTE: no SerialLoop.lock
     # more granular locking in send_data
@@ -1377,6 +1435,7 @@ def stop():
         SerialLoop.job_active = False
         # a job still being queued would otherwise refill what was just emptied
         SerialLoop.discard_writes = True
+        SerialLoop.clear_discard_after_dispatch = False
         SerialLoop.request_stop = True
         SerialLoop._paused = False
 
@@ -1385,16 +1444,21 @@ def unstop():
     """Resume from stop condition."""
     global SerialLoop
     with SerialLoop.lock:
-        SerialLoop.discard_writes = False
+        if _dispatch_thread is None:
+            SerialLoop.discard_writes = False
+        else:
+            SerialLoop.clear_discard_after_dispatch = True
         SerialLoop.request_resume = True
 
 
+@_serialized_operation
 def dwell():
     global SerialLoop
     with SerialLoop.lock:
         SerialLoop.send_command(CMD_DWELL)
 
 
+@_serialized_operation
 def air_on():
     global SerialLoop
     if SerialLoop is None:
@@ -1403,6 +1467,7 @@ def air_on():
         SerialLoop.send_command(CMD_AIR_ENABLE)
 
 
+@_serialized_operation
 def air_off():
     global SerialLoop
     if SerialLoop is None:
@@ -1411,6 +1476,7 @@ def air_off():
         SerialLoop.send_command(CMD_AIR_DISABLE)
 
 
+@_serialized_operation
 def aux_on():
     global SerialLoop
     if SerialLoop is None:
@@ -1419,6 +1485,7 @@ def aux_on():
         SerialLoop.send_command(CMD_AUX_ENABLE)
 
 
+@_serialized_operation
 def aux_off():
     global SerialLoop
     if SerialLoop is None:
@@ -1427,6 +1494,7 @@ def aux_off():
         SerialLoop.send_command(CMD_AUX_DISABLE)
 
 
+@_serialized_operation
 def pulse():
     print("Pulsing laser")
     air_on()
@@ -1443,6 +1511,7 @@ def pulse():
     air_off()
 
 
+@_serialized_operation
 def offset(x=None, y=None, z=None):
     """Sets an offset relative to present pos."""
     global SerialLoop
@@ -1458,6 +1527,7 @@ def offset(x=None, y=None, z=None):
         SerialLoop.send_command(CMD_REF_RESTORE)
 
 
+@_serialized_operation
 def absoffset(x=None, y=None, z=None):
     """Sets an offset in machine coordinates."""
     global SerialLoop
@@ -1495,25 +1565,68 @@ def job(jobdict):
 
     if not _dispatch_lock.acquire(blocking=False):
         raise MachineBusy("a job is already being queued")
+    if not _operation_lock.acquire(blocking=False):
+        _dispatch_lock.release()
+        raise MachineBusy("another machine operation is in progress")
     _dispatch_thread = threading.get_ident()
+    started = False
     try:
         job_stop_guard()
-        if SerialLoop is not None:
-            with SerialLoop.lock:
-                SerialLoop.discard_writes = False  # a new job starts clean
-                SerialLoop.job_active = True
         # placements of one picture share its payload on disk, dispatch reads
         # each def's own data
         resolve_image_data(jobdict)
-        if "head" in jobdict:
-            if "kind" in jobdict["head"] and jobdict["head"]["kind"] == "mill":
+        if "head" not in jobdict:
+            print("INFO: not a valid job, 'head' entry missing")
+            return
+
+        is_mill = jobdict["head"].get("kind") == "mill"
+        if is_mill:
+            if "defs" not in jobdict:
+                print("ERROR: invalid job")
+                return
+            job_mill_validate(jobdict)
+        else:
+            if "defs" not in jobdict or "items" not in jobdict:
+                print("ERROR: invalid job")
+                return
+            if "passes" not in jobdict:
+                print("NOTICE: no passes defined")
+                return
+            job_laser_validate(jobdict)
+
+        if SerialLoop is not None:
+            with SerialLoop.lock:
+                if SerialLoop.discard_writes or SerialLoop.request_stop:
+                    raise MachineBusy("the job dispatch was stopped")
+                if SerialLoop.job_active or not SerialLoop._status["ready"]:
+                    raise MachineBusy("the machine is not idle")
+                SerialLoop.discard_writes = False  # a new job starts clean
+                SerialLoop.clear_discard_after_dispatch = False
+                SerialLoop.job_active = True
+                SerialLoop._status["ready"] = False
+                started = True
+        try:
+            if is_mill:
                 job_mill(jobdict)
             else:
                 job_laser(jobdict)
-        else:
-            print("INFO: not a valid job, 'head' entry missing")
+        except Exception:
+            # A failure after admission may have left a partial program while
+            # the serial thread was already consuming it. Purging and stopping
+            # is the only safe recovery.
+            if started:
+                stop()
+            raise
     finally:
-        _dispatch_thread = None
+        if SerialLoop is not None:
+            with SerialLoop.lock:
+                _dispatch_thread = None
+                if SerialLoop.clear_discard_after_dispatch:
+                    SerialLoop.discard_writes = False
+                    SerialLoop.clear_discard_after_dispatch = False
+        else:
+            _dispatch_thread = None
+        _operation_lock.release()
         _dispatch_lock.release()
 
 

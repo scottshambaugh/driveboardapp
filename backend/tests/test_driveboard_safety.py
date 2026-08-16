@@ -925,6 +925,8 @@ def test_bidirectional_corner_choice_ignores_the_return_home(loop, monkeypatch):
     assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [3, 5]
 
     loop.tx_buffer.clear()
+    loop.job_active = False
+    loop._status["ready"] = True
     driveboard.job(make_job({}))
     assert [pixels for _l, _s, pixels in _raster_runs(loop.tx_buffer)] == [3, 5]
 
@@ -1077,6 +1079,8 @@ def test_split_closed_paths_beats_whole_loops_on_a_row_of_circles(loop, monkeypa
     seek_off, feed_off = _move_distances(loop.tx_buffer)
 
     loop.tx_buffer.clear()
+    loop.job_active = False
+    loop._status["ready"] = True
     monkeypatch.setitem(conf, "split_closed_paths", True)
     driveboard.job(make_job())
     seek_on, feed_on = _move_distances(loop.tx_buffer)
@@ -1114,6 +1118,8 @@ def test_split_resume_skips_the_pierce(loop, monkeypatch):
     assert dwells_on == 3
 
     loop.tx_buffer.clear()
+    loop.job_active = False
+    loop._status["ready"] = True
     monkeypatch.setitem(conf, "skip_pierce_on_resume", False)
     driveboard.job(make_job())
     dwells_off = loop.tx_buffer.count(ord(driveboard.CMD_DWELL))
@@ -1606,12 +1612,8 @@ def test_job_scope_survives_an_inner_pass_teardown(loop):
     assert buf.count(ord(driveboard.CMD_AIR_DISABLE), start) == 1
 
 
-def test_assists_released_when_a_pass_raises(loop, monkeypatch):
-    """A raise part way through a job must still queue the assists off.
-
-    Otherwise the relays stay energised with no further command coming, and the
-    module's hold state no longer matches the hardware.
-    """
+def test_a_pass_failure_stops_and_purges_the_partial_job(loop, monkeypatch):
+    """A partial program must not survive a failure after dispatch begins."""
     loop._status["offset"] = [0.0, 0.0, 0.0]
 
     def boom(*a, **k):
@@ -1626,13 +1628,8 @@ def test_assists_released_when_a_pass_raises(loop, monkeypatch):
     }
     with pytest.raises(RuntimeError):
         driveboard.job(job)
-    buf = bytes(loop.tx_buffer)
-    assert buf.rindex(ord(driveboard.CMD_AIR_DISABLE)) > buf.index(
-        ord(driveboard.CMD_AIR_ENABLE)
-    ), "air left energised after the raise"
-    assert buf.rindex(ord(driveboard.CMD_AUX_DISABLE)) > buf.index(
-        ord(driveboard.CMD_AUX_ENABLE)
-    ), "aux left energised after the raise"
+    assert loop.tx_buffer == bytearray()
+    assert loop.request_stop is True
     assert not any(driveboard._assist_holds.values()), "holds left out of step with the hardware"
 
 
@@ -2770,6 +2767,9 @@ def test_a_new_job_starts_from_a_clean_buffer_after_a_stop(loop):
     loop._status["offset"] = [0.0, 0.0, 0.0]
     driveboard.stop()
     loop._status["stops"].clear()  # the operator cleared the stop condition
+    driveboard.unstop()
+    loop.request_stop = False  # controller has consumed stop/resume and reported idle
+    loop._status["ready"] = True
     driveboard.job(_duration_job())
     assert loop.tx_buffer  # the next job is not swallowed by the old stop
 
@@ -2924,3 +2924,119 @@ def test_a_stop_lets_the_machine_be_driven_again(loop):
     driveboard.unstop()
     driveboard.move(5.0, 5.0)
     assert loop.tx_buffer
+
+
+def test_stop_during_raster_chunk_construction_cannot_refill_queue(loop):
+    entered = threading.Event()
+    release = threading.Event()
+
+    class SlowPixels:
+        def __iter__(self):
+            yield 0
+            entered.set()
+            assert release.wait(5)
+            yield 255
+
+    worker = threading.Thread(target=lambda: driveboard.rasterdata(SlowPixels(), 0, 2))
+    worker.start()
+    assert entered.wait(5)
+    driveboard.stop()
+    release.set()
+    worker.join(5)
+    assert not worker.is_alive()
+    assert loop.tx_buffer == bytearray()
+    assert loop.job_size == 0
+
+
+def test_unstop_during_cancelled_dispatch_does_not_restore_its_tail(loop, monkeypatch):
+    started = threading.Event()
+    release = threading.Event()
+    real_move = driveboard.move
+
+    def slow_move(*args, **kwargs):
+        started.set()
+        assert release.wait(5)
+        return real_move(*args, **kwargs)
+
+    monkeypatch.setattr(driveboard, "move", slow_move)
+    worker = threading.Thread(target=lambda: driveboard.job(_duration_job()))
+    worker.start()
+    assert started.wait(5)
+    driveboard.stop()
+    driveboard.unstop()
+    release.set()
+    worker.join(10)
+    assert not worker.is_alive()
+    assert loop.tx_buffer == bytearray()
+    assert loop.discard_writes is False  # released only after producer exited
+
+
+def test_second_job_rejected_until_firmware_reports_idle(loop):
+    driveboard.job(_duration_job())
+    with pytest.raises(driveboard.MachineBusy, match="not idle"):
+        driveboard.job(_duration_job())
+
+
+def test_job_rejected_after_manual_move_until_firmware_reports_idle(loop):
+    driveboard.move(5.0, 5.0)
+    assert loop._status["ready"] is False
+    with pytest.raises(driveboard.MachineBusy, match="not idle"):
+        driveboard.job(_duration_job())
+
+
+def test_job_stays_active_after_host_buffer_drains_until_firmware_idle(loop):
+    driveboard.job(_duration_job())
+    loop.tx_pos = len(loop.tx_buffer)
+    loop.request_status = 0
+    loop._serial_write()
+    assert loop.tx_buffer == bytearray()
+    assert loop.job_active is True
+    with pytest.raises(driveboard.MachineBusy, match="running"):
+        driveboard.move(5.0, 5.0)
+
+    feed(loop, driveboard.INFO_IDLE_YES.encode("latin-1"))
+    assert loop.job_active is False
+    driveboard.move(5.0, 5.0)  # manual control is available only now
+
+
+def test_failed_validation_does_not_leave_machine_marked_active(loop):
+    bad = _duration_job()
+    bad["passes"][0]["feedrate"] = 0
+    with pytest.raises(ValueError, match="feedrate"):
+        driveboard.job(bad)
+    assert loop.job_active is False
+    driveboard.move(5.0, 5.0)
+
+
+def test_manual_operation_keeps_pulse_out_of_positioning_move(loop):
+    move_ready = threading.Event()
+    allow_move = threading.Event()
+    pulse_errors = []
+
+    def positioning_move():
+        with driveboard.machine_operation():
+            driveboard.intensity(0)
+            move_ready.set()
+            assert allow_move.wait(5)
+            driveboard.move(10.0, 10.0)
+
+    mover = threading.Thread(target=positioning_move)
+    mover.start()
+    assert move_ready.wait(5)
+
+    def try_pulse():
+        try:
+            driveboard.pulse()
+        except Exception as error:
+            pulse_errors.append(error)
+
+    pulser = threading.Thread(target=try_pulse)
+    pulser.start()
+    pulser.join(5)
+    assert len(pulse_errors) == 1
+    assert isinstance(pulse_errors[0], driveboard.MachineBusy)
+    allow_move.set()
+    mover.join(5)
+    assert not mover.is_alive() and not pulser.is_alive()
+    assert ord(driveboard.CMD_LINE) in loop.tx_buffer
+    assert ord(driveboard.CMD_DWELL) not in loop.tx_buffer

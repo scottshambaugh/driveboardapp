@@ -258,10 +258,11 @@ def absolute():
 @bottle.auth_basic(checkuser)
 @checkserial
 def retract():
-    driveboard.intensity(0)
-    driveboard.feedrate(conf["seekrate"])
-    driveboard.supermove(z=0)
-    driveboard.supermove(x=0, y=0)
+    with driveboard.machine_operation():
+        driveboard.intensity(0)
+        driveboard.feedrate(conf["seekrate"])
+        driveboard.supermove(z=0)
+        driveboard.supermove(x=0, y=0)
     return "{}"
 
 
@@ -302,19 +303,20 @@ def _jog_target(dx, dy, dz):
 @checkserial
 def jog(x, y, z):
     global jog_target_last
-    driveboard.intensity(0)
-    driveboard.feedrate(conf["seekrate"])
-    if not conf["jog_soft_limits"]:
-        jog_target_last = None  # a relative jog leaves the tracked target behind
-        driveboard.relative()
-        driveboard.move(x, y, z)
+    with driveboard.machine_operation():
+        driveboard.intensity(0)
+        driveboard.feedrate(conf["seekrate"])
+        if not conf["jog_soft_limits"]:
+            jog_target_last = None  # a relative jog leaves the tracked target behind
+            driveboard.relative()
+            driveboard.move(x, y, z)
+            driveboard.absolute()
+            return "{}"
+        # Sent absolute, so the commanded target is inside the work area by
+        # construction even if the position it was derived from was stale.
+        target, clamped = _jog_target(x, y, z)
         driveboard.absolute()
-        return "{}"
-    # Sent absolute, so the commanded target is inside the work area by
-    # construction even if the position it was derived from was stale.
-    target, clamped = _jog_target(x, y, z)
-    driveboard.absolute()
-    driveboard.move(*target)
+        driveboard.move(*target)
     return json.dumps({"clamped": clamped})
 
 
@@ -322,10 +324,11 @@ def jog(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def move(x, y, z):
-    if not driveboard.target_in_workarea(x, y, z):
-        bottle.abort(400, "move target outside work area")
-    driveboard.intensity(0)
-    driveboard.move(x, y, z)
+    with driveboard.machine_operation():
+        if not driveboard.target_in_workarea(x, y, z):
+            bottle.abort(400, "move target outside work area")
+        driveboard.intensity(0)
+        driveboard.move(x, y, z)
     return "{}"
 
 
@@ -333,10 +336,11 @@ def move(x, y, z):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movex(x):
-    if not driveboard.target_in_workarea(x=x):
-        bottle.abort(400, "move target outside work area")
-    driveboard.intensity(0)
-    driveboard.move(x=x)
+    with driveboard.machine_operation():
+        if not driveboard.target_in_workarea(x=x):
+            bottle.abort(400, "move target outside work area")
+        driveboard.intensity(0)
+        driveboard.move(x=x)
     return "{}"
 
 
@@ -344,10 +348,11 @@ def movex(x):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movey(y):
-    if not driveboard.target_in_workarea(y=y):
-        bottle.abort(400, "move target outside work area")
-    driveboard.intensity(0)
-    driveboard.move(y=y)
+    with driveboard.machine_operation():
+        if not driveboard.target_in_workarea(y=y):
+            bottle.abort(400, "move target outside work area")
+        driveboard.intensity(0)
+        driveboard.move(y=y)
     return "{}"
 
 
@@ -355,10 +360,11 @@ def movey(y):
 @bottle.auth_basic(checkuser)
 @checkserial
 def movez(z):
-    if not driveboard.target_in_workarea(z=z):
-        bottle.abort(400, "move target outside work area")
-    driveboard.intensity(0)
-    driveboard.move(z=z)
+    with driveboard.machine_operation():
+        if not driveboard.target_in_workarea(z=z):
+            bottle.abort(400, "move target outside work area")
+        driveboard.intensity(0)
+        driveboard.move(z=z)
     return "{}"
 
 
@@ -495,26 +501,27 @@ def absoffset(x, y, z):
 ### JOBS QUEUE
 
 
+_queue_lock = threading.RLock()
+
+
 def _get_sorted(globpattern, library=False, stripext=False):
-    files = []
-    cwd_temp = os.getcwd()
-    try:
+    with _queue_lock:
         if library:
-            os.chdir(os.path.join(conf["rootdir"], "library"))
-            files = list(filter(os.path.isfile, glob.glob(globpattern)))
+            directory = os.path.join(conf["rootdir"], "library")
+            paths = list(filter(os.path.isfile, glob.glob(os.path.join(directory, globpattern))))
+            files = [os.path.basename(path) for path in paths]
             files.sort()
         else:
-            os.chdir(conf["stordir"])
-            files = list(filter(os.path.isfile, glob.glob(globpattern)))
-            files.sort(key=lambda x: os.path.getmtime(x))
+            directory = conf["stordir"]
+            paths = list(filter(os.path.isfile, glob.glob(os.path.join(directory, globpattern))))
+            files = [os.path.basename(path) for path in paths]
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(directory, x)))
         if stripext:
             for i in range(len(files)):
                 if files[i].endswith(".dba"):
                     files[i] = files[i][:-4]
                 elif files[i].endswith(".dba.starred"):
                     files[i] = files[i][:-12]
-    finally:
-        os.chdir(cwd_temp)
     return files
 
 
@@ -524,14 +531,15 @@ def _get(jobname, library=False):
         jobpath = os.path.join(conf["rootdir"], "library", jobname.strip("/\\"))
     else:
         jobpath = os.path.join(conf["stordir"], jobname.strip("/\\"))
-    if os.path.exists(jobpath + ".dba"):
-        jobpath = jobpath + ".dba"
-    elif os.path.exists(jobpath + ".dba.starred"):
-        jobpath = jobpath + ".dba.starred"
-    else:
-        raise bottle.HTTPResponse("No such file.", 400)
-    with open(jobpath) as fp:
-        job = fp.read()
+    with _queue_lock:
+        if os.path.exists(jobpath + ".dba"):
+            jobpath = jobpath + ".dba"
+        elif os.path.exists(jobpath + ".dba.starred"):
+            jobpath = jobpath + ".dba.starred"
+        else:
+            raise bottle.HTTPResponse("No such file.", 400)
+        with open(jobpath) as fp:
+            job = fp.read()
     return job
 
 
@@ -555,29 +563,42 @@ def _exists(jobname):
 
 
 def _clear(limit=None):
-    files = _get_sorted("*.dba")
-    if type(limit) is not int and limit is not None:
-        raise ValueError
-    for filename in files:
-        if type(limit) is int and limit <= 0:
-            break
-        filename = os.path.join(conf["stordir"], filename)
-        os.remove(filename)
-        print("file deleted: " + filename)
-        if type(limit) is int:
-            limit -= 1
+    with _queue_lock:
+        files = _get_sorted("*.dba")
+        if type(limit) is not int and limit is not None:
+            raise ValueError
+        for filename in files:
+            if type(limit) is int and limit <= 0:
+                break
+            filename = os.path.join(conf["stordir"], filename)
+            os.remove(filename)
+            print("file deleted: " + filename)
+            if type(limit) is int:
+                limit -= 1
 
 
 def _add(job, name):
     # add job (dba string)
     # overwrites file if already exists, use _unique_name(name) to avoid
-    namepath = os.path.join(conf["stordir"], name.strip("/\\") + ".dba")
-    with open(namepath, "w") as fp:
-        fp.write(job)
+    with _queue_lock:
+        namepath = os.path.join(conf["stordir"], name.strip("/\\") + ".dba")
+        fd, tmppath = tempfile.mkstemp(prefix=".job-", suffix=".tmp", dir=conf["stordir"])
+        try:
+            with os.fdopen(fd, "w") as fp:
+                fp.write(job)
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.replace(tmppath, namepath)
+        except Exception:
+            try:
+                os.remove(tmppath)
+            except FileNotFoundError:
+                pass
+            raise
         print("file saved: " + namepath)
-    # delete excessive job files
-    num_to_del = len(_get_sorted("*.dba")) - conf["max_jobs_in_list"]
-    _clear(num_to_del)
+        # delete excessive job files
+        num_to_del = len(_get_sorted("*.dba")) - conf["max_jobs_in_list"]
+        _clear(num_to_del)
 
 
 def _unique_name(jobname):
@@ -680,10 +701,11 @@ def _pending_register(future, out_path, tmpdir):
             # the queue entry gets the optimized job under the same name,
             # unless that name has been written since (running a job saves it
             # back with its passes, and this optimize predates them)
+            # Keep the staleness decision and publication indivisible from a
+            # request that marks this result stale and saves a replacement.
             with _load_pending_lock:
-                stale = entry["stale"]
-            if entry["name"] and not stale:
-                _add(entry["result"], entry["name"])
+                if entry["name"] and not entry["stale"]:
+                    _add(entry["result"], entry["name"])
         except Exception as e:
             entry["error"] = str(e)
         finally:
@@ -815,22 +837,22 @@ def load():
         except ValueError as e:
             raise bottle.HTTPResponse(str(e), 422) from e
 
-    if not overwrite:
-        name = _unique_name(name)
     # an optimize still running against this name would land on top of what is
     # about to be written, so it is told to stand down first
     with _load_pending_lock:
+        if not overwrite:
+            name = _unique_name(name)
         for entry in _load_pending.values():
             if entry.get("name") == name:
                 entry["stale"] = True
-    _add(job, name)
+        _add(job, name)
     if pending:
         with _load_pending_lock:
             entry = _load_pending[pending]
-        entry["name"] = name
-        # the watcher may have finished before the name was known
-        if entry["event"].is_set() and entry.get("result") and not entry["error"]:
-            _add(entry["result"], name)
+            entry["name"] = name
+            # the watcher may have finished before the name was known
+            if entry["event"].is_set() and entry.get("result") and not entry["error"]:
+                _add(entry["result"], name)
         return json.dumps({"name": name, "pending": pending})
     return json.dumps(name)
 
@@ -886,11 +908,12 @@ def get(jobname="woot"):
 @bottle.auth_basic(checkuser)
 def star(jobname):
     """Star a job."""
-    jobpath = _get_path(jobname)
-    if jobpath.endswith(".dba"):
-        os.rename(jobpath, jobpath + ".starred")
-    else:
-        raise bottle.HTTPResponse("No such file.", 400)
+    with _queue_lock:
+        jobpath = _get_path(jobname)
+        if jobpath.endswith(".dba"):
+            os.rename(jobpath, jobpath + ".starred")
+        else:
+            raise bottle.HTTPResponse("No such file.", 400)
     return "{}"
 
 
@@ -898,11 +921,12 @@ def star(jobname):
 @bottle.auth_basic(checkuser)
 def unstar(jobname):
     """Unstar a job."""
-    jobpath = _get_path(jobname)
-    if jobpath.endswith(".starred"):
-        os.rename(jobpath, jobpath[:-8])
-    else:
-        raise bottle.HTTPResponse("No such file.", 400)
+    with _queue_lock:
+        jobpath = _get_path(jobname)
+        if jobpath.endswith(".starred"):
+            os.rename(jobpath, jobpath[:-8])
+        else:
+            raise bottle.HTTPResponse("No such file.", 400)
     return "{}"
 
 
@@ -910,8 +934,9 @@ def unstar(jobname):
 @bottle.auth_basic(checkuser)
 def remove(jobname):
     """Delete a job."""
-    jobpath = _get_path(jobname)
-    os.remove(jobpath)
+    with _queue_lock:
+        jobpath = _get_path(jobname)
+        os.remove(jobpath)
     print("INFO: file deleted: " + jobpath)
     return "{}"
 
@@ -948,8 +973,9 @@ def get_library(jobname):
 def load_library(jobname):
     """Load a library job into the queue."""
     job = _get(jobname, library=True)
-    jobname = _unique_name(jobname)
-    _add(job, jobname)
+    with _queue_lock:
+        jobname = _unique_name(jobname)
+        _add(job, jobname)
     return json.dumps(jobname)
 
 
@@ -1050,6 +1076,8 @@ def run_direct():
     # sanity check
     if job is None:
         raise bottle.HTTPResponse("Invalid request data.", 400)
+    if not driveboard.status()["ready"]:
+        raise bottle.HTTPResponse("Machine not ready.", 400)
     try:
         driveboard.job(json.loads(job))
     except ValueError as e:
