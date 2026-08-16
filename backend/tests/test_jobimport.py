@@ -999,3 +999,53 @@ def test_resolve_image_data_drops_a_reference_that_leads_nowhere():
 def test_a_job_stored_without_sharing_still_loads():
     job = {"defs": [{"kind": "image", "data": "AAA"}, {"kind": "image", "data": "AAA"}]}
     assert jobimport.resolve_image_data(copy.deepcopy(job))["defs"] == job["defs"]
+
+
+def test_dumps_rounds_coordinates_to_what_the_wire_carries():
+    job = {"defs": [{"kind": "path", "data": [[[300.03750739553743, 1.1658347295008896e-05]]]}]}
+    out = json.loads(jobimport.dumps(job))
+    assert out["defs"][0]["data"] == [[[300.038, 0.0]]]
+
+
+def test_dumps_rounding_never_changes_what_the_controller_decodes():
+    # send_param quantizes to a thousandth of a millimetre, so storing more
+    # decimals than that keeps digits the machine throws away
+    def wire(v):
+        return int(round((v + 134217.728) * 1000))
+
+    job = {
+        "defs": [
+            {
+                "kind": "path",
+                "data": [
+                    [
+                        [300.03750739553743, 1.1658347295008896e-05],
+                        [0.1 + 0.2, 123.456789012345],
+                        [-45.6789012345, 999.9994999999],
+                    ]
+                ],
+            }
+        ]
+    }
+    out = json.loads(jobimport.dumps(job))
+    for before, after in zip(job["defs"][0]["data"][0], out["defs"][0]["data"][0]):
+        for a, b in zip(before, after):
+            assert wire(a) == wire(b)
+
+
+def test_dumps_leaves_named_settings_alone():
+    # a tolerance or pixel size is not a coordinate, rounding it would change it
+    job = {"head": {"optimized": 0.0001}, "passes": [{"pxsize": 0.0625, "feedrate": 2000}]}
+    out = json.loads(jobimport.dumps(job))
+    assert out["head"]["optimized"] == 0.0001
+    assert out["passes"][0]["pxsize"] == 0.0625
+
+
+def test_dumps_drops_separator_padding():
+    assert ", " not in jobimport.dumps({"a": [1, 2]})
+    assert '": ' not in jobimport.dumps({"a": [1, 2]})
+
+
+def test_dumps_output_reloads_unchanged():
+    job = {"head": {}, "passes": [], "items": [{"def": 0}], "defs": [{"kind": "path", "data": []}]}
+    assert json.loads(jobimport.dumps(job)) == job

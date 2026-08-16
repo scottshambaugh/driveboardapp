@@ -606,7 +606,7 @@ def _convert_worker(in_path, out_path, quick_path, text, optimize, matrix, conf_
         optimize = optimize and jobimport.get_type(job) != "gcode"
         job = jobimport.convert(job, optimize=False, tolerance=conf["tolerance"], matrix=matrix)
         with open(quick_path + ".tmp", "w") as fp:
-            json.dump(jobimport.share_image_data(job), fp)
+            fp.write(jobimport.dumps(jobimport.share_image_data(job)))
         os.replace(quick_path + ".tmp", quick_path)  # appear only when complete
         if optimize:
             jobimport.optimize_job(job, conf["tolerance"])
@@ -615,7 +615,7 @@ def _convert_worker(in_path, out_path, quick_path, text, optimize, matrix, conf_
     # placements of one picture share its payload on the way to disk, see
     # jobimport.share_image_data
     with open(out_path, "w") as fp:
-        json.dump(jobimport.share_image_data(job), fp)
+        fp.write(jobimport.dumps(jobimport.share_image_data(job)))
 
 
 def _convert_pool_get():

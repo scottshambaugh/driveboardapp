@@ -493,10 +493,10 @@ def test_convert_matches_an_in_process_convert(as_text, testjobs_dir):
         job = fp.read()
     if as_text:
         job = job.decode("utf-8")
-    assert web._convert_job(job, True, None) == (
-        json.dumps(jobimport.convert(job, optimize=True, matrix=None)),
-        None,
+    expected = jobimport.dumps(
+        jobimport.share_image_data(jobimport.convert(job, optimize=True, matrix=None))
     )
+    assert web._convert_job(job, True, None) == (expected, None)
 
 
 def test_convert_reports_an_unusable_file_as_a_type_error():
