@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 
 # AVR toolchain constants for the Driveboard's atmega328 (build + flash)
 AVR_DEVICE = "atmega328p"
@@ -310,6 +311,25 @@ elif conf["hardware"] == "raspberrypi":
 
 
 configpath = ""
+_config_lock = threading.RLock()
+
+
+def write_json_atomic(path, value, **dump_kwargs):
+    """Durably replace a JSON file without exposing a partial write."""
+    directory = os.path.dirname(os.path.abspath(path))
+    fd, tmppath = tempfile.mkstemp(prefix=".config-", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w") as fp:
+            json.dump(value, fp, **dump_kwargs)
+            fp.flush()
+            os.fsync(fp.fileno())
+        os.replace(tmppath, path)
+    except Exception:
+        try:
+            os.unlink(tmppath)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def load(configname):
@@ -344,15 +364,20 @@ def load(configname):
 
 
 def write_config_fields(subconfigdict):
-    conftemp = None
-    if os.path.exists(configpath):
-        with open(configpath) as fp:
-            conftemp = json.load(fp)
-    else:
-        conftemp = {}
-    conftemp.update(subconfigdict)
-    with open(configpath, "w") as fp:
-        json.dump(conftemp, fp, indent=4)
+    # Keep the read/modify/replace transaction together so simultaneous API
+    # updates cannot silently discard one another.
+    with _config_lock:
+        # Make the in-memory and persisted views one linearizable update. API
+        # callers used to mutate conf before taking the file lock, allowing two
+        # writes of the same field to leave memory and disk disagreeing.
+        conf.update(subconfigdict)
+        if os.path.exists(configpath):
+            with open(configpath) as fp:
+                conftemp = json.load(fp)
+        else:
+            conftemp = {}
+        conftemp.update(subconfigdict)
+        write_json_atomic(configpath, conftemp, indent=4)
 
 
 def list_configs():

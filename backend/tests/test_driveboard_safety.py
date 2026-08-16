@@ -388,6 +388,64 @@ def test_job_validate_relative_in_bounds(loop):
     driveboard.job_laser_validate(job)  # must not raise
 
 
+def test_job_validate_relative_starts_at_reported_position(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    loop._status["pos"] = [conf_workspace_x() - 20.0, 10.0, 0.0]
+    job = {
+        "passes": [{"items": [0], "relative": True}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[25.0, 0.0]]]}],
+    }
+    with pytest.raises(ValueError, match="right"):
+        driveboard.job_laser_validate(job)
+
+
+def test_job_validate_relative_accumulates_across_polylines_and_items(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    loop._status["pos"] = [conf_workspace_x() - 30.0, 10.0, 0.0]
+    job = {
+        "passes": [{"items": [0, 1], "relative": True}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "path", "data": [[[10.0, 0.0]], [[10.0, 0.0]]]},
+            {"kind": "path", "data": [[[20.0, 0.0]]]},
+        ],
+    }
+    with pytest.raises(ValueError, match="right"):
+        driveboard.job_laser_validate(job)
+
+
+def test_job_validate_rejects_relative_image(loop):
+    job = {
+        "passes": [{"items": [0], "relative": True}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "image", "pos": [0.0, 0.0], "size": [1.0, 1.0]}],
+    }
+    with pytest.raises(ValueError, match="relative image"):
+        driveboard.job_laser_validate(job)
+
+
+def test_job_validate_rejects_z_outside_workarea(loop, monkeypatch):
+    monkeypatch.setitem(driveboard.conf, "workspace", [1220.0, 610.0, 50.0])
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _path_job([[10.0, 10.0, 5000.0]])
+    with pytest.raises(ValueError, match="Z"):
+        driveboard.job_laser_validate(job)
+
+
+def test_job_validate_relative_z_accumulates_from_reported_position(loop, monkeypatch):
+    monkeypatch.setitem(driveboard.conf, "workspace", [1220.0, 610.0, 50.0])
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    loop._status["pos"] = [10.0, 10.0, 45.0]
+    job = {
+        "passes": [{"items": [0], "relative": True}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[0.0, 0.0, 10.0]]]}],
+    }
+    with pytest.raises(ValueError, match="Z"):
+        driveboard.job_laser_validate(job)
+
+
 def test_job_validate_image_bounds(loop):
     loop._status["offset"] = [0.0, 0.0, 0.0]
     job = {
@@ -2197,6 +2255,54 @@ def test_reconnect_tears_down_dead_loop(loop, monkeypatch):
     driveboard.reconnect()
     assert loop.device.closed is True, "stale device must be closed before reconnecting"
     assert called, "reconnect must attempt connect_withfind"
+
+
+def test_reconnect_refuses_to_swap_loop_during_job_dispatch(loop, monkeypatch):
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_job(_job):
+        entered.set()
+        assert release.wait(2.0)
+
+    monkeypatch.setattr(driveboard, "job_laser", slow_job)
+    worker = threading.Thread(
+        target=driveboard.job,
+        args=({"head": {}, "defs": [], "items": [], "passes": []},),
+    )
+    worker.start()
+    assert entered.wait(2.0)
+    original_loop = driveboard.SerialLoop
+    with pytest.raises(driveboard.MachineBusy):
+        driveboard.reconnect()
+    assert driveboard.SerialLoop is original_loop
+    release.set()
+    worker.join(2.0)
+    assert not worker.is_alive()
+
+
+def test_close_waits_until_active_dispatch_releases_loop(loop):
+    entered = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
+
+    def hold_operation():
+        with driveboard.machine_operation():
+            entered.set()
+            assert release.wait(2.0)
+
+    holder = threading.Thread(target=hold_operation)
+    holder.start()
+    assert entered.wait(2.0)
+    closer = threading.Thread(target=lambda: (driveboard.close(), closed.set()))
+    closer.start()
+    assert not closed.wait(0.05), "close must not swap the loop during dispatch"
+    assert driveboard.SerialLoop is loop
+    release.set()
+    holder.join(2.0)
+    closer.join(2.0)
+    assert closed.is_set()
+    assert driveboard.SerialLoop is None
 
 
 # ---------------------------------------------------------------------------

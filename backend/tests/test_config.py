@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 
 
 def test_defaults_present():
@@ -69,3 +70,24 @@ def test_write_config_fields_round_trip(isolated_config):
     with open(config.configpath) as fp:
         data = json.load(fp)
     assert data["feedrate"] == 777
+
+
+def test_concurrent_config_updates_are_not_lost(isolated_config):
+    config = isolated_config
+    path = os.path.join(config.conf["confdir"], "config.concurrent.json")
+    with open(path, "w") as fp:
+        json.dump({}, fp)
+    config.load("concurrent")
+
+    threads = [
+        threading.Thread(target=config.write_config_fields, args=({f"field_{i}": i},))
+        for i in range(20)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    with open(path) as fp:
+        data = json.load(fp)
+    assert data == {f"field_{i}": i for i in range(20)}

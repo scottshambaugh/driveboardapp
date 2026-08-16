@@ -30,6 +30,7 @@ DEBUG = False
 bottle.BaseRequest.MEMFILE_MAX = 1024 * 1024 * 100  # max 100Mb files
 time_reconnect_last = 0
 _reconnect_lock = threading.Lock()
+_presets_lock = threading.RLock()
 jog_target_last = None  # last jog target commanded, in offset coordinates
 
 if conf["mill_mode"]:
@@ -178,7 +179,6 @@ def config(key=None, value=None):
                     value = json.loads(value)
                 except ValueError:
                     pass
-            conf[key] = value
             write_config_fields({key: value})
             return json.dumps({"status": "ok", "message": "Written to config file."})
         else:
@@ -191,7 +191,6 @@ def config(key=None, value=None):
 def confserial(port=None):
     """Write serial port to configuration file."""
     if port:
-        conf["serial_port"] = port
         write_config_fields({"serial_port": port})
         return "Serial port written to config file."
     else:
@@ -987,20 +986,21 @@ def _get_presets_path():
 
 
 def _read_presets():
-    presets = []
-    path = _get_presets_path()
-    # load
-    if os.path.exists(path):
-        with open(path) as fp:
-            try:
-                presets = json.load(fp)
-                for one_preset in presets:
-                    # presets saved before pierce_time existed have no pierce
-                    one_preset.setdefault("pierce_time", 0.0)
-                presets.sort(key=lambda x: x["name"].lower())
-            except Exception:
-                print("ERROR: failed to read presets file")
-    return presets
+    with _presets_lock:
+        presets = []
+        path = _get_presets_path()
+        # load
+        if os.path.exists(path):
+            with open(path) as fp:
+                try:
+                    presets = json.load(fp)
+                    for one_preset in presets:
+                        # presets saved before pierce_time existed have no pierce
+                        one_preset.setdefault("pierce_time", 0.0)
+                    presets.sort(key=lambda x: x["name"].lower())
+                except Exception:
+                    print("ERROR: failed to read presets file")
+        return presets
 
 
 @bottle.route("/listing_presets")
@@ -1020,28 +1020,32 @@ def listing_presets():
 @bottle.auth_basic(checkuser)
 def save_preset(name, feedrate, intensity, pxsize, pierce_time=0.0):
     """Save a preset setting to presets.json. Delete if feedrate==0 && intensity==0"""
-    presets = _read_presets()
-    try:
-        presets_dict = {one_preset["name"].lower(): one_preset for one_preset in presets}
-        if name.lower() in presets_dict and int(feedrate) == 0 and int(intensity) == 0:
-            del presets_dict[name.lower()]
-        elif int(feedrate) != 0 or int(intensity) != 0:
-            presets_dict[name.lower()] = {
-                "name": name,
-                "feedrate": feedrate,
-                "intensity": intensity,
-                "pxsize": pxsize,
-                "pierce_time": pierce_time,
-            }
-        presets = list(presets_dict.values())
-        presets.sort(key=lambda x: x["name"].lower())
-        path = os.path.join(conf["confdir"], "presets.json")
-        with open(path, "w") as fp:
-            json.dump(presets, fp)
-    except Exception as e:
-        print("ERROR: failed to update presets file")
-        print(e)
+    _save_preset(name, feedrate, intensity, pxsize, pierce_time)
     return "{}"
+
+
+def _save_preset(name, feedrate, intensity, pxsize, pierce_time=0.0):
+    """Perform one locked preset read/modify/replace transaction."""
+    with _presets_lock:
+        presets = _read_presets()
+        try:
+            presets_dict = {one_preset["name"].lower(): one_preset for one_preset in presets}
+            if name.lower() in presets_dict and int(feedrate) == 0 and int(intensity) == 0:
+                del presets_dict[name.lower()]
+            elif int(feedrate) != 0 or int(intensity) != 0:
+                presets_dict[name.lower()] = {
+                    "name": name,
+                    "feedrate": feedrate,
+                    "intensity": intensity,
+                    "pxsize": pxsize,
+                    "pierce_time": pierce_time,
+                }
+            presets = list(presets_dict.values())
+            presets.sort(key=lambda x: x["name"].lower())
+            config_module.write_json_atomic(_get_presets_path(), presets)
+        except Exception as e:
+            print("ERROR: failed to update presets file")
+            print(e)
 
 
 ### JOB EXECUTION

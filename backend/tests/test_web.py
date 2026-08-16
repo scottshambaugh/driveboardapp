@@ -428,6 +428,19 @@ def test_delete_preset_still_works(auth_app, presets_dir):
     assert _presets_on_disk(presets_dir) == {}
 
 
+def test_concurrent_preset_updates_are_not_lost(presets_dir):
+    threads = [
+        threading.Thread(target=web._save_preset, args=(f"preset-{i}", 1000 + i, 50, 0.2))
+        for i in range(20)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert set(_presets_on_disk(presets_dir)) == {f"preset-{i}" for i in range(20)}
+
+
 # ---------------------------------------------------------------------------
 # /load upload forms
 # ---------------------------------------------------------------------------

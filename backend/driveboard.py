@@ -992,6 +992,7 @@ def find_controller(baudrate=conf["baudrate"], verbose=True):
     return None
 
 
+@_serialized_operation
 def connect(port=None, baudrate=None, verbose=True):
     global SerialLoop
     # resolve config at call time, not import time (serial_port is set after
@@ -1064,6 +1065,7 @@ def connect(port=None, baudrate=None, verbose=True):
             print("ERROR: disconnect first")
 
 
+@_serialized_operation
 def connect_withfind(port=None, baudrate=None, verbose=True):
     if port is None:
         port = conf["serial_port"]
@@ -1115,6 +1117,7 @@ def connected():
     )
 
 
+@_serialized_operation
 def reconnect():
     """Recover from a dropped serial link: tear down the dead serial loop (its
     thread has exited and can't be restarted) and reconnect. The controller
@@ -1143,6 +1146,14 @@ def reconnect():
 
 
 def close():
+    # Shutdown is not an interactive request that can sensibly return "busy".
+    # Wait for a producer holding the operation lock to leave the old loop,
+    # then tear it down. flash()/reset() already own this RLock and re-enter it.
+    with _operation_lock:
+        return _close_unlocked()
+
+
+def _close_unlocked():
     global SerialLoop
     if SerialLoop:
         if SerialLoop.device:
@@ -1166,6 +1177,7 @@ def close():
     return ret
 
 
+@_serialized_operation
 def flash(serial_port=None, firmware=None):
     import flash
 
@@ -1199,6 +1211,7 @@ def build():
     return ret
 
 
+@_serialized_operation
 def reset():
     import flash
 
@@ -1713,14 +1726,21 @@ def job_laser_validate(jobdict):
     job_pass_params_validate(jobdict)
 
     with SerialLoop.lock:
-        x_off = SerialLoop._status["offset"][0]
-        y_off = SerialLoop._status["offset"][1]
-    x_lim = conf["workspace"][0] - x_off
-    y_lim = conf["workspace"][1] - y_off
+        offsets = list(SerialLoop._status["offset"])
+        # Firmware reports position in offset coordinates, the same coordinate
+        # system move() accepts. A relative pass begins wherever the head is
+        # now, not at the job origin.
+        current = list(SerialLoop._status["pos"])
+    while len(current) < 3:
+        current.append(0.0)
 
     def check_point(point, passidx, kind):
-        # len(point) is not guaranteed to be 2
+        if len(point) < 2:
+            raise ValueError(f"pass {passidx + 1}: malformed point in {kind}")
         x, y = point[0], point[1]
+        x_off, y_off, z_off = offsets
+        x_lim = conf["workspace"][0] - x_off
+        y_lim = conf["workspace"][1] - y_off
         err_str = ""
         if y < -y_off:
             err_str = "top "
@@ -1734,8 +1754,13 @@ def job_laser_validate(jobdict):
             err_str = err_str.strip()
             # the frontend displays the first pass as "pass 1" so use passidx+1
             raise ValueError(f"pass {passidx + 1}: point in {kind} beyond {err_str} of work area")
+        if len(point) >= 3 and conf["workspace"][2]:
+            z = point[2]
+            if not -z_off <= z <= conf["workspace"][2] - z_off:
+                raise ValueError(f"pass {passidx + 1}: point in {kind} beyond Z of work area")
 
     # loop passes
+    absolute_motion_seen = False
     for passidx, pass_ in enumerate(jobdict["passes"]):
         # set absolute/relative
         is_relative = pass_.get("relative", False)
@@ -1747,6 +1772,11 @@ def job_laser_validate(jobdict):
             kind = def_["kind"]
 
             if kind == "image":
+                if is_relative:
+                    # Raster generation emits many absolute-looking segment
+                    # coordinates. In relative controller mode those become a
+                    # cumulative walk and cannot be bounded from the image box.
+                    raise ValueError(f"pass {passidx + 1}: relative image passes are unsafe")
                 # an all-white or transparent margin is skipped by the engraver,
                 # so only the part that actually burns has to fit
                 try:
@@ -1764,18 +1794,30 @@ def job_laser_validate(jobdict):
                 # are enough to tell whether it fits in the work area
                 check_point(corners[0], passidx, kind)
                 check_point(corners[1], passidx, kind)
+                absolute_motion_seen = True
 
             elif kind == "fill" or kind == "path":
+                if is_relative and absolute_motion_seen:
+                    # Absolute path/raster emission may be reordered and its
+                    # exact final head position is not part of the job format.
+                    # Do not guess the start of subsequent relative motion.
+                    raise ValueError(
+                        f"pass {passidx + 1}: relative motion after absolute motion is unsafe"
+                    )
                 path = def_["data"]
                 for polyline in path:
-                    point = [0, 0]
                     for pos in polyline:
                         if is_relative:
-                            point[0] += pos[0]
-                            point[1] += pos[1]
-                            check_point(point, passidx, kind)
+                            if len(pos) < 2:
+                                raise ValueError(f"pass {passidx + 1}: malformed point in {kind}")
+                            current[0] += pos[0]
+                            current[1] += pos[1]
+                            if len(pos) >= 3:
+                                current[2] += pos[2]
+                            check_point(current, passidx, kind)
                         else:
                             check_point(pos, passidx, kind)
+                            absolute_motion_seen = True
 
 
 def _emit_raster_segment(orientation, seekrate, feedrate_, intensity_, exit_y=None):
