@@ -792,7 +792,17 @@ class SVGReader:
         svgstring = convert_text_to_paths(svgstring)
 
         # parse xml
-        svgRootElement = ET.fromstring(svgstring)
+        try:
+            svgRootElement = ET.fromstring(svgstring)
+        except ET.ParseError as e:
+            # a file that arrived incomplete fails here rather than anywhere
+            # readable, so say which it is instead of raising the parser's
+            # line and column on their own
+            raise ValueError(
+                f"SVG is not well-formed XML ({e}). A file that was truncated "
+                "in transit or is still being written reads this way, so check "
+                "it opens in a browser and that its size matches the original."
+            ) from e
         tagName = self._tagReader._get_tag(svgRootElement)
 
         if tagName != "svg":

@@ -652,3 +652,24 @@ def test_job_preview_cache_notices_a_config_change(auth_app, monkeypatch):
     monkeypatch.setitem(conf, "fill_mode", "Bidirectional")
     bidi = _collect_preview(auth_app, job)
     assert forward["duration"] != bidi["duration"]
+
+
+def test_load_reports_a_truncated_svg_readably(auth_app):
+    # a file cut off in transit fails deep in the XML parser, which on its own
+    # surfaces as a 500 and a traceback rather than something actionable
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm">'
+        '<path d="M 0,0 L 10,10"'  # cut off mid-tag
+    )
+    body = {
+        "load_request": json.dumps(
+            {"job": "upload_raw", "name": "truncated", "optimize": False, "overwrite": True}
+        )
+    }
+    resp = auth_app.post(
+        "/load", body, upload_files=[("job", "truncated.svg", svg.encode())], expect_errors=True
+    )
+    assert resp.status_int == 422
+    assert "well-formed" in resp.body.decode("utf-8")
+    assert "truncated" in resp.body.decode("utf-8")
