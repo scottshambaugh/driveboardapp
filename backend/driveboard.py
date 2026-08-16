@@ -1238,14 +1238,19 @@ def status():
 
 @_serialized_operation
 def homing():
-    """Run homing cycle."""
+    """Run homing cycle.
+
+    A job on the machine holds this back, through the same guard the jogs go
+    by, which says so to whoever asked. Not yet knowing whether the machine is
+    idle is not a reason to refuse: a fresh connection has had no status frame
+    yet, and homing is exactly what it is for.
+    """
     global SerialLoop
     with SerialLoop.lock:
-        if SerialLoop._status["ready"] or SerialLoop._status["stops"]:
-            SerialLoop.request_resume = True  # to recover from a stop mode
-            SerialLoop.send_command(CMD_HOMING)
-        else:
-            print("WARN: ignoring homing command while job running")
+        # the resume is only armed once the command is through the guard, and
+        # goes out ahead of it, to recover from a stop mode
+        SerialLoop.send_command(CMD_HOMING)
+        SerialLoop.request_resume = True
 
 
 def _clamp_param(name, val, lo, hi):

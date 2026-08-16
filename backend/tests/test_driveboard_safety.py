@@ -215,16 +215,29 @@ def test_serial_write_emits_pause_unpause_chars(loop):
 # ---------------------------------------------------------------------------
 
 
-def test_homing_ignored_while_running(loop):
+def test_homing_refused_while_a_job_is_running(loop):
     loop._status["ready"] = False
     loop._status["stops"] = {}
-    driveboard.homing()
+    loop.job_active = True
+    with pytest.raises(driveboard.MachineBusy):
+        driveboard.homing()
     assert ord(driveboard.CMD_HOMING) not in loop.tx_buffer
+    assert loop.request_resume is False  # nothing armed by a refused home
 
 
 def test_homing_allowed_when_ready(loop):
     loop._status["ready"] = True
     loop._status["stops"] = {}
+    driveboard.homing()
+    assert ord(driveboard.CMD_HOMING) in loop.tx_buffer
+
+
+def test_homing_allowed_before_the_first_status_frame(loop):
+    """A fresh connection has heard nothing back yet, which is when homing on
+    startup asks for it."""
+    loop._status["ready"] = False
+    loop._status["stops"] = {}
+    loop.job_active = False
     driveboard.homing()
     assert ord(driveboard.CMD_HOMING) in loop.tx_buffer
 
@@ -3005,7 +3018,8 @@ def test_manual_moves_are_refused_while_the_job_is_still_running(loop):
     ):
         with pytest.raises(driveboard.MachineBusy):
             call()
-    driveboard.homing()  # has a guard of its own, and declines quietly
+    with pytest.raises(driveboard.MachineBusy):
+        driveboard.homing()
     assert bytes(loop.tx_buffer) == queued  # none of it reached the wire
 
 
