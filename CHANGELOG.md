@@ -4,6 +4,7 @@
 ### New Features
 - Instead of the total duration, a running job now shows the time left for the pass, and for the whole job
 - dba files with repeated raster data now only hold one copy of that data, for reduced filesize and faster run init
+- Exact paths with the same color and raster copies exactly overlaying itself are now deduplicated on import, to avoid surprise double-engraving
 
 ### Bug Fixes
 - Requests are now served concurrently, so a slow one no longer holds up the rest

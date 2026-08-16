@@ -703,16 +703,17 @@ def _quadrants(n):
     )
 
 
-def _stamped_svg(uri, clips, transform=""):
+def _stamped_svg(uri, clips, transform="", transforms=None):
     """One image placed once per entry in `clips`, each with its own clip rect
-    given as (x, y, w, h) in mm."""
+    given as (x, y, w, h) in mm. `transforms` gives a copy its own transform,
+    which moves its clip rect with it."""
     defs = "".join(
         f'<clipPath id="k{i}"><rect x="{c[0]}" y="{c[1]}" width="{c[2]}" height="{c[3]}"/></clipPath>'
         for i, c in enumerate(clips)
     )
     images = "".join(
         f'<image x="0" y="0" width="40" height="40" clip-path="url(#k{i})" '
-        f'transform="{transform}" xlink:href="{uri}"/>'
+        f'transform="{transforms[i] if transforms else transform}" xlink:href="{uri}"/>'
         for i in range(len(clips))
     )
     return (
@@ -728,9 +729,15 @@ def test_copies_clipped_alike_share_one_encoding():
     """Placements that land on the same pixels come back as the identical
     string, and ones that do not stay distinct."""
     uri = _png_data_uri(_quadrants(8))
-    # three copies clipped to the top-left quadrant, one to the bottom-right
+    # three copies clipped to the top-left quadrant, one to the bottom-right.
+    # the copies sit side by side, since stacked ones would be deduplicated
     job = jobimport.convert(
-        _stamped_svg(uri, [(0, 0, 20, 20)] * 3 + [(20, 20, 20, 20)]), optimize=False
+        _stamped_svg(
+            uri,
+            [(0, 0, 20, 20)] * 3 + [(20, 20, 20, 20)],
+            transforms=["", "translate(30,0)", "translate(60,0)", ""],
+        ),
+        optimize=False,
     )
     defs = [d for d in job["defs"] if d["kind"] == "image"]
     assert len(defs) == 4
@@ -738,8 +745,8 @@ def test_copies_clipped_alike_share_one_encoding():
     assert defs[0]["data"] is defs[1]["data"] is defs[2]["data"]
     assert defs[3]["data"] != defs[0]["data"]
     # and the shared crop is still the right corner of the picture
-    for def_ in defs[:3]:
-        assert def_["pos"] == pytest.approx([0.0, 0.0])
+    for def_, x in zip(defs[:3], [0.0, 30.0, 60.0]):
+        assert def_["pos"] == pytest.approx([x, 0.0])
         assert _pixels(_decode(def_)) == [(R,) * 4] * 4
     assert defs[3]["pos"] == pytest.approx([20.0, 20.0])
     assert _pixels(_decode(defs[3])) == [(K,) * 4] * 4
@@ -750,14 +757,21 @@ def test_copies_clipped_alike_after_a_quarter_turn():
     turned copies have to come out both shared and correct."""
     uri = _png_data_uri(_quadrants(8))
     # the turn lands the image back over the same 40x40 box and takes the clip
-    # rect with it, so the crop is the top-right quadrant of the turned picture
+    # rect with it, so the crop is the top-right quadrant of the turned picture.
+    # the second copy is turned in a box next to it, since a stacked one would
+    # be deduplicated
     job = jobimport.convert(
-        _stamped_svg(uri, [(0, 0, 20, 20)] * 2, transform="translate(40,0) rotate(90)"),
+        _stamped_svg(
+            uri,
+            [(0, 0, 20, 20)] * 2,
+            transforms=["translate(40,0) rotate(90)", "translate(90,0) rotate(90)"],
+        ),
         optimize=False,
     )
     defs = [d for d in job["defs"] if d["kind"] == "image"]
     assert len(defs) == 2
     assert defs[0]["data"] is defs[1]["data"]
+    assert defs[1]["pos"] == pytest.approx([70.0, 0.0])
     assert defs[0]["pos"] == pytest.approx([20.0, 0.0])
     assert _pixels(_decode(defs[0])) == [(R,) * 4] * 4
 
@@ -842,6 +856,113 @@ def test_convert_gcode_via_dispatch():
     job = jobimport.convert(gcode)
     assert "defs" in job
     assert job["head"]["kind"] == "mill"
+
+
+# ---------------------------------------------------------------------------
+# deduplication of stacked copies
+# ---------------------------------------------------------------------------
+
+
+def _path_job(*colored_paths):
+    """A job drawing one path def per (color, path) pair given."""
+    job = {"head": {}, "passes": [], "items": [], "defs": []}
+    for color, path in colored_paths:
+        job["defs"].append({"kind": "path", "data": path})
+        job["items"].append({"def": len(job["defs"]) - 1, "color": color})
+    return job
+
+
+SQUARE = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+
+
+def test_dedupe_drops_a_stacked_copy():
+    job = _path_job(("#ff0000", [list(SQUARE), list(SQUARE)]))
+    jobimport.dedupe_job(job)
+    assert job["defs"][0]["data"] == [SQUARE]
+
+
+def test_dedupe_drops_a_copy_in_another_def_of_the_same_color():
+    job = _path_job(("#ff0000", [list(SQUARE)]), ("#ff0000", [list(SQUARE)]))
+    jobimport.dedupe_job(job)
+    assert len(job["defs"]) == 1
+    assert len(job["items"]) == 1
+
+
+def test_dedupe_matches_a_copy_drawn_backwards():
+    job = _path_job(("#ff0000", [list(SQUARE), list(reversed(SQUARE))]))
+    jobimport.dedupe_job(job)
+    assert job["defs"][0]["data"] == [SQUARE]
+
+
+def test_dedupe_keeps_a_copy_in_another_color():
+    job = _path_job(("#ff0000", [list(SQUARE)]), ("#0000ff", [list(SQUARE)]))
+    jobimport.dedupe_job(job)
+    assert len(job["items"]) == 2
+    assert all(d["data"] == [SQUARE] for d in job["defs"])
+
+
+def test_dedupe_keeps_a_copy_somewhere_else():
+    moved = [[x + 20, y] for x, y in SQUARE]
+    job = _path_job(("#ff0000", [list(SQUARE), moved]))
+    jobimport.dedupe_job(job)
+    assert job["defs"][0]["data"] == [SQUARE, moved]
+
+
+def test_dedupe_renumbers_the_passes():
+    job = _path_job(("#ff0000", [list(SQUARE)]), ("#ff0000", [list(SQUARE)]))
+    job["items"].append({"def": 0, "color": "#00ff00"})
+    job["defs"].append({"kind": "path", "data": [list(SQUARE)]})
+    job["items"][-1]["def"] = 2
+    job["passes"] = [{"items": [0, 1, 2], "feedrate": 2000, "intensity": 50}]
+    jobimport.dedupe_job(job)
+    # the stacked red copy is gone and the green one keeps its place in the pass
+    assert len(job["items"]) == 2
+    assert job["passes"][0]["items"] == [0, 1]
+    assert job["items"][1]["color"] == "#00ff00"
+
+
+def _image_job(*placements):
+    """A job placing images, each given as (data, pos, size)."""
+    job = {"head": {}, "passes": [], "items": [], "defs": []}
+    for data, pos, size in placements:
+        job["defs"].append({"kind": "image", "data": data, "pos": pos, "size": size})
+        job["items"].append({"def": len(job["defs"]) - 1})
+    return job
+
+
+def test_dedupe_drops_a_raster_placed_twice_in_one_spot():
+    uri = _png_data_uri([[(0, 0, 0, 255), (255, 255, 255, 255)]])
+    job = _image_job((uri, [5.0, 5.0], [10.0, 5.0]), (uri, [5.0, 5.0], [10.0, 5.0]))
+    jobimport.dedupe_job(job)
+    assert len(job["defs"]) == 1
+    assert len(job["items"]) == 1
+
+
+@pytest.mark.parametrize(
+    "pos,size",
+    [
+        ([25.0, 5.0], [10.0, 5.0]),  # moved
+        ([5.0, 5.0], [20.0, 10.0]),  # scaled
+    ],
+)
+def test_dedupe_keeps_a_raster_placed_differently(pos, size):
+    uri = _png_data_uri([[(0, 0, 0, 255), (255, 255, 255, 255)]])
+    job = _image_job((uri, [5.0, 5.0], [10.0, 5.0]), (uri, pos, size))
+    jobimport.dedupe_job(job)
+    assert len(job["defs"]) == 2
+    assert len(job["items"]) == 2
+
+
+def test_dedupe_drops_a_stacked_copy_from_an_svg():
+    rect = '<rect x="10" y="10" width="20" height="20" fill="none" stroke="#ff0000"/>'
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" '
+        'viewBox="0 0 100 100">' + rect + rect + "</svg>"
+    )
+    job = jobimport.convert(svg, optimize=False)
+    segments = [seg for d in job["defs"] if d["kind"] == "path" for seg in d["data"]]
+    assert len(segments) == 1
 
 
 # ---------------------------------------------------------------------------
