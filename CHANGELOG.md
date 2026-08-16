@@ -5,7 +5,7 @@
 - Instead of the total duration, a running job now shows the time left for the pass, and for the whole job
 
 ### Bug Fixes
-- The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeeking and pathing
+- The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns
 - Raster lines no longer command z
 - Raster scanlines now advance y during the lead-out instead of as a standalone hop between scanlines, to avoid y acceleration jumps

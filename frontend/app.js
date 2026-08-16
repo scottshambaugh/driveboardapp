@@ -13,15 +13,12 @@ var app_fill_btn = undefined;
 var app_visibility = true;
 
 function time_format(seconds) {
-  // a run time for the job info line, in the largest unit that still reads
-  // as a number rather than a count of hundreds
+  // a run time for the job info line. Minutes all the way up, so a long job
+  // stays comparable with a short one at a glance
   if (seconds < 60) {
     return Math.round(seconds) + " sec";
   }
-  if (seconds < 3600) {
-    return (seconds / 60).toFixed(1) + " min";
-  }
-  return (seconds / 3600).toFixed(1) + " hr";
+  return (seconds / 60).toFixed(1) + " min";
 }
 
 // toast messages, install jquery plugin

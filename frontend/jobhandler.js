@@ -44,8 +44,7 @@ jobhandler = {
   path_group: undefined,
   fill_group: undefined,
   image_group: undefined,
-  seek_preview_seq: 0,
-  duration_seq: 0,
+  preview_seq: 0,
   duration: 0, // last modelled run time in seconds, 0 when unknown
 
   clear: function () {
@@ -59,7 +58,7 @@ jobhandler = {
     this.sources = {};
     this.name = "";
     this.duration = 0;
-    this.duration_seq++;
+    this.preview_seq++;
     jobview_clear();
     passes_clear();
     $("#job_info_name").html("");
@@ -443,66 +442,13 @@ jobhandler = {
         }
       }
     }
-    this.renderSeeks();
+    this.renderPreview();
   },
 
-  renderDuration: function () {
-    // run time of the job as the backend models it: a dry run of the same
-    // dispatch a run would send, so it carries the ordering, lead-ins,
-    // pierces, acceleration ramps and cornering the machine will see
-    if (status_cache.remaining && status_cache.remaining[1] > 0) {
-      // a run is on, so the info line is showing the time left instead and
-      // the backend will not dry-run a job while one is on the wire
-      return;
-    }
-    // only items assigned to a pass run, so only they are timed
-    var passes = [];
-    for (var i = 0; i < this.passes.length; i++) {
-      var pass = this.passes[i];
-      if (pass.items && pass.items.length > 0) {
-        passes.push(pass);
-      }
-    }
-    var seq = ++jobhandler.duration_seq;
-    if (passes.length === 0) {
-      jobhandler.duration = 0;
-      $("#job_info_duration").html("");
-      return;
-    }
-    var job = this.get();
-    job.passes = passes;
-    // the pre-clip originals are for previews, nothing engraves from them
-    delete job.sources;
-    $.ajax({
-      type: "POST",
-      url: "/job_duration",
-      contentType: "application/json",
-      data: JSON.stringify({ job: job }),
-      dataType: "json",
-      success: function (result) {
-        // a slower response from an older request must not win
-        if (seq !== jobhandler.duration_seq) {
-          return;
-        }
-        jobhandler.duration = result.duration;
-        $("#job_info_duration").html(
-          " | duration: ~" + time_format(result.duration),
-        );
-      },
-      error: function (xhr, status, error) {
-        if (seq !== jobhandler.duration_seq) {
-          return;
-        }
-        jobhandler.duration = 0;
-        $("#job_info_duration").html("");
-        console.error("Duration estimate failed: " + error);
-      },
-    });
-  },
-
-  renderSeeks: function () {
-    // seek lines as dispatch will order the job, drawn when the backend
-    // preview arrives. Images travel as their extent only.
+  renderPreview: function () {
+    // seek lines and run time of the job, both out of the one ordering pass
+    // the backend makes of it. Images carry their pixel data, which is what
+    // tells the estimate which rows engrave and how far across.
     // only items assigned to a pass run, so only they are previewed
     var passes = [];
     for (var i = 0; i < this.passes.length; i++) {
@@ -511,55 +457,124 @@ jobhandler = {
         passes.push(pass);
       }
     }
-    var seq = ++jobhandler.seek_preview_seq;
+    var seq = ++jobhandler.preview_seq;
     if (passes.length === 0) {
+      jobhandler.duration = 0;
+      $("#job_info_duration").html("");
       jobview_seekLayer.removeChildren();
       paper.view.draw();
       return;
     }
+    // a job that places the same picture many times holds one Image for all
+    // of them, so each copy carries the same base64. Sending it once and
+    // pointing the rest at it keeps a placed-many-times raster from turning
+    // into a payload tens of megabytes wide
     var slim_defs = [];
+    var data_seen = {};
     for (var i = 0; i < this.defs.length; i++) {
       var def = this.defs[i];
       if (def.kind === "image") {
-        slim_defs.push({ kind: "image", pos: def.pos, size: def.size });
+        var src = def.data.src;
+        if (src in data_seen) {
+          slim_defs.push({
+            kind: "image",
+            pos: def.pos,
+            size: def.size,
+            data_of: data_seen[src],
+          });
+        } else {
+          data_seen[src] = i;
+          slim_defs.push({
+            kind: "image",
+            pos: def.pos,
+            size: def.size,
+            data: src,
+          });
+        }
       } else {
         slim_defs.push({ kind: def.kind, data: def.data });
       }
     }
     $.ajax({
       type: "POST",
-      url: "/job_seek_preview",
+      url: "/job_preview",
       contentType: "application/json",
       data: JSON.stringify({
         job: { head: {}, passes: passes, items: this.items, defs: slim_defs },
       }),
       dataType: "json",
       success: function (result) {
-        // a slower response from an older request must not win
-        if (seq !== jobhandler.seek_preview_seq) {
-          return;
-        }
-        jobview_seekLayer.activate();
-        jobview_seekLayer.removeChildren();
-        var seeks = result.seeks;
-        for (var i = 0; i < seeks.length; i++) {
-          var p_seek = new paper.Path();
-          p_seek.strokeColor = "#dddddd";
-          p_seek.add([
-            seeks[i][0][0] * jobview_mm2px,
-            seeks[i][0][1] * jobview_mm2px,
-          ]);
-          p_seek.add([
-            seeks[i][1][0] * jobview_mm2px,
-            seeks[i][1][1] * jobview_mm2px,
-          ]);
-        }
-        paper.view.draw();
+        jobhandler.collectPreview(result.token, seq, 0);
       },
       error: function (xhr, status, error) {
-        console.error("Seek preview failed: " + error);
+        console.error("Job preview failed: " + error);
       },
     });
+  },
+
+  collectPreview: function (token, seq, tries) {
+    // the backend computes previews on a worker thread so a big job cannot
+    // stall the status polling, so the answer is collected rather than waited
+    // on. A newer request having been made makes this one irrelevant.
+    if (seq !== jobhandler.preview_seq) {
+      return;
+    }
+    if (tries > 200) {
+      console.error("Job preview timed out");
+      return;
+    }
+    $.ajax({
+      type: "GET",
+      url: "/job_preview/" + token,
+      dataType: "json",
+      success: function (result) {
+        if (seq !== jobhandler.preview_seq) {
+          return;
+        }
+        if (result.pending) {
+          setTimeout(function () {
+            jobhandler.collectPreview(token, seq, tries + 1);
+          }, 100);
+          return;
+        }
+        jobhandler.showDuration(result.duration);
+        jobhandler.showSeeks(result.seeks);
+      },
+      error: function (xhr, status, error) {
+        if (seq !== jobhandler.preview_seq) {
+          return;
+        }
+        jobhandler.duration = 0;
+        $("#job_info_duration").html("");
+        console.error("Job preview failed: " + error);
+      },
+    });
+  },
+
+  showDuration: function (seconds) {
+    jobhandler.duration = seconds;
+    if (status_cache.remaining && status_cache.remaining[1] > 0) {
+      return; // a run is on, the info line is showing the time left instead
+    }
+    $("#job_info_duration").html(" | duration: ~" + time_format(seconds));
+  },
+
+  showSeeks: function (seeks) {
+    jobview_seekLayer.activate();
+    jobview_seekLayer.removeChildren();
+    for (var i = 0; i < seeks.length; i++) {
+      var p_seek = new paper.Path();
+      p_seek.strokeColor = "#dddddd";
+      p_seek.add([
+        seeks[i][0][0] * jobview_mm2px,
+        seeks[i][0][1] * jobview_mm2px,
+      ]);
+      p_seek.add([
+        seeks[i][1][0] * jobview_mm2px,
+        seeks[i][1][1] * jobview_mm2px,
+      ]);
+    }
+    paper.view.draw();
   },
 
   renderBounds: function () {

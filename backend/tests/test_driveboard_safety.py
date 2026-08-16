@@ -1134,7 +1134,7 @@ def test_job_seek_preview_reflects_dispatch_ordering():
             }
         ],
     }
-    seeks = driveboard.job_seek_preview(job)
+    seeks = driveboard.job_preview(job)["seeks"]
     assert seeks == [[[0.0, 0.0], [5.0, 5.0]], [[15.0, 5.0], [50.0, 50.0]]]
 
 
@@ -1149,7 +1149,7 @@ def test_job_seek_preview_handles_dataless_images():
             {"kind": "path", "data": [[[100.0, 100.0], [110.0, 100.0]]]},
         ],
     }
-    seeks = driveboard.job_seek_preview(job)
+    seeks = driveboard.job_preview(job)["seeks"]
     assert seeks[0] == [[0.0, 0.0], [50.0, 50.0]]
     assert seeks[-1][1] == [100.0, 100.0]
 
@@ -1278,7 +1278,7 @@ def test_job_seek_preview_matches_item_reordering():
             {"kind": "path", "data": [[[5.0, 5.0], [15.0, 5.0]]]},
         ],
     }
-    seeks = driveboard.job_seek_preview(job)
+    seeks = driveboard.job_preview(job)["seeks"]
     assert seeks[0] == [[0.0, 0.0], [5.0, 5.0]]
     assert seeks[1] == [[15.0, 5.0], [200.0, 200.0]]
 
@@ -2498,7 +2498,7 @@ def test_host_stall_mid_job_leaves_the_controller_stopped():
 
 
 # ---------------------------------------------------------------------------
-# Run-time estimate (backend/jobtime.py driven by a dry run of dispatch)
+# Run-time estimate (analytical, out of the same ordering pass as the seeks)
 # ---------------------------------------------------------------------------
 
 
@@ -2518,66 +2518,97 @@ def _duration_job(**pass_kw):
     }
 
 
+def _duration(job):
+    return driveboard.job_preview(job)["duration"]
+
+
 def test_job_duration_needs_no_machine():
     # the info line has to show a time before anything is plugged in
     assert driveboard.SerialLoop is None
-    assert driveboard.job_duration(_duration_job()) > 0.0
+    assert _duration(_duration_job()) > 0.0
 
 
 def test_job_duration_exceeds_length_over_feedrate():
     # the ramps and corners the old length/rate estimate ignored
     naive = 400.0 / (2000.0 / 60.0)
-    assert driveboard.job_duration(_duration_job()) > naive
+    assert _duration(_duration_job()) > naive
 
 
 def test_job_duration_scales_with_feedrate():
-    slow = driveboard.job_duration(_duration_job(feedrate=1000))
-    fast = driveboard.job_duration(_duration_job(feedrate=4000))
-    assert slow > fast
+    assert _duration(_duration_job(feedrate=1000)) > _duration(_duration_job(feedrate=4000))
 
 
 def test_job_duration_counts_pierce_time():
-    plain = driveboard.job_duration(_duration_job())
-    pierced = driveboard.job_duration(_duration_job(pierce_time=2.0))
+    # one open polyline, so exactly one burn and one pierce to account for
+    def open_path_job(pierce):
+        return {
+            "head": {},
+            "passes": [{"items": [0], "feedrate": 2000, "seekrate": 6000, "pierce_time": pierce}],
+            "items": [{"def": 0}],
+            "defs": [{"kind": "path", "data": [[[0.0, 0.0], [100.0, 0.0], [100.0, 100.0]]]}],
+        }
+
+    plain = _duration(open_path_job(0.0))
+    pierced = _duration(open_path_job(2.0))
     assert pierced == pytest.approx(plain + 2.0, abs=0.01)
 
 
-def test_job_duration_leaves_no_trace_on_the_serial_loop(loop):
+def test_job_duration_leaves_the_job_and_the_serial_loop_alone(loop):
     loop._status["offset"] = [0.0, 0.0, 0.0]
-    assert driveboard.job_duration(_duration_job()) > 0.0
-    # a dry run emits into its own buffer, never onto the wire
+    job = _duration_job()
+    before = copy.deepcopy(job)
+    assert _duration(job) > 0.0
+    assert job == before  # the estimate reads the job, it does not rewrite it
     assert loop.tx_buffer == bytearray()
     assert loop.job_size == 0
-    assert loop.timer.total() == 0.0
-    assert not any(driveboard._assist_holds.values())
 
 
-def test_job_duration_refuses_while_a_job_is_on_the_wire(loop):
+def test_job_duration_runs_while_a_job_is_on_the_wire(loop):
+    # nothing is emitted to estimate, so an edit mid-run still gets an answer
     loop._status["offset"] = [0.0, 0.0, 0.0]
     driveboard.job(_duration_job())
-    assert loop.tx_buffer  # the job is queued for the machine
-    with pytest.raises(ValueError, match="while one is running"):
-        driveboard.job_duration(_duration_job())
+    assert loop.tx_buffer
+    assert _duration(_duration_job()) > 0.0
 
 
 def test_job_duration_follows_raster_mode(monkeypatch):
     # a unidirectional raster flies back over every scanline, a bidirectional
     # one engraves on the way back, so the config choice changes the time
-    img = Image.new("L", (200, 100), 0)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode()
     job = {
         "head": {},
         "passes": [{"items": [0], "feedrate": 3000, "seekrate": 6000, "intensity": 50}],
         "items": [{"def": 0}],
-        "defs": [{"kind": "image", "data": b64, "pos": [10.0, 10.0], "size": [80.0, 40.0]}],
+        "defs": [{"kind": "image", "pos": [10.0, 10.0], "size": [80.0, 40.0]}],
     }
     monkeypatch.setitem(driveboard.conf, "raster_mode", "Forward")
-    forward = driveboard.job_duration(job)
+    forward = _duration(job)
     monkeypatch.setitem(driveboard.conf, "raster_mode", "Bidirectional")
-    bidi = driveboard.job_duration(job)
+    bidi = _duration(job)
     assert forward > bidi
+
+
+def test_job_duration_times_images_without_pixel_data():
+    # the frontend sends image defs slim, the estimate works off the extent
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 3000, "seekrate": 6000, "pxsize": 0.4}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "image", "pos": [10.0, 10.0], "size": [80.0, 40.0]}],
+    }
+    # 40mm of scanlines at 0.4mm is 100 lines, each crossing at least the 80mm
+    assert _duration(job) > 100 * 80.0 / (3000.0 / 60.0)
+
+
+def test_job_duration_scales_with_image_area():
+    def image_job(w, h):
+        return {
+            "head": {},
+            "passes": [{"items": [0], "feedrate": 3000, "seekrate": 6000, "pxsize": 0.4}],
+            "items": [{"def": 0}],
+            "defs": [{"kind": "image", "pos": [10.0, 10.0], "size": [w, h]}],
+        }
+
+    assert _duration(image_job(80.0, 80.0)) > _duration(image_job(80.0, 40.0))
 
 
 def test_dispatch_marks_every_pass_for_the_time_left(loop):
@@ -2601,3 +2632,100 @@ def test_remaining_in_pass_tracks_the_pass_being_run(loop):
     # in the last pass, only the run home separates the two
     late = first_pass_end + 1
     assert loop.timer.remaining_in_pass(late) <= loop.timer.remaining(late)
+
+
+def test_estimate_and_dispatch_agree_on_a_vector_job(loop):
+    # the analytical estimate and the model that watches the real command
+    # stream are two views of the same machine, so they must not drift
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _duration_job()
+    estimate = _duration(job)
+    driveboard.job(copy.deepcopy(job))
+    assert loop.timer.total() == pytest.approx(estimate, rel=0.02)
+
+
+def _raster_time_job(b64, w=80.0, h=40.0, px=0.4, **pass_kw):
+    pass_ = {"items": [0], "feedrate": 3000, "seekrate": 6000, "intensity": 50, "pxsize": px}
+    pass_.update(pass_kw)
+    return {
+        "head": {"noreturn": True},
+        "passes": [pass_],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "image", "data": b64, "pos": [10.0, 10.0], "size": [w, h]}],
+    }
+
+
+def _png(img):
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def test_job_duration_skips_rows_that_engrave_nothing():
+    # dispatch skips a blank scanline outright, so the estimate must too
+    full = Image.new("L", (200, 100), 0)
+    half = Image.new("L", (200, 100), 255)
+    for y in range(50):
+        for x in range(200):
+            half.putpixel((x, y), 0)
+    assert _duration(_raster_time_job(_png(half))) == pytest.approx(
+        _duration(_raster_time_job(_png(full))) / 2.0, rel=0.05
+    )
+
+
+def test_job_duration_follows_how_far_across_a_row_engraves():
+    wide = Image.new("L", (200, 100), 255)
+    narrow = Image.new("L", (200, 100), 255)
+    for y in range(100):
+        for x in range(200):
+            wide.putpixel((x, y), 0)
+        for x in range(20):
+            narrow.putpixel((x, y), 0)
+    assert _duration(_raster_time_job(_png(wide))) > _duration(_raster_time_job(_png(narrow)))
+
+
+def test_job_duration_matches_dispatch_on_a_sparse_image(loop):
+    # the pixel scan exists so a mostly blank raster is not read as a full one
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    img = Image.new("L", (200, 100), 255)
+    for y in range(40, 60):
+        for x in range(80, 120):
+            img.putpixel((x, y), 0)
+    job = _raster_time_job(_png(img))
+    estimate = _duration(job)
+    driveboard.job(copy.deepcopy(job))
+    assert loop.timer.total() == pytest.approx(estimate, rel=0.05)
+
+
+def test_job_duration_matches_dispatch_on_a_full_image(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _raster_time_job(_png(Image.new("L", (200, 100), 0)))
+    estimate = _duration(job)
+    driveboard.job(copy.deepcopy(job))
+    assert loop.timer.total() == pytest.approx(estimate, rel=0.05)
+
+
+def test_job_duration_times_an_image_with_no_pixel_data_as_full():
+    # a def sent without data has only its extent to go on
+    slim = {
+        "head": {"noreturn": True},
+        "passes": [{"items": [0], "feedrate": 3000, "seekrate": 6000, "pxsize": 0.4}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "image", "pos": [10.0, 10.0], "size": [80.0, 40.0]}],
+    }
+    full = _raster_time_job(_png(Image.new("L", (200, 100), 0)))
+    assert _duration(slim) == pytest.approx(_duration(full), rel=0.05)
+
+
+def test_raster_row_extents_keys_on_invert(monkeypatch):
+    # inverting swaps which pixels are ink, so a cached scan must not be reused
+    img = Image.new("L", (100, 10), 255)
+    for x in range(20):
+        img.putpixel((x, 5), 0)
+    b64 = _png(img)
+    monkeypatch.setitem(driveboard.conf, "raster_invert", False)
+    plain = driveboard._raster_row_extents(b64, 100, 10, False)
+    monkeypatch.setitem(driveboard.conf, "raster_invert", True)
+    inverted = driveboard._raster_row_extents(b64, 100, 10, True)
+    assert plain != inverted
+    assert plain.count(None) > inverted.count(None)  # mostly white becomes mostly ink

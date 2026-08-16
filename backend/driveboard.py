@@ -2,9 +2,11 @@
 import base64
 import copy
 import datetime
+import functools
 import io
 import itertools
 import json
+import math
 import platform
 import sys
 import threading
@@ -243,20 +245,6 @@ markers_rx = {
 
 SerialLoop = None
 fallback_msg_thread = None
-
-# A thread estimating a job emits into a buffer of its own instead of the
-# machine, see job_duration. Thread-local, so the serial thread and any thread
-# actually running a job never see anything but the real loop.
-_dry_run = threading.local()
-# one dry run at a time, they share the module's assist bookkeeping
-_duration_lock = threading.Lock()
-
-
-def _out():
-    """Where emitted commands go: this thread's dry-run buffer while it is
-    estimating a job, the serial loop otherwise."""
-    sink = getattr(_dry_run, "sink", None)
-    return SerialLoop if sink is None else sink
 
 
 class SerialLoopClass(threading.Thread):
@@ -1161,54 +1149,54 @@ def _clamp_param(name, val, lo, hi):
 
 
 def feedrate(val):
-    out = _out()
-    with out.lock:
+    global SerialLoop
+    with SerialLoop.lock:
         # zero or negative reaches the planner as a zero or wrapped step rate
         val = _clamp_param("feedrate", val, MIN_FEEDRATE, MAX_FEEDRATE)
-        out.send_param(PARAM_FEEDRATE, val)
+        SerialLoop.send_param(PARAM_FEEDRATE, val)
 
 
 def intensity(val):
-    out = _out()
-    with out.lock:
+    global SerialLoop
+    with SerialLoop.lock:
         val = max(min(255 * val / 100, 255), 0)
-        out.send_param(PARAM_INTENSITY, val)
+        SerialLoop.send_param(PARAM_INTENSITY, val)
 
 
 def duration(val):
-    out = _out()
-    with out.lock:
+    global SerialLoop
+    with SerialLoop.lock:
         # a dwell holds the beam on in one spot for its whole duration
         val = _clamp_param("duration", val, 0.0, MAX_DWELL_SECONDS)
-        out.send_param(PARAM_DURATION, val)
+        SerialLoop.send_param(PARAM_DURATION, val)
 
 
 def pixelwidth(val):
-    out = _out()
-    with out.lock:
+    global SerialLoop
+    with SerialLoop.lock:
         # zero selects a plain line, negative walks the raster pixel index back
         val = _clamp_param("pixelwidth", val, 0.0, MAX_PARAM_VALUE)
-        out.send_param(PARAM_PIXEL_WIDTH, val)
+        SerialLoop.send_param(PARAM_PIXEL_WIDTH, val)
 
 
 def mark_pass():
     """Note the pass boundary the stream has reached, see jobtime.JobTimer.
     Emits nothing, it only bookmarks where in the stream a pass starts."""
-    out = _out()
-    with out.lock:
-        out.mark_pass()
+    global SerialLoop
+    with SerialLoop.lock:
+        SerialLoop.mark_pass()
 
 
 def relative():
-    out = _out()
-    with out.lock:
-        out.send_command(CMD_REF_RELATIVE)
+    global SerialLoop
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_REF_RELATIVE)
 
 
 def absolute():
-    out = _out()
-    with out.lock:
-        out.send_command(CMD_REF_ABSOLUTE)
+    global SerialLoop
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_REF_ABSOLUTE)
 
 
 def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
@@ -1219,14 +1207,14 @@ def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
     gives it a non-zero work area, since a machine with no Z axis configured
     still has to be able to jog the focus.
     """
-    out = _out()
+    global SerialLoop
     if machine_coords:
         x_off = y_off = z_off = 0.0
     else:
-        with out.lock:
-            x_off = out._status["offset"][0]
-            y_off = out._status["offset"][1]
-            z_off = out._status["offset"][2]
+        with SerialLoop.lock:
+            x_off = SerialLoop._status["offset"][0]
+            y_off = SerialLoop._status["offset"][1]
+            z_off = SerialLoop._status["offset"][2]
     if x is not None and not (-x_off <= x <= conf["workspace"][0] - x_off):
         return False
     if y is not None and not (-y_off <= y <= conf["workspace"][1] - y_off):
@@ -1237,15 +1225,15 @@ def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
 
 
 def move(x=None, y=None, z=None):
-    out = _out()
-    with out.lock:
+    global SerialLoop
+    with SerialLoop.lock:
         if x is not None:
-            out.send_param(PARAM_TARGET_X, x)
+            SerialLoop.send_param(PARAM_TARGET_X, x)
         if y is not None:
-            out.send_param(PARAM_TARGET_Y, y)
+            SerialLoop.send_param(PARAM_TARGET_Y, y)
         if z is not None:
-            out.send_param(PARAM_TARGET_Z, z)
-        out.send_command(CMD_LINE)
+            SerialLoop.send_param(PARAM_TARGET_Z, z)
+        SerialLoop.send_command(CMD_LINE)
 
 
 def supermove(x=None, y=None, z=None):
@@ -1255,29 +1243,29 @@ def supermove(x=None, y=None, z=None):
     sequence. Intensity persists in the controller between commands. Sent
     inline because intensity() would deadlock on the lock held here.
     """
-    out = _out()
-    with out.lock:
-        out.send_param(PARAM_INTENSITY, 0)
+    global SerialLoop
+    with SerialLoop.lock:
+        SerialLoop.send_param(PARAM_INTENSITY, 0)
         # clear offset
-        out.send_command(CMD_OFFSET_STORE)
-        out.send_command(CMD_REF_STORE)
-        out.send_command(CMD_REF_ABSOLUTE)
+        SerialLoop.send_command(CMD_OFFSET_STORE)
+        SerialLoop.send_command(CMD_REF_STORE)
+        SerialLoop.send_command(CMD_REF_ABSOLUTE)
         if x is not None:
-            out.send_param(PARAM_OFFSET_X, 0)
+            SerialLoop.send_param(PARAM_OFFSET_X, 0)
         if y is not None:
-            out.send_param(PARAM_OFFSET_Y, 0)
+            SerialLoop.send_param(PARAM_OFFSET_Y, 0)
         if z is not None:
-            out.send_param(PARAM_OFFSET_Z, 0)
-        out.send_command(CMD_REF_RESTORE)
+            SerialLoop.send_param(PARAM_OFFSET_Z, 0)
+        SerialLoop.send_command(CMD_REF_RESTORE)
         # move
         if x is not None:
-            out.send_param(PARAM_TARGET_X, x)
+            SerialLoop.send_param(PARAM_TARGET_X, x)
         if y is not None:
-            out.send_param(PARAM_TARGET_Y, y)
+            SerialLoop.send_param(PARAM_TARGET_Y, y)
         if z is not None:
-            out.send_param(PARAM_TARGET_Z, z)
-        out.send_command(CMD_OFFSET_RESTORE)
-        out.send_command(CMD_LINE)
+            SerialLoop.send_param(PARAM_TARGET_Z, z)
+        SerialLoop.send_command(CMD_OFFSET_RESTORE)
+        SerialLoop.send_command(CMD_LINE)
 
 
 def rastermove(x, y, z=None):
@@ -1286,20 +1274,21 @@ def rastermove(x, y, z=None):
     An axis left as None keeps the target the controller already holds, so a
     raster does not disturb a focus the head was jogged to.
     """
-    out = _out()
-    with out.lock:
+    global SerialLoop
+    with SerialLoop.lock:
         if x is not None:
-            out.send_param(PARAM_TARGET_X, x)
+            SerialLoop.send_param(PARAM_TARGET_X, x)
         if y is not None:
-            out.send_param(PARAM_TARGET_Y, y)
+            SerialLoop.send_param(PARAM_TARGET_Y, y)
         if z is not None:
-            out.send_param(PARAM_TARGET_Z, z)
-        out.send_command(CMD_RASTER)
+            SerialLoop.send_param(PARAM_TARGET_Z, z)
+        SerialLoop.send_command(CMD_RASTER)
 
 
 def rasterdata(data, start, end):
-    # NOTE: no lock held here, send_raster_data locks more granularly
-    _out().send_raster_data(data, start, end)
+    # NOTE: no SerialLoop.lock
+    # more granular locking in send_data
+    SerialLoop.send_raster_data(data, start, end)
 
 
 def pause():
@@ -1337,41 +1326,41 @@ def unstop():
 
 
 def dwell():
-    out = _out()
-    with out.lock:
-        out.send_command(CMD_DWELL)
+    global SerialLoop
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_DWELL)
 
 
 def air_on():
-    out = _out()
-    if out is None:
+    global SerialLoop
+    if SerialLoop is None:
         return
-    with out.lock:
-        out.send_command(CMD_AIR_ENABLE)
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_AIR_ENABLE)
 
 
 def air_off():
-    out = _out()
-    if out is None:
+    global SerialLoop
+    if SerialLoop is None:
         return
-    with out.lock:
-        out.send_command(CMD_AIR_DISABLE)
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_AIR_DISABLE)
 
 
 def aux_on():
-    out = _out()
-    if out is None:
+    global SerialLoop
+    if SerialLoop is None:
         return
-    with out.lock:
-        out.send_command(CMD_AUX_ENABLE)
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_AUX_ENABLE)
 
 
 def aux_off():
-    out = _out()
-    if out is None:
+    global SerialLoop
+    if SerialLoop is None:
         return
-    with out.lock:
-        out.send_command(CMD_AUX_DISABLE)
+    with SerialLoop.lock:
+        SerialLoop.send_command(CMD_AUX_DISABLE)
 
 
 def pulse():
@@ -1437,40 +1426,6 @@ def job(jobdict):
         print("INFO: not a valid job, 'head' entry missing")
 
 
-def job_duration(jobdict):
-    """Modelled run time (s) of a job, from a dry run of the real dispatch.
-
-    The job is emitted into a throwaway buffer instead of onto the wire, so
-    the estimate times the exact command stream a run would produce: the same
-    item and scanline ordering, the same lead-ins, pierces, acceleration ramps
-    and cornering, with no second model of any of it. Purely computational,
-    and safe with no machine connected.
-
-    Raises ValueError while a job is on the wire, since the dry run shares the
-    module's assist bookkeeping with dispatch.
-    """
-    with _duration_lock:
-        live = SerialLoop
-        sink = SerialLoopClass()  # never started, so it only ever buffers
-        if live is not None:
-            with live.lock:
-                if live.tx_buffer:
-                    raise ValueError("cannot estimate a job while one is running")
-                # a table offset moves where the job lands, and so what the
-                # work area check makes of it
-                sink._status["offset"] = list(live._status["offset"])
-        holds = {key: set(held) for key, held in _assist_holds.items()}
-        _dry_run.sink = sink
-        try:
-            job(copy.deepcopy(jobdict))  # dispatch mutates the job it is given
-        finally:
-            _dry_run.sink = None
-            for key, held in holds.items():
-                _assist_holds[key].clear()
-                _assist_holds[key].update(held)
-        return sink.timer.total()
-
-
 def job_stop_guard():
     """Refuse to queue a job while the controller is in a stop condition.
 
@@ -1480,12 +1435,12 @@ def job_stop_guard():
 
     Raises ValueError naming the active stops.
     """
-    out = _out()
+    global SerialLoop
 
-    if out is None:
+    if SerialLoop is None:
         return
-    with out.lock:
-        stops = sorted(out._status["stops"])
+    with SerialLoop.lock:
+        stops = sorted(SerialLoop._status["stops"])
     if stops:
         raise ValueError(f"cannot start a job while stopped ({', '.join(stops)}), clear it first")
 
@@ -1549,13 +1504,13 @@ def job_laser_validate(jobdict):
 
     Raises a ValueError with a descriptive message if the job is not valid.
     """
-    out = _out()
+    global SerialLoop
 
     job_pass_params_validate(jobdict)
 
-    with out.lock:
-        x_off = out._status["offset"][0]
-        y_off = out._status["offset"][1]
+    with SerialLoop.lock:
+        x_off = SerialLoop._status["offset"][0]
+        y_off = SerialLoop._status["offset"][1]
     x_lim = conf["workspace"][0] - x_off
     y_lim = conf["workspace"][1] - y_off
 
@@ -1955,12 +1910,15 @@ def _reachable_x_range():
 
     The controller adds the table offset to every target, so clamping a raster
     lead-in or lead-out against the raw machine width would let it run past the
-    end of travel by as much as the offset.
+    end of travel by as much as the offset. With no machine there is no offset
+    to add, which is the case the job preview asks from.
     """
-    out = _out()
+    global SerialLoop
 
-    with out.lock:
-        x_off = out._status["offset"][0]
+    if SerialLoop is None:
+        return 0.0, conf["workspace"][0]
+    with SerialLoop.lock:
+        x_off = SerialLoop._status["offset"][0]
     return -x_off, conf["workspace"][0] - x_off
 
 
@@ -2641,27 +2599,169 @@ def _next_pass_rect(jobdict, passes, passidx):
     return None
 
 
-def job_seek_preview(jobdict):
-    """Seek lines [[x0,y0],[x1,y1]] of a job as dispatch will order it.
+def _polyline_time(polyline, vmax, v_in=0.0, v_out=0.0):
+    """Time (s) to burn a polyline at vmax mm/s, entering at v_in and leaving
+    at v_out, under the planner's speed profile.
+
+    The analytical form of what the machine will do: each vertex is a junction
+    whose angle sets the speed carried through it, and each segment a
+    trapezoid between two such speeds. Same physics as the run-time model in
+    jobtime, driven straight off the geometry instead of an emitted stream.
+    Returns (time, entry direction, exit direction), the directions being what
+    the seeks either side of it turn out of and into.
+    """
+    from jobimport import pathoptimizer
+
+    accel = pathoptimizer.ACCEL
+    trapezoid = pathoptimizer.trapezoid_time
+    junction = pathoptimizer.junction_speed_cos
+    total = 0.0
+    first_dir = None
+    prev_len = prev_dir = None
+    prev_vin = v_in
+    for i in range(1, len(polyline)):
+        a, b = polyline[i - 1], polyline[i]
+        dx = b[0] - a[0]
+        dy = b[1] - a[1]
+        length = math.sqrt(dx * dx + dy * dy)
+        if length < 1e-9:
+            continue  # a repeated vertex is no move at all
+        direction = (dx / length, dy / length)
+        if first_dir is None:
+            first_dir = direction
+        if prev_dir is not None:
+            v_junction = junction(-(prev_dir[0] * direction[0] + prev_dir[1] * direction[1]), vmax)
+            total += trapezoid(prev_len, vmax, accel, prev_vin, v_junction)
+            prev_vin = v_junction
+        prev_len, prev_dir = length, direction
+    if prev_len is not None:
+        total += trapezoid(prev_len, vmax, accel, prev_vin, v_out)
+    return total, first_dir, prev_dir
+
+
+@functools.lru_cache(maxsize=4)
+def _raster_row_extents(data, px_w, px_h, invert):
+    """The engraved span (first ink column, last ink column edge) of each row
+    of an image, None for a row that engraves nothing.
+
+    All the pixel detail a run-time estimate needs: dispatch skips a blank row
+    outright and runs the head from the first ink to the last, so those two
+    columns set the travel. The scan is PIL's, a row crop per line, rather
+    than a walk over every pixel in Python.
+
+    Interior whitespace wide enough for dispatch to break a row into separate
+    segments (see _raster_line_segments) is engraved through here instead, so
+    a row with a big hole in it reads a little slow.
+
+    invert is in the key rather than read from conf because it decides what
+    counts as ink, see _raster_grayscale. Cached because editing a job
+    re-estimates the same image over and over.
+    """
+    del invert  # part of the cache key, applied inside _raster_grayscale
+    imgobj = _raster_grayscale(data, px_w, px_h)
+    ink = imgobj.point(lambda px: 0 if px == 255 else 255)
+    rows = []
+    for y in range(ink.height):
+        box = ink.crop((0, y, ink.width, y + 1)).getbbox()
+        rows.append(None if box is None else (box[0], box[2]))
+    return tuple(rows)
+
+
+def _image_time(def_, pass_, seekrate, feedrate_):
+    """Time (s) to engrave an image, from its pixels and the raster settings.
+
+    Analytical rather than measured: a scanline per pixel row, each a lead-in,
+    a run across whatever that row engraves, and a lead-out, plus the flyback
+    when the mode only engraves one way. Blank rows cost nothing, as dispatch
+    skips them. An image sent without pixel data (the old slim preview) is
+    read as engraving every row end to end.
+    """
+    from jobimport import pathoptimizer
+
+    pos = def_.get("pos") or [0.0, 0.0]
+    size = def_.get("size") or [0.0, 0.0]
+    width, height = float(size[0]), float(size[1])
+    pxsize_x, pxsize_y = _pass_pxsize(pass_)
+    if width <= 0.0 or height <= 0.0 or pxsize_x <= 0.0 or pxsize_y <= 0.0:
+        return 0.0
+    px_w = int(width / pxsize_x)  # x is 2x horizontal resolution
+    px_h = int(height / pxsize_y)
+    if px_w < 1 or px_h < 1:
+        return 0.0
+
+    raster_mode = conf["raster_mode"]
+    if raster_mode not in ("Forward", "Reverse", "Bidirectional", "NearestNeighbor"):
+        raster_mode = "Bidirectional"
+    leadin = conf["raster_leadin"] if raster_mode != "NearestNeighbor" else 0
+    x_min, x_max = _reachable_x_range()
+
+    rows = None
+    if def_.get("data"):
+        try:
+            rows = _raster_row_extents(def_["data"], px_w, px_h, bool(conf["raster_invert"]))
+        except Exception:
+            rows = None  # an image the estimate cannot read still gets a time
+
+    vmax = feedrate_ / 60.0
+    engraves_both_ways = raster_mode in ("Bidirectional", "NearestNeighbor")
+    total = 0.0
+    for li in range(px_h):
+        if rows is None:
+            lo, hi = 0, px_w
+        else:
+            span = rows[li] if li < len(rows) else None
+            if span is None:
+                continue  # a blank row engraves nothing, dispatch skips it
+            lo, hi = span
+        # the head runs lead-in, engraving and lead-out as one move, coming to
+        # rest at each end of the line
+        travel = min(pos[0] + hi * pxsize_x + leadin, x_max) - max(
+            pos[0] + lo * pxsize_x - leadin, x_min
+        )
+        if travel <= 0.0:
+            continue
+        total += pathoptimizer.trapezoid_time(travel, vmax, pathoptimizer.ACCEL, 0.0, 0.0)
+        if not engraves_both_ways:
+            total += pathoptimizer.stop_seek_time(travel, seekrate)  # flyback
+    return total
+
+
+def job_preview(jobdict):
+    """Seek lines and run time of a job as dispatch will order it.
+
+    Returns {"seeks": [[[x0,y0],[x1,y1]], ...], "duration": seconds}.
 
     A dry run of the pass walk: path defs go through the real job-time
     ordering (re-sequencing, splitting, reversal), so the preview shows what
-    the machine will actually do. Image interiors are approximated by their
-    extents (the raster ordering needs the decoded pixels), and image defs
-    may come without pixel data. Purely computational, safe without a
-    machine connection.
+    the machine will actually do. Both answers come out of that one ordering
+    pass, which is the expensive part, and the times themselves are analytical
+    (see _polyline_time and _image_time) rather than measured off an emitted
+    command stream. An image def may carry "data_of": another def's index,
+    to share that def's pixel data rather than repeat it, and one without any
+    pixel data at all is read as engraving its whole extent. Purely
+    computational, safe without a machine connection.
     """
+    from jobimport import pathoptimizer
+
+    defs = jobdict.get("defs") or []
+    for def_ in defs:
+        shared = def_.get("data_of")
+        if shared is not None and 0 <= shared < len(defs):
+            def_["data"] = defs[shared].get("data")
 
     def clamp(p, rect):
         return [min(max(p[0], rect[0]), rect[2]), min(max(p[1], rect[1]), rect[3])]
 
     seeks = []
+    duration = 0.0
     head_pos = [0.0, 0.0]
+    head_dir = None  # the direction the head arrived on, for the next junction
     returns_home = not jobdict.get("head", {}).get("noreturn")
     passes = jobdict.get("passes") or []
     for passidx, pass_ in enumerate(passes):
         seekrate = pass_.get("seekrate", conf["seekrate"])
         feedrate_ = pass_.get("feedrate", conf["feedrate"])
+        pierce_time = pass_.get("pierce_time", conf["pierce_time"])
         pass_end_rect = _next_pass_rect(jobdict, passes, passidx)
         pass_items = _order_pass_items(jobdict, pass_, head_pos, pass_end_rect, seekrate)
         for i, itemidx in enumerate(pass_items):
@@ -2679,7 +2779,12 @@ def job_seek_preview(jobdict):
                 entry = clamp(head_pos, rect)
                 if entry != head_pos:
                     seeks.append([head_pos, entry])
+                    duration += pathoptimizer.seek_time(
+                        head_pos, head_dir, entry, None, seekrate, feedrate_
+                    )
+                duration += _image_time(def_, pass_, seekrate, feedrate_)
                 head_pos = clamp(clamp(entry, next_rect), rect) if next_rect else entry
+                head_dir = None  # a raster ends its last line at a standstill
             elif kind == "fill" or kind == "path":
                 if pass_.get("relative"):
                     head_pos = None
@@ -2687,16 +2792,33 @@ def job_seek_preview(jobdict):
                 ordered = _order_path_def(
                     def_, pass_, seekrate, feedrate_, head_pos, next_rect, kind == "path"
                 )
+                vmax = feedrate_ / 60.0
                 for polyline, _is_arc in ordered:
                     p0 = list(polyline[0][:2])
+                    burn_time, entry_dir, exit_dir = _polyline_time(polyline, vmax)
                     if head_pos is not None and p0 != head_pos:
                         seeks.append([head_pos, p0])
+                        duration += pathoptimizer.seek_time(
+                            head_pos, head_dir, p0, entry_dir, seekrate, feedrate_
+                        )
+                    if pierce_time > 0:
+                        duration += pierce_time
+                    duration += burn_time
                     head_pos = list(polyline[-1][:2])
+                    head_dir = exit_dir
         if head_pos is None:
             break  # a relative pass loses the position, stop the preview
     if returns_home and head_pos is not None and head_pos != [0.0, 0.0]:
         seeks.append([head_pos, [0.0, 0.0]])
-    return [[[round(a[0], 2), round(a[1], 2)], [round(b[0], 2), round(b[1], 2)]] for a, b in seeks]
+        duration += pathoptimizer.seek_time(
+            head_pos, head_dir, [0.0, 0.0], None, conf["seekrate"], conf["feedrate"]
+        )
+    return {
+        "seeks": [
+            [[round(a[0], 2), round(a[1], 2)], [round(b[0], 2), round(b[1], 2)]] for a, b in seeks
+        ],
+        "duration": duration,
+    }
 
 
 def _job_laser_passes(jobdict):

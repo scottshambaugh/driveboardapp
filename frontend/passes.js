@@ -608,13 +608,11 @@ function passes_update_handler() {
       $("#job_info_length").html("");
     }
 
-    // duration comes from the backend, which times the job by dry-running
-    // the dispatch it would actually send
-    jobhandler.renderDuration();
+    // seek preview and duration both follow the new assignments, and come
+    // back together from one backend pass over the job
+    jobhandler.renderPreview();
     // bounds
     jobhandler.renderBounds();
-    // seek preview follows the new assignments
-    jobhandler.renderSeeks();
     jobhandler.draw();
   }, 2000);
 }

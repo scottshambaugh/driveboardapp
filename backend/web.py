@@ -2,6 +2,7 @@ import concurrent.futures
 import copy
 import glob
 import gzip
+import hashlib
 import json
 import multiprocessing
 import os
@@ -1048,53 +1049,113 @@ def optimize_fill():
         raise bottle.HTTPResponse(f"Error optimizing fill: {str(e)}", 400) from e
 
 
-@bottle.route("/job_seek_preview", method="POST")
-def job_seek_preview():
-    """Seek lines of a job as dispatch will order it, for the job view.
+# The job view's preview, computed off the request thread. The server serves
+# one request at a time, so ordering a big job inline would stall the status
+# polling and the stop button behind it. Only the newest job matters: a request
+# arriving mid-computation replaces the pending one, and the frontend collects
+# the answer by polling with the token it was handed.
+_preview_lock = threading.Lock()
+_preview_worker = None
+_preview_request = None  # (token, job) waiting to be computed
+_preview_result = None  # (token, result dict or error string)
+_preview_token = 0
+# Ordering a job is the expensive part of a preview, and most of what prompts
+# one leaves the job alone (widgets opening and closing, a colour reassigned
+# and put back). The answer for an unchanged job and unchanged settings is
+# unchanged too, so the last one is kept and handed straight back.
+_preview_cache = None  # (key, result)
+
+
+def _preview_key(body):
+    """What a preview depends on: the job as posted and the settings that
+    change what a run of it would do."""
+    settings = json.dumps(conf, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha1(body).hexdigest() + hashlib.sha1(settings).hexdigest()
+
+
+def _preview_run():
+    """Compute queued previews until none is left, newest first."""
+    global _preview_worker, _preview_request, _preview_result, _preview_cache
+    while True:
+        with _preview_lock:
+            if _preview_request is None:
+                _preview_worker = None
+                return
+            token, job, key, optimize = _preview_request
+            _preview_request = None
+        try:
+            if optimize:
+                # the same pass /load makes on the way to a run, so the
+                # preview describes what the machine would be sent
+                jobimport.optimize_job(job, conf["tolerance"])
+            result = driveboard.job_preview(job)
+            outcome = (token, result)
+        except Exception as e:
+            traceback.print_exc()
+            outcome = (token, {"error": str(e)})
+        with _preview_lock:
+            if "error" not in outcome[1]:
+                _preview_cache = (key, outcome[1])
+            # a newer request may have landed while this one ran, and its
+            # answer supersedes this one
+            if _preview_request is None or _preview_request[0] < token:
+                _preview_result = outcome
+
+
+@bottle.route("/job_preview", method="POST")
+def job_preview():
+    """Queue the seek lines and run time of a job, for the job view.
+
+    The job goes through the same fill_mode optimization /load applies on the
+    way to a run, so the preview describes what the machine would be sent.
+    Optimizing and ordering both happen on a worker thread, leaving this
+    handler with only the parse; poll /job_preview/<token> for the answer.
 
     Args (via POST JSON):
         job: dba-style dict with passes/items/defs. Image defs only need
              kind/pos/size, pixel data is not used.
-
-    Returns:
-        JSON with a list of [[x0,y0],[x1,y1]] seek lines in mm.
-    """
-    try:
-        request_data = json.loads(bottle.request.body.read().decode("utf-8"))
-        seeks = driveboard.job_seek_preview(request_data.get("job", {}))
-        return json.dumps({"seeks": seeks})
-    except Exception as e:
-        traceback.print_exc()
-        raise bottle.HTTPResponse(f"Error computing seek preview: {str(e)}", 400) from e
-
-
-@bottle.route("/job_duration", method="POST")
-def job_duration():
-    """Modelled run time of a job, for the job info line.
-
-    The job goes through the same optimization /load applies on the way to a
-    run, so what is timed is what the machine would be sent, fill_mode and
-    path simplification included.
-
-    Args (via POST JSON):
-        job: dba-style dict with passes/items/defs. Image defs need their
-             pixel data, the raster ordering is timed from it.
         optimize: flag whether to optimize (bool), default True, matching
              /load
 
     Returns:
-        JSON with the run time in seconds.
+        JSON with the token to collect the result under.
     """
+    global _preview_worker, _preview_request, _preview_result, _preview_token
     try:
-        request_data = json.loads(bottle.request.body.read().decode("utf-8"))
+        body = bottle.request.body.read()
+        key = _preview_key(body)
+        request_data = json.loads(body.decode("utf-8"))
         job = request_data.get("job", {})
-        if request_data.get("optimize", True):
-            jobimport.optimize_job(job, conf["tolerance"])
-        seconds = driveboard.job_duration(job)
-        return json.dumps({"duration": seconds})
+        optimize = bool(request_data.get("optimize", True))
     except Exception as e:
         traceback.print_exc()
-        raise bottle.HTTPResponse(f"Error computing job duration: {str(e)}", 400) from e
+        raise bottle.HTTPResponse(f"Error reading job: {str(e)}", 400) from e
+    with _preview_lock:
+        _preview_token += 1
+        token = _preview_token
+        cached = _preview_cache
+        if cached is not None and cached[0] == key:
+            # nothing that matters changed, so the answer is already known
+            _preview_result = (token, cached[1])
+            _preview_request = None
+            return json.dumps({"token": token})
+        _preview_request = (token, job, key, optimize)
+        if _preview_worker is None:
+            _preview_worker = threading.Thread(target=_preview_run, daemon=True)
+            _preview_worker.start()
+    return json.dumps({"token": token})
+
+
+@bottle.route("/job_preview/<token:int>")
+def job_preview_result(token):
+    """Collect a queued preview. Returns {"pending": true} until it is done."""
+    with _preview_lock:
+        result = _preview_result
+    if result is None or result[0] != token:
+        return json.dumps({"pending": True})
+    if "error" in result[1]:
+        raise bottle.HTTPResponse(f"Error computing preview: {result[1]['error']}", 400)
+    return json.dumps(result[1])
 
 
 @bottle.route("/pause")

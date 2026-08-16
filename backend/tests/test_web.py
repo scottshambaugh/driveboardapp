@@ -6,16 +6,20 @@ status codes, and the work-area safety wiring - not driveboard internals (those
 are covered in test_driveboard_safety.py).
 """
 
+import base64
+import copy
 import gzip
 import io
 import json
 import os
+import time
 
 import driveboard
 import jobimport
 import pytest
 import web  # noqa: F401  (import registers routes on the default app)
 from config import conf
+from PIL import Image
 
 # `app` fixture is provided by conftest.py.
 
@@ -502,31 +506,78 @@ def test_convert_reports_an_unusable_file_as_a_type_error():
         web._convert_job(b"not a job at all", True, None)
 
 
-def test_job_duration_endpoint_returns_seconds(auth_app):
+def _collect_preview(auth_app, job):
+    """POST a preview and poll until the worker has the answer."""
+    token = json.loads(auth_app.post_json("/job_preview", {"job": job}).body)["token"]
+    for _ in range(200):
+        resp = auth_app.get(f"/job_preview/{token}", expect_errors=True)
+        if resp.status_int != 200:
+            return resp
+        body = json.loads(resp.body)
+        if not body.get("pending"):
+            return body
+        time.sleep(0.02)
+    raise AssertionError("preview never completed")
+
+
+def test_job_preview_endpoint_returns_seeks_and_duration(auth_app):
     job = {
         "head": {},
         "passes": [{"items": [0], "feedrate": 2000, "seekrate": 6000, "intensity": 50}],
         "items": [{"def": 0}],
         "defs": [{"kind": "path", "data": [[[0.0, 0.0], [100.0, 0.0]]]}],
     }
-    resp = auth_app.post_json("/job_duration", {"job": job})
-    duration = json.loads(resp.body)["duration"]
-    assert duration > 100.0 / (2000.0 / 60.0)  # the ramps at either end
+    body = _collect_preview(auth_app, job)
+    assert body["duration"] > 100.0 / (2000.0 / 60.0)  # the ramps at either end
+    assert isinstance(body["seeks"], list)
 
 
-def test_job_duration_endpoint_reports_a_bad_job(auth_app):
+def test_job_preview_result_is_pending_before_the_worker_finishes(auth_app):
     job = {
         "head": {},
         "passes": [{"items": [0], "feedrate": 2000}],
         "items": [{"def": 0}],
-        "defs": [{"kind": "path", "data": [[[0.0, 0.0], [99999.0, 0.0]]]}],
+        "defs": [{"kind": "path", "data": [[[0.0, 0.0], [10.0, 0.0]]]}],
     }
-    resp = auth_app.post_json("/job_duration", {"job": job}, expect_errors=True)
+    token = json.loads(auth_app.post_json("/job_preview", {"job": job}).body)["token"]
+    # an unknown token never resolves, so it reads as pending rather than 404
+    body = json.loads(auth_app.get(f"/job_preview/{token + 500}").body)
+    assert body["pending"] is True
+
+
+def test_job_preview_endpoint_reports_an_unreadable_job(auth_app):
+    # optimizing runs on the worker, so a job it chokes on surfaces on collect
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": "not a path"}],
+    }
+    assert _collect_preview(auth_app, job).status_int == 400
+
+
+def test_job_preview_endpoint_reports_malformed_json(auth_app):
+    resp = auth_app.post(
+        "/job_preview", b"not json", content_type="application/json", expect_errors=True
+    )
     assert resp.status_int == 400
 
 
-def test_job_duration_endpoint_follows_fill_mode(auth_app, monkeypatch):
-    # /load applies fill_mode on the way to a run, so the estimate has to see
+def test_job_preview_endpoint_reports_a_failure_from_the_worker(auth_app):
+    # a job that reads fine but cannot be ordered fails on the worker thread,
+    # so the error surfaces when the result is collected
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000}],
+        "items": [{"def": 5}],  # no such def
+        "defs": [{"kind": "path", "data": [[[0.0, 0.0], [10.0, 0.0]]]}],
+    }
+    resp = _collect_preview(auth_app, job)
+    assert resp.status_int == 400
+
+
+def test_job_preview_endpoint_follows_fill_mode(auth_app, monkeypatch):
+    # /load applies fill_mode on the way to a run, so the preview has to see
     # it too: unidirectional flies back over every scanline, bidirectional
     # engraves on the way back
     def fill_job():
@@ -539,7 +590,65 @@ def test_job_duration_endpoint_follows_fill_mode(auth_app, monkeypatch):
         }
 
     monkeypatch.setitem(conf, "fill_mode", "Forward")
-    forward = json.loads(auth_app.post_json("/job_duration", {"job": fill_job()}).body)
+    forward = _collect_preview(auth_app, fill_job())
     monkeypatch.setitem(conf, "fill_mode", "Bidirectional")
-    bidi = json.loads(auth_app.post_json("/job_duration", {"job": fill_job()}).body)
+    bidi = _collect_preview(auth_app, fill_job())
     assert forward["duration"] > bidi["duration"]
+
+
+def test_job_preview_shares_pixel_data_between_defs(auth_app):
+    # a picture placed many times is sent once, the rest point at it
+    img = Image.new("L", (200, 100), 0)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    shared = {
+        "head": {},
+        "passes": [{"items": [0, 1], "feedrate": 3000, "seekrate": 6000, "pxsize": 0.4}],
+        "items": [{"def": 0}, {"def": 1}],
+        "defs": [
+            {"kind": "image", "pos": [10.0, 10.0], "size": [80.0, 40.0], "data": b64},
+            {"kind": "image", "pos": [10.0, 60.0], "size": [80.0, 40.0], "data_of": 0},
+        ],
+    }
+    repeated = copy.deepcopy(shared)
+    repeated["defs"][1] = {
+        "kind": "image",
+        "pos": [10.0, 60.0],
+        "size": [80.0, 40.0],
+        "data": b64,
+    }
+    assert _collect_preview(auth_app, shared)["duration"] == pytest.approx(
+        _collect_preview(auth_app, repeated)["duration"]
+    )
+
+
+def test_job_preview_reuses_the_answer_for_an_unchanged_job(auth_app):
+    # the ordering is the expensive part and most edits do not change the job
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000, "seekrate": 6000}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[0.0, 0.0], [100.0, 0.0], [100.0, 50.0]]]}],
+    }
+    first = _collect_preview(auth_app, job)
+    # served straight from the cache, so it is ready on the first collect
+    token = json.loads(auth_app.post_json("/job_preview", {"job": job}).body)["token"]
+    body = json.loads(auth_app.get(f"/job_preview/{token}").body)
+    assert not body.get("pending")
+    assert body["duration"] == first["duration"]
+
+
+def test_job_preview_cache_notices_a_config_change(auth_app, monkeypatch):
+    lines = [[[10.0, 10.0 + 0.4 * i], [90.0, 10.0 + 0.4 * i]] for i in range(60)]
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000, "seekrate": 6000}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "fill", "data": lines}],
+    }
+    monkeypatch.setitem(conf, "fill_mode", "Forward")
+    forward = _collect_preview(auth_app, job)
+    monkeypatch.setitem(conf, "fill_mode", "Bidirectional")
+    bidi = _collect_preview(auth_app, job)
+    assert forward["duration"] != bidi["duration"]

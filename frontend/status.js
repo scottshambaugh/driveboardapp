@@ -363,13 +363,13 @@ var status_handlers = {
           " job",
       );
     } else {
-      // the run is over, the duration of the job as it stands comes back.
-      // The cache is written ahead of the caller here so renderDuration sees
-      // a finished run rather than the value being replaced
+      // the run is over, so the duration of the job as it stands comes back.
+      // The cache is written ahead of the caller here so showDuration sees a
+      // finished run rather than the value being replaced
       status_cache.remaining = status.remaining;
       $("#job_info_remaining").html("");
       $("#job_info_duration").show();
-      jobhandler.renderDuration();
+      jobhandler.showDuration(jobhandler.duration);
     }
   },
   //// stop conditions
