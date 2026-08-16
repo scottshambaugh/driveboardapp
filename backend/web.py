@@ -7,6 +7,7 @@ import json
 import multiprocessing
 import os
 import shutil
+import socketserver
 import sys
 import tempfile
 import threading
@@ -1264,6 +1265,19 @@ def hello(name):
 ###############################################################################
 
 
+class ThreadingWSGIServer(socketserver.ThreadingMixIn, wsgiref.simple_server.WSGIServer):
+    """A request per thread, so a slow one cannot hold up the rest.
+
+    Queueing a job builds its whole command stream in the request that asked
+    for it, and the machine is already burning the start of it long before
+    that returns. Served one at a time, the stop button would sit unanswered
+    for as long as that takes, which on a big raster is tens of seconds. The
+    same goes for pause, and for the status the interlocks are reported in.
+    """
+
+    daemon_threads = True
+
+
 class Server(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -1312,7 +1326,7 @@ def start(browser=False, debug=False):
         conf["network_host"],
         conf["network_port"],
         bottle.default_app(),
-        wsgiref.simple_server.WSGIServer,
+        ThreadingWSGIServer,
         FixedHandler,
     )
     S.server.timeout = 0.01

@@ -245,6 +245,8 @@ markers_rx = {
 
 SerialLoop = None
 fallback_msg_thread = None
+# One job goes onto the wire at a time, see job()
+_dispatch_lock = threading.Lock()
 
 
 class SerialLoopClass(threading.Thread):
@@ -279,6 +281,10 @@ class SerialLoopClass(threading.Thread):
 
         # used for calculating percentage done
         self.job_size = 0
+        # A stop empties the buffer, but whatever was still queueing the job
+        # goes on emitting into it, and the resume that follows would run the
+        # remainder. Set by stop(), cleared by unstop() and by the next job.
+        self.discard_writes = False
         # run time of the buffered stream, and where each move sits in it
         self.timer = JobTimer(TIMED_COMMANDS, TIMED_PARAMS)
 
@@ -343,11 +349,15 @@ class SerialLoopClass(threading.Thread):
         self.timer.mark_pass(self.job_size)
 
     def send_command(self, command):
+        if self.discard_writes:
+            return  # stopped, see discard_writes
         self.tx_buffer.append(ord(command))
         self.job_size += 1
         self.timer.command(command, self.job_size)
 
     def send_param(self, param, val):
+        if self.discard_writes:
+            return  # stopped, see discard_writes
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
         # three decimals are retained
         num = int(round((val + 134217.728) * 1000))
@@ -371,6 +381,8 @@ class SerialLoopClass(threading.Thread):
         self.timer.param(param, num / 1000.0 - 134217.728)
 
     def send_raster_data(self, data, start, end):
+        if self.discard_writes:
+            return  # stopped, see discard_writes
         # Build the whole chunk first, then splice it in under a single lock.
         # Locking per-pixel here meant thousands of acquire/release cycles per
         # raster line on the hot path.
@@ -1314,6 +1326,8 @@ def stop():
         SerialLoop.tx_pos = 0
         SerialLoop.job_size = 0
         SerialLoop.timer.reset()
+        # a job still being queued would otherwise refill what was just emptied
+        SerialLoop.discard_writes = True
         SerialLoop.request_stop = True
         SerialLoop._paused = False
 
@@ -1322,6 +1336,7 @@ def unstop():
     """Resume from stop condition."""
     global SerialLoop
     with SerialLoop.lock:
+        SerialLoop.discard_writes = False
         SerialLoop.request_resume = True
 
 
@@ -1416,19 +1431,36 @@ def jobfile(filepath):
 
 
 def job(jobdict):
+    """Queue a job for the machine.
+
+    Emitting a job is a long sequence of writes into one buffer, so two of
+    them at once would interleave into a stream that is neither. Requests are
+    served concurrently (so the stop button stays answerable while this runs),
+    hence the guard.
+
+    Raises ValueError if a job is already being queued.
+    """
     from jobimport import resolve_image_data
 
-    job_stop_guard()
-    # placements of one picture share its payload on disk, dispatch reads each
-    # def's own data
-    resolve_image_data(jobdict)
-    if "head" in jobdict:
-        if "kind" in jobdict["head"] and jobdict["head"]["kind"] == "mill":
-            job_mill(jobdict)
+    if not _dispatch_lock.acquire(blocking=False):
+        raise ValueError("a job is already being queued")
+    try:
+        job_stop_guard()
+        if SerialLoop is not None:
+            with SerialLoop.lock:
+                SerialLoop.discard_writes = False  # a new job starts clean
+        # placements of one picture share its payload on disk, dispatch reads
+        # each def's own data
+        resolve_image_data(jobdict)
+        if "head" in jobdict:
+            if "kind" in jobdict["head"] and jobdict["head"]["kind"] == "mill":
+                job_mill(jobdict)
+            else:
+                job_laser(jobdict)
         else:
-            job_laser(jobdict)
-    else:
-        print("INFO: not a valid job, 'head' entry missing")
+            print("INFO: not a valid job, 'head' entry missing")
+    finally:
+        _dispatch_lock.release()
 
 
 def job_stop_guard():

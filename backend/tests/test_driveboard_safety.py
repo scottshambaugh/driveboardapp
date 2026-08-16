@@ -25,6 +25,7 @@ Safety functions covered:
 import base64
 import copy
 import io
+import threading
 import time
 
 import driveboard
@@ -2729,3 +2730,70 @@ def test_raster_row_extents_keys_on_invert(monkeypatch):
     inverted = driveboard._raster_row_extents(b64, 100, 10, True)
     assert plain != inverted
     assert plain.count(None) > inverted.count(None)  # mostly white becomes mostly ink
+
+
+# ---------------------------------------------------------------------------
+# Stopping mid-dispatch
+# ---------------------------------------------------------------------------
+
+
+def test_stop_discards_what_a_running_dispatch_still_emits(loop):
+    # Queueing a big job takes seconds, and the machine is already burning the
+    # start of it. A stop empties the buffer, but the dispatch that is still
+    # running would refill it, and the resume that follows would run it.
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.stop()
+    assert loop.tx_buffer == bytearray()
+    driveboard.feedrate(2000)
+    driveboard.intensity(50)
+    driveboard.move(10.0, 10.0)
+    driveboard.rastermove(20.0, 10.0)
+    driveboard.rasterdata([0, 128, 255], 0, 3)
+    driveboard.dwell()
+    assert loop.tx_buffer == bytearray()  # nothing of it reached the wire
+    assert loop.job_size == 0
+
+
+def test_unstop_lets_the_machine_be_driven_again(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.stop()
+    driveboard.move(10.0, 10.0)
+    assert loop.tx_buffer == bytearray()
+    loop.request_resume = False
+    driveboard.unstop()
+    driveboard.move(10.0, 10.0)
+    assert loop.tx_buffer  # driveable once the stop is cleared
+
+
+def test_a_new_job_starts_from_a_clean_buffer_after_a_stop(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.stop()
+    loop._status["stops"].clear()  # the operator cleared the stop condition
+    driveboard.job(_duration_job())
+    assert loop.tx_buffer  # the next job is not swallowed by the old stop
+
+
+def test_two_jobs_cannot_interleave_into_one_stream(loop):
+    # requests are served concurrently now, and two dispatches sharing the
+    # buffer would produce a stream that is neither job
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    started = threading.Event()
+    release = threading.Event()
+    real_move = driveboard.move
+
+    def slow_move(*a, **k):
+        started.set()
+        release.wait(5)
+        return real_move(*a, **k)
+
+    driveboard.move = slow_move
+    try:
+        first = threading.Thread(target=lambda: driveboard.job(_duration_job()))
+        first.start()
+        assert started.wait(5)
+        with pytest.raises(ValueError, match="already being queued"):
+            driveboard.job(_duration_job())
+        release.set()
+        first.join(10)
+    finally:
+        driveboard.move = real_move

@@ -12,8 +12,10 @@ import gzip
 import io
 import json
 import os
+import threading
 import time
 
+import bottle
 import driveboard
 import jobimport
 import pytest
@@ -718,3 +720,50 @@ def test_load_still_converts_an_svg_with_optimize_off(auth_app, isolated_config)
     resp = auth_app.post("/load", body, upload_files=[("job", "a.svg", svg.encode())])
     assert json.loads(resp.body) == "svg"
     assert _stored_job(isolated_config, "svg")["defs"]  # actually parsed
+
+
+def test_a_slow_request_does_not_hold_up_the_stop_button(monkeypatch):
+    # Queueing a job builds its command stream in the request that asked for
+    # it, and the machine is already burning the start of it. Served one at a
+    # time, the stop would wait for the whole thing.
+    import socket
+    import urllib.request
+    import wsgiref.simple_server
+
+    monkeypatch.setattr(driveboard, "connected", lambda: True)
+    monkeypatch.setattr(driveboard, "status", lambda: {"ready": True, "serial": True})
+    monkeypatch.setattr(web, "_get", lambda name, library=False: MINIMAL_DBA)
+    stopped = threading.Event()
+    monkeypatch.setattr(driveboard, "stop", stopped.set)
+    dispatching = threading.Event()
+
+    def slow_job(jobdict):
+        dispatching.set()
+        time.sleep(3.0)
+
+    monkeypatch.setattr(driveboard, "job", slow_job)
+
+    srv = wsgiref.simple_server.make_server(
+        "127.0.0.1", 0, bottle.default_app(), web.ThreadingWSGIServer
+    )
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    auth = base64.b64encode(b"laser:laser").decode()
+
+    def get(path, timeout=10):
+        req = urllib.request.Request(base + path, headers={"Authorization": "Basic " + auth})
+        return urllib.request.urlopen(req, timeout=timeout).read()
+
+    try:
+        threading.Thread(target=lambda: get("/run/x", timeout=20), daemon=True).start()
+        assert dispatching.wait(5)
+        started = time.time()
+        get("/stop", timeout=5)
+        assert stopped.wait(1)
+        # answered while the dispatch is still going, not after it
+        assert time.time() - started < 1.5
+    except (socket.timeout, TimeoutError) as e:
+        raise AssertionError("the stop request was held up by the dispatch") from e
+    finally:
+        srv.shutdown()
+        srv.server_close()

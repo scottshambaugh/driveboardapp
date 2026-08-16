@@ -6,6 +6,7 @@
 - dba files with repeated raster data now only hold one copy of that data, for reduced filesize and faster run init
 
 ### Bug Fixes
+- Safety: stop button is no longer blocked during initial dispatch, and fix a race condition where the job could have resumed after
 - The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns
 - Raster lines no longer command z
