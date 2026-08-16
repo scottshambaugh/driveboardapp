@@ -12,6 +12,18 @@ var config_enum_options = {
 var app_fill_btn = undefined;
 var app_visibility = true;
 
+function time_format(seconds) {
+  // a run time for the job info line, in the largest unit that still reads
+  // as a number rather than a count of hundreds
+  if (seconds < 60) {
+    return Math.round(seconds) + " sec";
+  }
+  if (seconds < 3600) {
+    return (seconds / 60).toFixed(1) + " min";
+  }
+  return (seconds / 3600).toFixed(1) + " hr";
+}
+
 // toast messages, install jquery plugin
 (function ($) {
   $.fn.uxmessage = function (kind, text, max_length) {
@@ -385,6 +397,9 @@ function config_save() {
             if (pendingRequests === 0) {
               $().uxmessage("success", "Configuration saved.");
               config_build_form();
+              // raster and fill modes, rates and pixel size all change what a
+              // run would do, so the job info and seek preview are restated
+              passes_update_handler();
             }
           },
           error: function () {

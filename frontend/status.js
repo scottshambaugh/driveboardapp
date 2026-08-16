@@ -20,6 +20,7 @@ function status_init() {
     underruns: 0, // how many times machine is waiting for serial data
     stackclear: Infinity, // minimal stack clearance (must stay above 0)
     progress: 1.0,
+    remaining: [0.0, 0.0], // modelled seconds left, [this pass, whole job]
 
     //// stop conditions
     // indicated when key present
@@ -344,6 +345,32 @@ var status_handlers = {
   },
   progress: function (status) {
     app_run_btn.setProgress(status.progress);
+  },
+  remaining: function (status) {
+    // what the machine has left of the job it is running, from the same model
+    // the duration estimate comes from, read at the byte it has worked down
+    // to. It supersedes the duration while a job runs, so only one of the two
+    // is on the info line at a time
+    var pass_left = status.remaining[0];
+    var job_left = status.remaining[1];
+    if (job_left > 0) {
+      $("#job_info_duration").hide();
+      $("#job_info_remaining").html(
+        " | remaining: " +
+          time_format(pass_left) +
+          " pass, " +
+          time_format(job_left) +
+          " job",
+      );
+    } else {
+      // the run is over, the duration of the job as it stands comes back.
+      // The cache is written ahead of the caller here so renderDuration sees
+      // a finished run rather than the value being replaced
+      status_cache.remaining = status.remaining;
+      $("#job_info_remaining").html("");
+      $("#job_info_duration").show();
+      jobhandler.renderDuration();
+    }
   },
   //// stop conditions
   stops: function (status) {

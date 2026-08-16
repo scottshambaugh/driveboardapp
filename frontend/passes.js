@@ -592,11 +592,9 @@ function passes_set_assignments() {
 }
 
 function passes_update_handler() {
-  // called whenever passes widget changes happen (color add/remove)
-  // this event handler is debounced to minimize updates
-
-  // TODO: make sure this functions is called, when any of the feedrates was changed, otherwise, passes need to be added
-  // and removed to update the duration...
+  // called whenever passes widget changes happen (color add/remove), and
+  // whenever config changes what a run would do. This event handler is
+  // debounced to minimize updates
 
   clearTimeout(window.lastPassesUpdateTimer);
   window.lastPassesUpdateTimer = setTimeout(function () {
@@ -610,15 +608,9 @@ function passes_update_handler() {
       $("#job_info_length").html("");
     }
 
-    var duration = (
-      jobhandler.getActivePassesDuration() +
-      (jobhandler.getSeekPassesLength() * 1) / app_config_main.seekrate
-    ).toFixed(1);
-    if (duration != 0) {
-      $("#job_info_duration").html(" | duration: ≥" + duration + " min");
-    } else {
-      $("#job_info_duration").html("");
-    }
+    // duration comes from the backend, which times the job by dry-running
+    // the dispatch it would actually send
+    jobhandler.renderDuration();
     // bounds
     jobhandler.renderBounds();
     // seek preview follows the new assignments

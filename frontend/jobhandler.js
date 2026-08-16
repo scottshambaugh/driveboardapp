@@ -45,6 +45,8 @@ jobhandler = {
   fill_group: undefined,
   image_group: undefined,
   seek_preview_seq: 0,
+  duration_seq: 0,
+  duration: 0, // last modelled run time in seconds, 0 when unknown
 
   clear: function () {
     this.passes = [];
@@ -56,11 +58,14 @@ jobhandler = {
     this.image_group_members = {};
     this.sources = {};
     this.name = "";
+    this.duration = 0;
+    this.duration_seq++;
     jobview_clear();
     passes_clear();
     $("#job_info_name").html("");
     $("#job_info_length").html("");
-    $("#job_info_duration").html("");
+    $("#job_info_duration").html("").show();
+    $("#job_info_remaining").html("");
     $("#info_content").html("");
     $("#info_btn").hide();
   },
@@ -441,6 +446,60 @@ jobhandler = {
     this.renderSeeks();
   },
 
+  renderDuration: function () {
+    // run time of the job as the backend models it: a dry run of the same
+    // dispatch a run would send, so it carries the ordering, lead-ins,
+    // pierces, acceleration ramps and cornering the machine will see
+    if (status_cache.remaining && status_cache.remaining[1] > 0) {
+      // a run is on, so the info line is showing the time left instead and
+      // the backend will not dry-run a job while one is on the wire
+      return;
+    }
+    // only items assigned to a pass run, so only they are timed
+    var passes = [];
+    for (var i = 0; i < this.passes.length; i++) {
+      var pass = this.passes[i];
+      if (pass.items && pass.items.length > 0) {
+        passes.push(pass);
+      }
+    }
+    var seq = ++jobhandler.duration_seq;
+    if (passes.length === 0) {
+      jobhandler.duration = 0;
+      $("#job_info_duration").html("");
+      return;
+    }
+    var job = this.get();
+    job.passes = passes;
+    // the pre-clip originals are for previews, nothing engraves from them
+    delete job.sources;
+    $.ajax({
+      type: "POST",
+      url: "/job_duration",
+      contentType: "application/json",
+      data: JSON.stringify({ job: job }),
+      dataType: "json",
+      success: function (result) {
+        // a slower response from an older request must not win
+        if (seq !== jobhandler.duration_seq) {
+          return;
+        }
+        jobhandler.duration = result.duration;
+        $("#job_info_duration").html(
+          " | duration: ~" + time_format(result.duration),
+        );
+      },
+      error: function (xhr, status, error) {
+        if (seq !== jobhandler.duration_seq) {
+          return;
+        }
+        jobhandler.duration = 0;
+        $("#job_info_duration").html("");
+        console.error("Duration estimate failed: " + error);
+      },
+    });
+  },
+
   renderSeeks: function () {
     // seek lines as dispatch will order the job, drawn when the backend
     // preview arrives. Images travel as their extent only.
@@ -710,83 +769,6 @@ jobhandler = {
       }
     });
     return length;
-  },
-
-  getSeekPassesLength: function () {
-    var length = 0;
-    // loop over the passes
-    this.loopPasses(function (pass, item_idxs) {
-      // loop over the items
-      for (var iPass = 0; iPass < item_idxs.length; iPass++) {
-        var itemIdx = item_idxs[iPass];
-        var itemObj = jobhandler.items[itemIdx];
-        var def = jobhandler.defs[itemObj.def];
-
-        // Skip image items - they don't have path data for seek calculation
-        if (def.kind === "image") {
-          continue;
-        }
-
-        // loop over the individual paths in the item
-        var pathData = def.data;
-        if (!pathData || !Array.isArray(pathData) || pathData.length < 2) {
-          continue;
-        }
-
-        var lastPath = null;
-        for (var iPath = 0; iPath < pathData.length - 1; iPath++) {
-          var path = pathData[iPath];
-          var nextPath = pathData[iPath + 1];
-          if (path && path.length > 0 && nextPath && nextPath.length > 0) {
-            var endPoint = path[path.length - 1];
-            var startPoint = nextPath[0];
-            // add distance to the seek-length
-            length += Math.sqrt(
-              (startPoint[0] - endPoint[0]) * (startPoint[0] - endPoint[0]) +
-                (startPoint[1] - endPoint[1]) * (startPoint[1] - endPoint[1]),
-            );
-          }
-          lastPath = nextPath;
-        }
-
-        // Calculate seek between items
-        if (iPass < item_idxs.length - 1 && lastPath && lastPath.length > 0) {
-          var nextItemIdx = item_idxs[iPass + 1];
-          var nextItemObj = jobhandler.items[nextItemIdx];
-          var nextItemDef = jobhandler.defs[nextItemObj.def];
-          if (
-            nextItemDef.kind !== "image" &&
-            nextItemDef.data &&
-            Array.isArray(nextItemDef.data) &&
-            nextItemDef.data.length > 0
-          ) {
-            var lastPointLastPass = lastPath[lastPath.length - 1];
-            var firstPathNextItem = nextItemDef.data[0];
-            if (firstPathNextItem && firstPathNextItem.length > 0) {
-              var firstPointNextPass = firstPathNextItem[0];
-              length += Math.sqrt(
-                (firstPointNextPass[0] - lastPointLastPass[0]) *
-                  (firstPointNextPass[0] - lastPointLastPass[0]) +
-                  (firstPointNextPass[1] - lastPointLastPass[1]) *
-                    (firstPointNextPass[1] - lastPointLastPass[1]),
-              );
-            }
-          }
-        }
-      }
-    });
-    return length;
-  },
-
-  getActivePassesDuration: function () {
-    var duration = 0;
-    this.loopPasses(function (pass, item_idxs) {
-      for (var i = 0; i < item_idxs.length; i++) {
-        var item = item_idxs[i];
-        duration += (1 / pass.feedrate) * jobhandler.stats.items[item].len;
-      }
-    });
-    return duration;
   },
 
   getActivePassesBbox: function () {

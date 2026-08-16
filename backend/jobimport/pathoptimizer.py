@@ -188,15 +188,16 @@ DEFAULT_SEEKRATE = 6000.0
 DEFAULT_FEEDRATE = 2000.0
 
 
-def _junction_speed(d_prev, d_cur, vcap, accel=ACCEL, deviation=JUNCTION_DEVIATION):
-    """Speed (mm/s) the firmware planner carries through a junction between
-    unit directions d_prev and d_cur, replicating planner.c: full speed when
-    nearly collinear, a stop when reversing, and the centripetal
-    junction-deviation approximation between. None for a direction means the
-    head stops there."""
-    if d_prev is None or d_cur is None:
-        return 0.0
-    cos_theta = -(d_prev[0] * d_cur[0] + d_prev[1] * d_cur[1])
+def junction_speed_cos(cos_theta, vcap, accel=ACCEL, deviation=JUNCTION_DEVIATION):
+    """Speed (mm/s) the firmware planner carries through a junction, from the
+    cosine of the angle between the reversed entry direction and the exit
+    direction, replicating planner.c: full speed when nearly collinear, a stop
+    when reversing, and the centripetal junction-deviation approximation
+    between.
+
+    Takes the cosine rather than the directions so callers working in three
+    axes can use the same physics as the planar optimizers.
+    """
     if cos_theta >= 0.95:  # close to 180 degree turn
         return 0.0
     if cos_theta <= -0.95:  # close to straight through
@@ -205,7 +206,16 @@ def _junction_speed(d_prev, d_cur, vcap, accel=ACCEL, deviation=JUNCTION_DEVIATI
     return min(vcap, math.sqrt(accel * deviation * sin_half / (1.0 - sin_half)))
 
 
-def _trapezoid_time(length, vmax, accel, v0, v1):
+def _junction_speed(d_prev, d_cur, vcap, accel=ACCEL, deviation=JUNCTION_DEVIATION):
+    """junction_speed_cos for planar unit directions d_prev and d_cur. None
+    for a direction means the head stops there."""
+    if d_prev is None or d_cur is None:
+        return 0.0
+    cos_theta = -(d_prev[0] * d_cur[0] + d_prev[1] * d_cur[1])
+    return junction_speed_cos(cos_theta, vcap, accel, deviation)
+
+
+def trapezoid_time(length, vmax, accel, v0, v1):
     """Time (s) of a move of `length` mm under the planner's trapezoidal
     profile: enter at v0, ramp towards vmax, leave at v1 (mm/s)."""
     if length <= 0.0:
@@ -406,7 +416,7 @@ def rotate_closed_entries(
 def seek_cost(seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
     """seek_time specialized to fixed rates, for the optimization hot loops.
     Returns a cost(p0, d0, p1, d1) closure with the per-call constant work
-    hoisted, the physics stays in _junction_speed and _trapezoid_time."""
+    hoisted, the physics stays in _junction_speed and trapezoid_time."""
     vseek = seekrate / 60.0
     vcap = min(feedrate / 60.0, vseek)
 
@@ -419,7 +429,7 @@ def seek_cost(seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRATE):
         u = (dx / length, dy / length)
         v_in = _junction_speed(d0, u, vcap)
         v_out = _junction_speed(u, d1, vcap)
-        return _trapezoid_time(length, vseek, ACCEL, v_in, v_out)
+        return trapezoid_time(length, vseek, ACCEL, v_in, v_out)
 
     return cost
 
@@ -438,7 +448,7 @@ def seek_time(p0, d0, p1, d1, seekrate=DEFAULT_SEEKRATE, feedrate=DEFAULT_FEEDRA
 
 def stop_seek_time(length, seekrate=DEFAULT_SEEKRATE):
     """Planner-model time (s) of a stop-to-stop seek of `length` mm."""
-    return _trapezoid_time(length, seekrate / 60.0, ACCEL, 0.0, 0.0)
+    return trapezoid_time(length, seekrate / 60.0, ACCEL, 0.0, 0.0)
 
 
 def _knn_ids(points, k):

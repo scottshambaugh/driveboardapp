@@ -150,10 +150,10 @@ def test_improve_seek_order_never_worsens_random_tours():
 def test_trapezoid_time_matches_closed_forms():
     a = pathoptimizer.ACCEL
     # long move from stop to stop: cruise time plus one full ramp up and down
-    t = pathoptimizer._trapezoid_time(100.0, 100.0, a, 0.0, 0.0)
+    t = pathoptimizer.trapezoid_time(100.0, 100.0, a, 0.0, 0.0)
     assert abs(t - (100.0 / 100.0 + 100.0 / a)) < 1e-9
     # short move never reaches cruise: symmetric triangular profile
-    t = pathoptimizer._trapezoid_time(1.0, 100.0, a, 0.0, 0.0)
+    t = pathoptimizer.trapezoid_time(1.0, 100.0, a, 0.0, 0.0)
     assert abs(t - 2.0 * (1.0 / a) ** 0.5) < 1e-9
 
 

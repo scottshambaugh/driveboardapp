@@ -13,6 +13,7 @@ import time
 import serial
 import serial.tools.list_ports
 from config import conf, write_config_fields
+from jobtime import JobTimer
 
 if not conf["mill_mode"]:
     try:
@@ -75,6 +76,26 @@ MAX_DWELL_SECONDS = 10.0
 
 # How long an assist output stays on: one burn, one pass, or the whole job.
 ASSIST_MODES = ("off", "feed", "pass", "job")
+
+# What the run-time model makes of the stream, see jobtime.JobTimer. Anything
+# left out of these maps takes no time and moves nothing.
+TIMED_COMMANDS = {
+    CMD_LINE: "line",
+    CMD_RASTER: "raster",
+    CMD_DWELL: "dwell",
+    CMD_REF_RELATIVE: "relative",
+    CMD_REF_ABSOLUTE: "absolute",
+    CMD_REF_STORE: "ref_store",
+    CMD_REF_RESTORE: "ref_restore",
+    CMD_HOMING: "homing",
+}
+TIMED_PARAMS = {
+    PARAM_TARGET_X: "x",
+    PARAM_TARGET_Y: "y",
+    PARAM_TARGET_Z: "z",
+    PARAM_FEEDRATE: "feedrate",
+    PARAM_DURATION: "duration",
+}
 
 ################
 
@@ -223,6 +244,20 @@ markers_rx = {
 SerialLoop = None
 fallback_msg_thread = None
 
+# A thread estimating a job emits into a buffer of its own instead of the
+# machine, see job_duration. Thread-local, so the serial thread and any thread
+# actually running a job never see anything but the real loop.
+_dry_run = threading.local()
+# one dry run at a time, they share the module's assist bookkeeping
+_duration_lock = threading.Lock()
+
+
+def _out():
+    """Where emitted commands go: this thread's dry-run buffer while it is
+    estimating a job, the serial loop otherwise."""
+    sink = getattr(_dry_run, "sink", None)
+    return SerialLoop if sink is None else sink
+
 
 class SerialLoopClass(threading.Thread):
     def __init__(self):
@@ -256,6 +291,8 @@ class SerialLoopClass(threading.Thread):
 
         # used for calculating percentage done
         self.job_size = 0
+        # run time of the buffered stream, and where each move sits in it
+        self.timer = JobTimer(TIMED_COMMANDS, TIMED_PARAMS)
 
         # status flags
         self._status = {}  # last complete status frame
@@ -293,6 +330,8 @@ class SerialLoopClass(threading.Thread):
             "underruns": 0,  # how many times machine is waiting for serial data
             "stackclear": 999999,  # minimal stack clearance (must stay above 0)
             "progress": 1.0,
+            # modelled seconds of run time left, [this pass, whole job]
+            "remaining": [0.0, 0.0],
             ### stop conditions
             # indicated when key present
             "stops": {},
@@ -312,9 +351,13 @@ class SerialLoopClass(threading.Thread):
         }
         self._s = copy.deepcopy(self._status)
 
+    def mark_pass(self):
+        self.timer.mark_pass(self.job_size)
+
     def send_command(self, command):
         self.tx_buffer.append(ord(command))
         self.job_size += 1
+        self.timer.command(command, self.job_size)
 
     def send_param(self, param, val):
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
@@ -335,6 +378,9 @@ class SerialLoopClass(threading.Thread):
         self.tx_buffer.append(char3)
         self.tx_buffer.append(ord(param))
         self.job_size += 5
+        # the model wants the value the controller will decode, not the one
+        # asked for, so a clamped param is timed as it will actually run
+        self.timer.param(param, num / 1000.0 - 134217.728)
 
     def send_raster_data(self, data, start, end):
         # Build the whole chunk first, then splice it in under a single lock.
@@ -417,8 +463,17 @@ class SerialLoopClass(threading.Thread):
                     self._status["serial"] = bool(self.device)
                     if self.job_size == 0:
                         self._status["progress"] = 1.0
+                        self._status["remaining"] = [0.0, 0.0]
                     else:
                         self._status["progress"] = round(self.tx_pos / float(self.job_size), 3)
+                        # bytes sent lead the machine by whatever the firmware
+                        # is still holding, so the model is read at the byte
+                        # the controller has actually worked down to
+                        executed = max(0, self.tx_pos - self.firmbuf_used)
+                        self._status["remaining"] = [
+                            round(self.timer.remaining_in_pass(executed), 1),
+                            round(self.timer.remaining(executed), 1),
+                        ]
                     self._s["stops"].clear()
                     self._s["info"].clear()
                     self._s["ready"] = False
@@ -489,6 +544,7 @@ class SerialLoopClass(threading.Thread):
                 self.tx_buffer = bytearray()
                 self.tx_pos = 0
                 self.job_size = 0
+                self.timer.reset()
                 self._paused = False
                 self.device.flushOutput()
                 self.pdata_count = 0
@@ -716,6 +772,7 @@ class SerialLoopClass(threading.Thread):
                 self.job_size = 0
                 self.tx_buffer = bytearray()
                 self.tx_pos = 0
+                self.timer.reset()
 
     def _send_char(self, char):
         try:
@@ -1104,46 +1161,54 @@ def _clamp_param(name, val, lo, hi):
 
 
 def feedrate(val):
-    global SerialLoop
-    with SerialLoop.lock:
+    out = _out()
+    with out.lock:
         # zero or negative reaches the planner as a zero or wrapped step rate
         val = _clamp_param("feedrate", val, MIN_FEEDRATE, MAX_FEEDRATE)
-        SerialLoop.send_param(PARAM_FEEDRATE, val)
+        out.send_param(PARAM_FEEDRATE, val)
 
 
 def intensity(val):
-    global SerialLoop
-    with SerialLoop.lock:
+    out = _out()
+    with out.lock:
         val = max(min(255 * val / 100, 255), 0)
-        SerialLoop.send_param(PARAM_INTENSITY, val)
+        out.send_param(PARAM_INTENSITY, val)
 
 
 def duration(val):
-    global SerialLoop
-    with SerialLoop.lock:
+    out = _out()
+    with out.lock:
         # a dwell holds the beam on in one spot for its whole duration
         val = _clamp_param("duration", val, 0.0, MAX_DWELL_SECONDS)
-        SerialLoop.send_param(PARAM_DURATION, val)
+        out.send_param(PARAM_DURATION, val)
 
 
 def pixelwidth(val):
-    global SerialLoop
-    with SerialLoop.lock:
+    out = _out()
+    with out.lock:
         # zero selects a plain line, negative walks the raster pixel index back
         val = _clamp_param("pixelwidth", val, 0.0, MAX_PARAM_VALUE)
-        SerialLoop.send_param(PARAM_PIXEL_WIDTH, val)
+        out.send_param(PARAM_PIXEL_WIDTH, val)
+
+
+def mark_pass():
+    """Note the pass boundary the stream has reached, see jobtime.JobTimer.
+    Emits nothing, it only bookmarks where in the stream a pass starts."""
+    out = _out()
+    with out.lock:
+        out.mark_pass()
 
 
 def relative():
-    global SerialLoop
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_REF_RELATIVE)
+    out = _out()
+    with out.lock:
+        out.send_command(CMD_REF_RELATIVE)
 
 
 def absolute():
-    global SerialLoop
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_REF_ABSOLUTE)
+    out = _out()
+    with out.lock:
+        out.send_command(CMD_REF_ABSOLUTE)
 
 
 def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
@@ -1154,14 +1219,14 @@ def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
     gives it a non-zero work area, since a machine with no Z axis configured
     still has to be able to jog the focus.
     """
-    global SerialLoop
+    out = _out()
     if machine_coords:
         x_off = y_off = z_off = 0.0
     else:
-        with SerialLoop.lock:
-            x_off = SerialLoop._status["offset"][0]
-            y_off = SerialLoop._status["offset"][1]
-            z_off = SerialLoop._status["offset"][2]
+        with out.lock:
+            x_off = out._status["offset"][0]
+            y_off = out._status["offset"][1]
+            z_off = out._status["offset"][2]
     if x is not None and not (-x_off <= x <= conf["workspace"][0] - x_off):
         return False
     if y is not None and not (-y_off <= y <= conf["workspace"][1] - y_off):
@@ -1172,15 +1237,15 @@ def target_in_workarea(x=None, y=None, z=None, machine_coords=False):
 
 
 def move(x=None, y=None, z=None):
-    global SerialLoop
-    with SerialLoop.lock:
+    out = _out()
+    with out.lock:
         if x is not None:
-            SerialLoop.send_param(PARAM_TARGET_X, x)
+            out.send_param(PARAM_TARGET_X, x)
         if y is not None:
-            SerialLoop.send_param(PARAM_TARGET_Y, y)
+            out.send_param(PARAM_TARGET_Y, y)
         if z is not None:
-            SerialLoop.send_param(PARAM_TARGET_Z, z)
-        SerialLoop.send_command(CMD_LINE)
+            out.send_param(PARAM_TARGET_Z, z)
+        out.send_command(CMD_LINE)
 
 
 def supermove(x=None, y=None, z=None):
@@ -1190,29 +1255,29 @@ def supermove(x=None, y=None, z=None):
     sequence. Intensity persists in the controller between commands. Sent
     inline because intensity() would deadlock on the lock held here.
     """
-    global SerialLoop
-    with SerialLoop.lock:
-        SerialLoop.send_param(PARAM_INTENSITY, 0)
+    out = _out()
+    with out.lock:
+        out.send_param(PARAM_INTENSITY, 0)
         # clear offset
-        SerialLoop.send_command(CMD_OFFSET_STORE)
-        SerialLoop.send_command(CMD_REF_STORE)
-        SerialLoop.send_command(CMD_REF_ABSOLUTE)
+        out.send_command(CMD_OFFSET_STORE)
+        out.send_command(CMD_REF_STORE)
+        out.send_command(CMD_REF_ABSOLUTE)
         if x is not None:
-            SerialLoop.send_param(PARAM_OFFSET_X, 0)
+            out.send_param(PARAM_OFFSET_X, 0)
         if y is not None:
-            SerialLoop.send_param(PARAM_OFFSET_Y, 0)
+            out.send_param(PARAM_OFFSET_Y, 0)
         if z is not None:
-            SerialLoop.send_param(PARAM_OFFSET_Z, 0)
-        SerialLoop.send_command(CMD_REF_RESTORE)
+            out.send_param(PARAM_OFFSET_Z, 0)
+        out.send_command(CMD_REF_RESTORE)
         # move
         if x is not None:
-            SerialLoop.send_param(PARAM_TARGET_X, x)
+            out.send_param(PARAM_TARGET_X, x)
         if y is not None:
-            SerialLoop.send_param(PARAM_TARGET_Y, y)
+            out.send_param(PARAM_TARGET_Y, y)
         if z is not None:
-            SerialLoop.send_param(PARAM_TARGET_Z, z)
-        SerialLoop.send_command(CMD_OFFSET_RESTORE)
-        SerialLoop.send_command(CMD_LINE)
+            out.send_param(PARAM_TARGET_Z, z)
+        out.send_command(CMD_OFFSET_RESTORE)
+        out.send_command(CMD_LINE)
 
 
 def rastermove(x, y, z=None):
@@ -1221,21 +1286,20 @@ def rastermove(x, y, z=None):
     An axis left as None keeps the target the controller already holds, so a
     raster does not disturb a focus the head was jogged to.
     """
-    global SerialLoop
-    with SerialLoop.lock:
+    out = _out()
+    with out.lock:
         if x is not None:
-            SerialLoop.send_param(PARAM_TARGET_X, x)
+            out.send_param(PARAM_TARGET_X, x)
         if y is not None:
-            SerialLoop.send_param(PARAM_TARGET_Y, y)
+            out.send_param(PARAM_TARGET_Y, y)
         if z is not None:
-            SerialLoop.send_param(PARAM_TARGET_Z, z)
-        SerialLoop.send_command(CMD_RASTER)
+            out.send_param(PARAM_TARGET_Z, z)
+        out.send_command(CMD_RASTER)
 
 
 def rasterdata(data, start, end):
-    # NOTE: no SerialLoop.lock
-    # more granular locking in send_data
-    SerialLoop.send_raster_data(data, start, end)
+    # NOTE: no lock held here, send_raster_data locks more granularly
+    _out().send_raster_data(data, start, end)
 
 
 def pause():
@@ -1260,6 +1324,7 @@ def stop():
         SerialLoop.tx_buffer = bytearray()
         SerialLoop.tx_pos = 0
         SerialLoop.job_size = 0
+        SerialLoop.timer.reset()
         SerialLoop.request_stop = True
         SerialLoop._paused = False
 
@@ -1272,41 +1337,41 @@ def unstop():
 
 
 def dwell():
-    global SerialLoop
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_DWELL)
+    out = _out()
+    with out.lock:
+        out.send_command(CMD_DWELL)
 
 
 def air_on():
-    global SerialLoop
-    if SerialLoop is None:
+    out = _out()
+    if out is None:
         return
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_AIR_ENABLE)
+    with out.lock:
+        out.send_command(CMD_AIR_ENABLE)
 
 
 def air_off():
-    global SerialLoop
-    if SerialLoop is None:
+    out = _out()
+    if out is None:
         return
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_AIR_DISABLE)
+    with out.lock:
+        out.send_command(CMD_AIR_DISABLE)
 
 
 def aux_on():
-    global SerialLoop
-    if SerialLoop is None:
+    out = _out()
+    if out is None:
         return
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_AUX_ENABLE)
+    with out.lock:
+        out.send_command(CMD_AUX_ENABLE)
 
 
 def aux_off():
-    global SerialLoop
-    if SerialLoop is None:
+    out = _out()
+    if out is None:
         return
-    with SerialLoop.lock:
-        SerialLoop.send_command(CMD_AUX_DISABLE)
+    with out.lock:
+        out.send_command(CMD_AUX_DISABLE)
 
 
 def pulse():
@@ -1372,6 +1437,40 @@ def job(jobdict):
         print("INFO: not a valid job, 'head' entry missing")
 
 
+def job_duration(jobdict):
+    """Modelled run time (s) of a job, from a dry run of the real dispatch.
+
+    The job is emitted into a throwaway buffer instead of onto the wire, so
+    the estimate times the exact command stream a run would produce: the same
+    item and scanline ordering, the same lead-ins, pierces, acceleration ramps
+    and cornering, with no second model of any of it. Purely computational,
+    and safe with no machine connected.
+
+    Raises ValueError while a job is on the wire, since the dry run shares the
+    module's assist bookkeeping with dispatch.
+    """
+    with _duration_lock:
+        live = SerialLoop
+        sink = SerialLoopClass()  # never started, so it only ever buffers
+        if live is not None:
+            with live.lock:
+                if live.tx_buffer:
+                    raise ValueError("cannot estimate a job while one is running")
+                # a table offset moves where the job lands, and so what the
+                # work area check makes of it
+                sink._status["offset"] = list(live._status["offset"])
+        holds = {key: set(held) for key, held in _assist_holds.items()}
+        _dry_run.sink = sink
+        try:
+            job(copy.deepcopy(jobdict))  # dispatch mutates the job it is given
+        finally:
+            _dry_run.sink = None
+            for key, held in holds.items():
+                _assist_holds[key].clear()
+                _assist_holds[key].update(held)
+        return sink.timer.total()
+
+
 def job_stop_guard():
     """Refuse to queue a job while the controller is in a stop condition.
 
@@ -1381,12 +1480,12 @@ def job_stop_guard():
 
     Raises ValueError naming the active stops.
     """
-    global SerialLoop
+    out = _out()
 
-    if SerialLoop is None:
+    if out is None:
         return
-    with SerialLoop.lock:
-        stops = sorted(SerialLoop._status["stops"])
+    with out.lock:
+        stops = sorted(out._status["stops"])
     if stops:
         raise ValueError(f"cannot start a job while stopped ({', '.join(stops)}), clear it first")
 
@@ -1450,13 +1549,13 @@ def job_laser_validate(jobdict):
 
     Raises a ValueError with a descriptive message if the job is not valid.
     """
-    global SerialLoop
+    out = _out()
 
     job_pass_params_validate(jobdict)
 
-    with SerialLoop.lock:
-        x_off = SerialLoop._status["offset"][0]
-        y_off = SerialLoop._status["offset"][1]
+    with out.lock:
+        x_off = out._status["offset"][0]
+        y_off = out._status["offset"][1]
     x_lim = conf["workspace"][0] - x_off
     y_lim = conf["workspace"][1] - y_off
 
@@ -1858,10 +1957,10 @@ def _reachable_x_range():
     lead-in or lead-out against the raw machine width would let it run past the
     end of travel by as much as the offset.
     """
-    global SerialLoop
+    out = _out()
 
-    with SerialLoop.lock:
-        x_off = SerialLoop._status["offset"][0]
+    with out.lock:
+        x_off = out._status["offset"][0]
     return -x_off, conf["workspace"][0] - x_off
 
 
@@ -2424,6 +2523,7 @@ def job_laser(jobdict):
 
     try:
         _job_laser_passes(jobdict)
+        mark_pass()  # the passes are done, what follows is the run home
     finally:
         # Whatever happened, queue the outputs off. A raise part way through a
         # pass would otherwise leave a relay energised with no command coming.
@@ -2606,6 +2706,7 @@ def _job_laser_passes(jobdict):
     head_pos = [0.0, 0.0]
     passes = jobdict["passes"]
     for passidx, pass_ in enumerate(passes):
+        mark_pass()  # so the run-time model can report on this pass alone
         requested_pxsize = float(pass_.setdefault("pxsize", conf["pxsize"]))
         pxsize_x, pxsize_y = _pass_pxsize(pass_)  # x is 2x horiz resolution
         if requested_pxsize != pxsize_y:

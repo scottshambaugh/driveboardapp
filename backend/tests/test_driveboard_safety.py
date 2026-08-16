@@ -2495,3 +2495,109 @@ def test_host_stall_mid_job_leaves_the_controller_stopped():
     finally:
         sl.stop_processing = True
         sl.join(timeout=5)
+
+
+# ---------------------------------------------------------------------------
+# Run-time estimate (backend/jobtime.py driven by a dry run of dispatch)
+# ---------------------------------------------------------------------------
+
+
+def _duration_job(**pass_kw):
+    pass_ = {"items": [0], "feedrate": 2000, "seekrate": 6000, "intensity": 50}
+    pass_.update(pass_kw)
+    return {
+        "head": {},
+        "passes": [pass_],
+        "items": [{"def": 0}],
+        "defs": [
+            {
+                "kind": "path",
+                "data": [[[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0], [0.0, 0.0]]],
+            }
+        ],
+    }
+
+
+def test_job_duration_needs_no_machine():
+    # the info line has to show a time before anything is plugged in
+    assert driveboard.SerialLoop is None
+    assert driveboard.job_duration(_duration_job()) > 0.0
+
+
+def test_job_duration_exceeds_length_over_feedrate():
+    # the ramps and corners the old length/rate estimate ignored
+    naive = 400.0 / (2000.0 / 60.0)
+    assert driveboard.job_duration(_duration_job()) > naive
+
+
+def test_job_duration_scales_with_feedrate():
+    slow = driveboard.job_duration(_duration_job(feedrate=1000))
+    fast = driveboard.job_duration(_duration_job(feedrate=4000))
+    assert slow > fast
+
+
+def test_job_duration_counts_pierce_time():
+    plain = driveboard.job_duration(_duration_job())
+    pierced = driveboard.job_duration(_duration_job(pierce_time=2.0))
+    assert pierced == pytest.approx(plain + 2.0, abs=0.01)
+
+
+def test_job_duration_leaves_no_trace_on_the_serial_loop(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    assert driveboard.job_duration(_duration_job()) > 0.0
+    # a dry run emits into its own buffer, never onto the wire
+    assert loop.tx_buffer == bytearray()
+    assert loop.job_size == 0
+    assert loop.timer.total() == 0.0
+    assert not any(driveboard._assist_holds.values())
+
+
+def test_job_duration_refuses_while_a_job_is_on_the_wire(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_duration_job())
+    assert loop.tx_buffer  # the job is queued for the machine
+    with pytest.raises(ValueError, match="while one is running"):
+        driveboard.job_duration(_duration_job())
+
+
+def test_job_duration_follows_raster_mode(monkeypatch):
+    # a unidirectional raster flies back over every scanline, a bidirectional
+    # one engraves on the way back, so the config choice changes the time
+    img = Image.new("L", (200, 100), 0)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 3000, "seekrate": 6000, "intensity": 50}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "image", "data": b64, "pos": [10.0, 10.0], "size": [80.0, 40.0]}],
+    }
+    monkeypatch.setitem(driveboard.conf, "raster_mode", "Forward")
+    forward = driveboard.job_duration(job)
+    monkeypatch.setitem(driveboard.conf, "raster_mode", "Bidirectional")
+    bidi = driveboard.job_duration(job)
+    assert forward > bidi
+
+
+def test_dispatch_marks_every_pass_for_the_time_left(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _duration_job()
+    job["passes"] = [dict(job["passes"][0]), dict(job["passes"][0])]
+    driveboard.job(job)
+    # one mark per pass, plus the end of the last one
+    assert len(loop.timer._pass_starts) == 3
+    assert loop.timer._pass_starts == sorted(loop.timer._pass_starts)
+
+
+def test_remaining_in_pass_tracks_the_pass_being_run(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    job = _duration_job()
+    job["passes"] = [dict(job["passes"][0]), dict(job["passes"][0])]
+    driveboard.job(job)
+    first_pass_end = loop.timer._pass_starts[1]
+    # in the first pass, what is left of it is less than what is left overall
+    assert loop.timer.remaining_in_pass(1) < loop.timer.remaining(1)
+    # in the last pass, only the run home separates the two
+    late = first_pass_end + 1
+    assert loop.timer.remaining_in_pass(late) <= loop.timer.remaining(late)

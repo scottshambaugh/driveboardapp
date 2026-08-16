@@ -500,3 +500,46 @@ def test_convert_reports_an_unusable_file_as_a_type_error():
     # otherwise /load answers 500 instead of 400
     with pytest.raises(TypeError):
         web._convert_job(b"not a job at all", True, None)
+
+
+def test_job_duration_endpoint_returns_seconds(auth_app):
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000, "seekrate": 6000, "intensity": 50}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[0.0, 0.0], [100.0, 0.0]]]}],
+    }
+    resp = auth_app.post_json("/job_duration", {"job": job})
+    duration = json.loads(resp.body)["duration"]
+    assert duration > 100.0 / (2000.0 / 60.0)  # the ramps at either end
+
+
+def test_job_duration_endpoint_reports_a_bad_job(auth_app):
+    job = {
+        "head": {},
+        "passes": [{"items": [0], "feedrate": 2000}],
+        "items": [{"def": 0}],
+        "defs": [{"kind": "path", "data": [[[0.0, 0.0], [99999.0, 0.0]]]}],
+    }
+    resp = auth_app.post_json("/job_duration", {"job": job}, expect_errors=True)
+    assert resp.status_int == 400
+
+
+def test_job_duration_endpoint_follows_fill_mode(auth_app, monkeypatch):
+    # /load applies fill_mode on the way to a run, so the estimate has to see
+    # it too: unidirectional flies back over every scanline, bidirectional
+    # engraves on the way back
+    def fill_job():
+        lines = [[[10.0, 10.0 + 0.4 * i], [90.0, 10.0 + 0.4 * i]] for i in range(100)]
+        return {
+            "head": {},
+            "passes": [{"items": [0], "feedrate": 2000, "seekrate": 6000, "intensity": 50}],
+            "items": [{"def": 0}],
+            "defs": [{"kind": "fill", "data": lines}],
+        }
+
+    monkeypatch.setitem(conf, "fill_mode", "Forward")
+    forward = json.loads(auth_app.post_json("/job_duration", {"job": fill_job()}).body)
+    monkeypatch.setitem(conf, "fill_mode", "Bidirectional")
+    bidi = json.loads(auth_app.post_json("/job_duration", {"job": fill_job()}).body)
+    assert forward["duration"] > bidi["duration"]

@@ -1068,6 +1068,35 @@ def job_seek_preview():
         raise bottle.HTTPResponse(f"Error computing seek preview: {str(e)}", 400) from e
 
 
+@bottle.route("/job_duration", method="POST")
+def job_duration():
+    """Modelled run time of a job, for the job info line.
+
+    The job goes through the same optimization /load applies on the way to a
+    run, so what is timed is what the machine would be sent, fill_mode and
+    path simplification included.
+
+    Args (via POST JSON):
+        job: dba-style dict with passes/items/defs. Image defs need their
+             pixel data, the raster ordering is timed from it.
+        optimize: flag whether to optimize (bool), default True, matching
+             /load
+
+    Returns:
+        JSON with the run time in seconds.
+    """
+    try:
+        request_data = json.loads(bottle.request.body.read().decode("utf-8"))
+        job = request_data.get("job", {})
+        if request_data.get("optimize", True):
+            jobimport.optimize_job(job, conf["tolerance"])
+        seconds = driveboard.job_duration(job)
+        return json.dumps({"duration": seconds})
+    except Exception as e:
+        traceback.print_exc()
+        raise bottle.HTTPResponse(f"Error computing job duration: {str(e)}", 400) from e
+
+
 @bottle.route("/pause")
 @bottle.auth_basic(checkuser)
 @checkserial
