@@ -767,3 +767,96 @@ def test_a_slow_request_does_not_hold_up_the_stop_button(monkeypatch):
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_a_slow_request_does_not_hold_up_the_pause_button(monkeypatch):
+    # pause has to be answerable mid-dispatch for the same reason stop does
+    import socket
+    import urllib.request
+    import wsgiref.simple_server
+
+    monkeypatch.setattr(driveboard, "connected", lambda: True)
+    monkeypatch.setattr(driveboard, "status", lambda: {"ready": True, "serial": True})
+    monkeypatch.setattr(web, "_get", lambda name, library=False: MINIMAL_DBA)
+    paused = threading.Event()
+    monkeypatch.setattr(driveboard, "pause", paused.set)
+    dispatching = threading.Event()
+    monkeypatch.setattr(driveboard, "job", lambda jd: (dispatching.set(), time.sleep(3.0)))
+
+    srv = wsgiref.simple_server.make_server(
+        "127.0.0.1", 0, bottle.default_app(), web.ThreadingWSGIServer
+    )
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    auth = base64.b64encode(b"laser:laser").decode()
+
+    def get(path, timeout=10):
+        req = urllib.request.Request(base + path, headers={"Authorization": "Basic " + auth})
+        return urllib.request.urlopen(req, timeout=timeout).read()
+
+    try:
+        threading.Thread(target=lambda: get("/run/x", timeout=20), daemon=True).start()
+        assert dispatching.wait(5)
+        started = time.time()
+        get("/pause", timeout=5)
+        assert paused.wait(1)
+        assert time.time() - started < 1.5
+    except (socket.timeout, TimeoutError) as e:
+        raise AssertionError("the pause request was held up by the dispatch") from e
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_a_jog_during_a_dispatch_is_refused_not_a_server_error(auth_app, monkeypatch):
+    # the machine is mid-job, so the move is turned away with a status the
+    # frontend can act on rather than a 500
+    monkeypatch.setattr(driveboard, "connected", lambda: True)
+    monkeypatch.setattr(driveboard, "target_in_workarea", lambda *a, **k: True)
+    monkeypatch.setattr(driveboard, "intensity", lambda *a, **k: None)
+
+    def busy(*a, **k):
+        raise driveboard.MachineBusy("a job is being sent to the machine")
+
+    monkeypatch.setattr(driveboard, "move", busy)
+    resp = auth_app.get("/move/100/100/0", expect_errors=True)
+    assert resp.status_int == 409
+
+
+def test_concurrent_status_polls_reconnect_only_once(monkeypatch):
+    # reconnect() swaps the serial loop out from under whatever else holds it,
+    # so polls arriving together must not each start one
+    import urllib.request
+    import wsgiref.simple_server
+
+    monkeypatch.setattr(driveboard, "connected", lambda: False)
+    monkeypatch.setattr(driveboard, "status", lambda: {"serial": False, "ready": False})
+    monkeypatch.setattr(web, "time_reconnect_last", 0)
+    calls = []
+
+    def slow_reconnect():
+        calls.append(1)
+        time.sleep(0.3)
+
+    monkeypatch.setattr(driveboard, "reconnect", slow_reconnect)
+    srv = wsgiref.simple_server.make_server(
+        "127.0.0.1", 0, bottle.default_app(), web.ThreadingWSGIServer
+    )
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    auth = base64.b64encode(b"laser:laser").decode()
+
+    def poll():
+        req = urllib.request.Request(base + "/status", headers={"Authorization": "Basic " + auth})
+        urllib.request.urlopen(req, timeout=10).read()
+
+    try:
+        threads = [threading.Thread(target=poll) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(15)
+        assert len(calls) == 1
+    finally:
+        srv.shutdown()
+        srv.server_close()

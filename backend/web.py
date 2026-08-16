@@ -29,6 +29,7 @@ __author__ = "Stefan Hechenberger <stefan@nortd.com>"
 DEBUG = False
 bottle.BaseRequest.MEMFILE_MAX = 1024 * 1024 * 100  # max 100Mb files
 time_reconnect_last = 0
+_reconnect_lock = threading.Lock()
 jog_target_last = None  # last jog target commanded, in offset coordinates
 
 if conf["mill_mode"]:
@@ -41,6 +42,22 @@ else:
 def checkuser(user, pw):
     """Check login credentials, used by auth_basic decorator."""
     return bool(user in conf["users"] and conf["users"][user] == pw)
+
+
+def machine_busy_plugin(callback):
+    """Answer 409 when something asks the machine to move while a job is being
+    queued onto it, rather than letting it surface as a server error."""
+
+    def wrapper(*args, **kwargs):
+        try:
+            return callback(*args, **kwargs)
+        except driveboard.MachineBusy as e:
+            raise bottle.HTTPResponse(str(e), 409) from e
+
+    return wrapper
+
+
+bottle.default_app().install(machine_busy_plugin)
 
 
 def checkserial(func):
@@ -186,10 +203,14 @@ def confserial(port=None):
 def status():
     global time_reconnect_last
     # while disconnected, retry the reconnect at most every 5s so the frequent
-    # status polls don't hammer it
+    # status polls don't hammer it. Concurrent polls would otherwise both pass
+    # the check and reconnect twice over, and reconnect() swaps the serial loop
+    # out from under whatever else is using it.
     if not driveboard.connected() and (time.time() - time_reconnect_last) > 5.0:
-        time_reconnect_last = time.time()
-        driveboard.reconnect()
+        with _reconnect_lock:
+            if (time.time() - time_reconnect_last) > 5.0:
+                time_reconnect_last = time.time()
+                driveboard.reconnect()
     return json.dumps(driveboard.status())
 
 
@@ -631,7 +652,8 @@ def _convert_pool_get():
 def _convert_pool_drop():
     """Discard the worker so the next request starts a clean one."""
     global _convert_pool
-    pool, _convert_pool = _convert_pool, None
+    with _convert_pool_lock:
+        pool, _convert_pool = _convert_pool, None
     if pool is not None:
         for proc in list(pool._processes.values()):
             proc.kill()

@@ -245,8 +245,28 @@ markers_rx = {
 
 SerialLoop = None
 fallback_msg_thread = None
-# One job goes onto the wire at a time, see job()
+# One job goes onto the wire at a time, see job(). _dispatch_thread is the
+# thread queueing it, so anything arriving from another one can be told apart
+# from the job's own writes.
 _dispatch_lock = threading.Lock()
+_dispatch_thread = None
+
+
+class MachineBusy(ValueError):
+    """Raised when something asks the machine to move while a job is being
+    queued onto it."""
+
+
+def _dispatch_elsewhere():
+    """Whether another thread is part way through queueing a job.
+
+    Requests are served concurrently, so a jog, a pulse or a feed rate change
+    can arrive while a job is being written into the send buffer. Appending it
+    would splice that command into the middle of the job, and the machine
+    would run it mid-cut.
+    """
+    owner = _dispatch_thread
+    return owner is not None and owner != threading.get_ident()
 
 
 class SerialLoopClass(threading.Thread):
@@ -351,6 +371,8 @@ class SerialLoopClass(threading.Thread):
     def send_command(self, command):
         if self.discard_writes:
             return  # stopped, see discard_writes
+        if _dispatch_elsewhere():
+            raise MachineBusy("a job is being sent to the machine")
         self.tx_buffer.append(ord(command))
         self.job_size += 1
         self.timer.command(command, self.job_size)
@@ -358,6 +380,8 @@ class SerialLoopClass(threading.Thread):
     def send_param(self, param, val):
         if self.discard_writes:
             return  # stopped, see discard_writes
+        if _dispatch_elsewhere():
+            raise MachineBusy("a job is being sent to the machine")
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
         # three decimals are retained
         num = int(round((val + 134217.728) * 1000))
@@ -383,6 +407,8 @@ class SerialLoopClass(threading.Thread):
     def send_raster_data(self, data, start, end):
         if self.discard_writes:
             return  # stopped, see discard_writes
+        if _dispatch_elsewhere():
+            raise MachineBusy("a job is being sent to the machine")
         # Build the whole chunk first, then splice it in under a single lock.
         # Locking per-pixel here meant thousands of acquire/release cycles per
         # raster line on the hot path.
@@ -1304,9 +1330,17 @@ def rasterdata(data, start, end):
 
 
 def pause():
+    """Freeze the machine in place, keeping its job.
+
+    An empty send buffer does not mean the machine has finished: the
+    controller holds an rx buffer and the planner up to BLOCK_BUFFER_SIZE
+    moves beyond it, which at the end of a job is real motion still to come.
+    So this goes by whether the controller reports itself idle, not by whether
+    there is anything left to send it.
+    """
     global SerialLoop
     with SerialLoop.lock:
-        if SerialLoop.tx_buffer:
+        if SerialLoop.tx_buffer or not SerialLoop._status["ready"]:
             SerialLoop._paused = True  # stop feeding the buffer
             SerialLoop.request_pause = True  # freeze the controller in place
 
@@ -1442,8 +1476,11 @@ def job(jobdict):
     """
     from jobimport import resolve_image_data
 
+    global _dispatch_thread
+
     if not _dispatch_lock.acquire(blocking=False):
-        raise ValueError("a job is already being queued")
+        raise MachineBusy("a job is already being queued")
+    _dispatch_thread = threading.get_ident()
     try:
         job_stop_guard()
         if SerialLoop is not None:
@@ -1460,6 +1497,7 @@ def job(jobdict):
         else:
             print("INFO: not a valid job, 'head' entry missing")
     finally:
+        _dispatch_thread = None
         _dispatch_lock.release()
 
 

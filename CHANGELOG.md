@@ -7,6 +7,9 @@
 
 ### Bug Fixes
 - Safety: stop button is no longer blocked during initial dispatch, and fix a race condition where the job could have resumed after
+- Safety: the pause button was blocked during initial dispatch for the same reason, and did nothing at all once the last of the job had been sent, even though the controller still had queued moves to run
+- Safety: a jog, pulse or rate change arriving while a job was being sent is now refused rather than spliced into the middle of that job
+- Requests are now served concurrently, so a slow one no longer holds up the rest
 - The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns
 - Raster lines no longer command z

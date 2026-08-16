@@ -180,7 +180,8 @@ def test_serial_write_sends_stop_char_while_paused(loop):
 
 
 def test_pause_only_when_job_active(loop):
-    loop.tx_buffer = bytearray()  # nothing running
+    loop.tx_buffer = bytearray()  # nothing left to send
+    loop._status["ready"] = True  # and the controller has finished it too
     driveboard.pause()
     assert loop._paused is False
     assert loop.request_pause is False
@@ -2797,3 +2798,95 @@ def test_two_jobs_cannot_interleave_into_one_stream(loop):
         first.join(10)
     finally:
         driveboard.move = real_move
+
+
+def test_pause_works_once_the_send_buffer_has_drained(loop):
+    # the controller still holds an rx buffer and up to BLOCK_BUFFER_SIZE
+    # planned moves, so an empty send buffer is not a finished job
+    loop.tx_buffer = bytearray()
+    loop._status["ready"] = False  # controller still working through its own
+    driveboard.pause()
+    assert loop._paused is True
+    assert loop.request_pause is True
+
+
+def test_pause_still_works_with_a_job_left_to_send(loop):
+    loop.tx_buffer = bytearray(b"abc")
+    loop._status["ready"] = True
+    driveboard.pause()
+    assert loop._paused is True
+    assert loop.request_pause is True
+
+
+def test_pause_does_nothing_on_an_idle_machine(loop):
+    loop.tx_buffer = bytearray()
+    loop._status["ready"] = True
+    driveboard.pause()
+    assert loop._paused is False
+    assert loop.request_pause is False
+
+
+def test_pause_keeps_the_job_where_stop_discards_it(loop):
+    # pausing must not lose what is queued, that is the difference from a stop
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_duration_job())
+    queued = bytes(loop.tx_buffer)
+    assert queued
+    driveboard.pause()
+    assert bytes(loop.tx_buffer) == queued
+    assert loop.discard_writes is False  # more of the job may still be emitted
+    driveboard.unpause()
+    assert loop._paused is False
+    assert bytes(loop.tx_buffer) == queued
+
+
+def test_a_jog_cannot_splice_itself_into_a_job_being_queued(loop):
+    # requests are served concurrently, so a jog can arrive while a job is
+    # being written into the send buffer. Appending it would put that move in
+    # the middle of the job and the machine would run it mid-cut.
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    started = threading.Event()
+    release = threading.Event()
+    real_move = driveboard.move
+    seen = []
+
+    def slow_move(*a, **k):
+        started.set()
+        release.wait(5)
+        return real_move(*a, **k)
+
+    driveboard.move = slow_move
+    try:
+        worker = threading.Thread(target=lambda: driveboard.job(_duration_job()))
+        worker.start()
+        assert started.wait(5)
+        for call in (
+            lambda: driveboard.move(5.0, 5.0),
+            lambda: driveboard.feedrate(1000),
+            lambda: driveboard.intensity(80),
+            lambda: driveboard.pulse(),
+            lambda: driveboard.air_on(),
+        ):
+            with pytest.raises(driveboard.MachineBusy):
+                call()
+            seen.append(True)
+        release.set()
+        worker.join(10)
+    finally:
+        driveboard.move = real_move
+    assert len(seen) == 5
+
+
+def test_the_dispatching_thread_itself_is_not_blocked(loop):
+    # the guard tells another thread's writes apart from the job's own
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_duration_job())
+    assert loop.tx_buffer  # the job got all the way out
+
+
+def test_manual_moves_work_again_once_the_job_is_queued(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_duration_job())
+    before = len(loop.tx_buffer)
+    driveboard.move(5.0, 5.0)
+    assert len(loop.tx_buffer) > before
