@@ -146,7 +146,7 @@ def _raster_svg(transform="", rows=MARKER, uri=None):
         '<svg xmlns="http://www.w3.org/2000/svg" '
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
-        f'<image x="10" y="20" width="40" height="20" transform="{transform}" '
+        f'<image x="10" y="20" width="40" height="20" preserveAspectRatio="none" transform="{transform}" '
         f'xlink:href="{uri or _png_data_uri(rows)}"/>'
         "</svg>"
     )
@@ -245,8 +245,8 @@ def test_raster_clipped_copies_share_source():
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
         '<defs><clipPath id="c1"><rect x="10" y="50" width="20" height="10"/></clipPath></defs>'
-        f'<image x="10" y="20" width="40" height="20" xlink:href="{uri}"/>'
-        f'<image x="10" y="50" width="40" height="20" clip-path="url(#c1)" xlink:href="{uri}"/>'
+        f'<image x="10" y="20" width="40" height="20" preserveAspectRatio="none" xlink:href="{uri}"/>'
+        f'<image x="10" y="50" width="40" height="20" preserveAspectRatio="none" clip-path="url(#c1)" xlink:href="{uri}"/>'
         "</svg>"
     )
     job = jobimport.convert(svg, optimize=False)
@@ -275,7 +275,7 @@ def _use_svg(body, defs=""):
         '<svg xmlns="http://www.w3.org/2000/svg" '
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
-        f'<defs><image id="img0" x="0" y="0" width="40" height="20" '
+        f'<defs><image id="img0" x="0" y="0" width="40" height="20" preserveAspectRatio="none" '
         f'xlink:href="{_png_data_uri(MARKER)}"/>{defs}</defs>'
         f"{body}"
         "</svg>"
@@ -375,7 +375,7 @@ def _tile_pattern(pid="p", attribs='patternUnits="userSpaceOnUse" width="50" hei
     """A 50x50 pattern tile holding one 40x20 image at (10, 20) of the tile."""
     return (
         f"<pattern id='{pid}' {attribs}>"
-        f'<image x="10" y="20" width="40" height="20" xlink:href="{_png_data_uri(MARKER)}"/>'
+        f'<image x="10" y="20" width="40" height="20" preserveAspectRatio="none" xlink:href="{_png_data_uri(MARKER)}"/>'
         "</pattern>"
     )
 
@@ -562,12 +562,12 @@ def _copies_svg(uri, second_uri=None):
         for i in range(3)
     )
     clipped = "".join(
-        f'<image x="{10 + 20 * i}" y="10" width="16" height="8" '
+        f'<image x="{10 + 20 * i}" y="10" width="16" height="8" preserveAspectRatio="none" '
         f'clip-path="url(#c{i})" xlink:href="{uri}"/>'
         for i in range(3)
     )
     other = (
-        f'<image x="10" y="80" width="16" height="8" xlink:href="{second_uri}"/>'
+        f'<image x="10" y="80" width="16" height="8" preserveAspectRatio="none" xlink:href="{second_uri}"/>'
         if second_uri
         else ""
     )
@@ -578,8 +578,8 @@ def _copies_svg(uri, second_uri=None):
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
         f"<defs>{clips}</defs>"
         f"{clipped}"
-        f'<image x="10" y="60" width="16" height="8" xlink:href="{uri}"/>'
-        f'<image x="10" y="20" width="40" height="20" transform="translate(60,0) rotate(90)" '
+        f'<image x="10" y="60" width="16" height="8" preserveAspectRatio="none" xlink:href="{uri}"/>'
+        f'<image x="10" y="20" width="40" height="20" preserveAspectRatio="none" transform="translate(60,0) rotate(90)" '
         f'xlink:href="{uri}"/>'
         f"{other}"
         "</svg>"
@@ -983,6 +983,162 @@ def _points(job):
     ]
 
 
+# ---------------------------------------------------------------------------
+# viewBox and preserveAspectRatio
+#
+# A viewBox says which part of the content the viewport shows, and
+# preserveAspectRatio how it is fitted when the two do not have the same
+# shape. Getting this wrong scales or shifts a whole job.
+# ---------------------------------------------------------------------------
+
+_SQUARE_PATH = '<path d="M 0 0 L 100 0 L 100 100 L 0 100 Z" fill="none" stroke="#ff0000"/>'
+
+
+def _path_bbox(job):
+    xs = _points(job)[0::2]
+    ys = _points(job)[1::2]
+    return [min(xs), min(ys), max(xs), max(ys)]
+
+
+def _page(width, height, viewbox, par="", body=_SQUARE_PATH):
+    par = f' preserveAspectRatio="{par}"' if par else ""
+    return (
+        '<?xml version="1.0"?>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="{width}" height="{height}" viewBox="{viewbox}"{par}>{body}</svg>'
+    )
+
+
+def test_page_viewbox_origin_lands_on_the_page_origin():
+    """The viewBox corner is where the page starts, so content at that corner
+    engraves at 0,0 rather than at the corner's own coordinates."""
+    job = jobimport.convert(_page("100mm", "100mm", "10 20 100 100"), optimize=False)
+    assert _path_bbox(job) == pytest.approx([-10.0, -20.0, 90.0, 80.0])
+
+
+@pytest.mark.parametrize(
+    "par,expected",
+    [
+        # a square viewBox on a page twice as wide as it is tall
+        ("", [25.0, 0.0, 75.0, 50.0]),  # the default fits and centers
+        ("xMidYMid meet", [25.0, 0.0, 75.0, 50.0]),
+        ("xMinYMin meet", [0.0, 0.0, 50.0, 50.0]),  # pinned to the corner
+        ("xMaxYMax meet", [50.0, 0.0, 100.0, 50.0]),
+        ("none", [0.0, 0.0, 100.0, 50.0]),  # stretched to fill
+        ("xMidYMid slice", [0.0, -25.0, 100.0, 75.0]),  # covers, hangs over
+    ],
+)
+def test_page_preserve_aspect_ratio(par, expected):
+    job = jobimport.convert(_page("100mm", "50mm", "0 0 100 100", par), optimize=False)
+    assert _path_bbox(job) == pytest.approx(expected)
+
+
+def test_page_stretch_scales_the_two_axes_apart():
+    """'none' is the one fit where a millimetre across is not a millimetre
+    down, so the job has to come out with the page's own proportions."""
+    job = jobimport.convert(_page("200mm", "50mm", "0 0 100 100", "none"), optimize=False)
+    assert _path_bbox(job) == pytest.approx([0.0, 0.0, 200.0, 50.0])
+
+
+def test_page_viewbox_that_is_not_a_rectangle_is_ignored():
+    job = jobimport.convert(_page("100mm", "100mm", "0 0 0 100"), optimize=False)
+    assert _path_bbox(job) == pytest.approx([0.0, 0.0, 100.0, 100.0])
+
+
+@pytest.mark.parametrize(
+    "par,expected",
+    [
+        # a 100x100 viewBox drawn into a 40x20 viewport at (10, 10)
+        ("", [20.0, 10.0, 40.0, 30.0]),  # fitted and centered
+        ("xMinYMin meet", [10.0, 10.0, 30.0, 30.0]),
+        ("none", [10.0, 10.0, 50.0, 30.0]),  # stretched to the viewport
+    ],
+)
+def test_nested_svg_viewport(par, expected):
+    """A nested svg is its own viewport. Its content used to be dropped."""
+    par = f' preserveAspectRatio="{par}"' if par else ""
+    body = (
+        f'<svg x="10" y="10" width="40" height="20" viewBox="0 0 100 100"{par}>{_SQUARE_PATH}</svg>'
+    )
+    job = jobimport.convert(_page("100mm", "100mm", "0 0 100 100", body=body), optimize=False)
+    assert _path_bbox(job) == pytest.approx(expected)
+
+
+def test_nested_svg_without_a_viewbox_only_moves_its_content():
+    body = f'<svg x="10" y="10" width="40" height="20">{_SQUARE_PATH}</svg>'
+    job = jobimport.convert(_page("100mm", "100mm", "0 0 100 100", body=body), optimize=False)
+    assert _path_bbox(job) == pytest.approx([10.0, 10.0, 110.0, 110.0])
+
+
+def _wide_image(par="", box=(0, 0, 100, 100)):
+    """A 2:1 image placed in `box`, with the given preserveAspectRatio."""
+    uri = _png_data_uri(((R, G), (B, K), (R, G), (B, K)))  # 2 wide, 4 tall
+    par = f' preserveAspectRatio="{par}"' if par else ""
+    return (
+        f'<image x="{box[0]}" y="{box[1]}" width="{box[2]}" height="{box[3]}"{par} '
+        f'xlink:href="{uri}"/>'
+    )
+
+
+@pytest.mark.parametrize(
+    "par,pos,size",
+    [
+        # a 1:2 image (2 wide, 4 tall) in a square box
+        ("", [25.0, 0.0], [50.0, 100.0]),  # fitted and centered by default
+        ("xMinYMin meet", [0.0, 0.0], [50.0, 100.0]),
+        ("xMaxYMax meet", [50.0, 0.0], [50.0, 100.0]),
+        ("none", [0.0, 0.0], [100.0, 100.0]),  # stretched to the box
+        ("xMidYMid slice", [0.0, 0.0], [100.0, 100.0]),  # covers the box
+    ],
+)
+def test_image_preserve_aspect_ratio(par, pos, size):
+    """An image is not stretched to its box unless the tag asks for it."""
+    job = jobimport.convert(_page("100mm", "100mm", "0 0 100 100", body=_wide_image(par)))
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert len(defs) == 1
+    assert defs[0]["pos"] == pytest.approx(pos)
+    assert defs[0]["size"] == pytest.approx(size)
+
+
+def test_image_slice_crops_what_hangs_over_the_box():
+    """'slice' fills the box, so the pixels past it are dropped rather than
+    engraved outside the placement the job reports."""
+    job = jobimport.convert(
+        _page("100mm", "100mm", "0 0 100 100", body=_wide_image("xMidYMid slice"))
+    )
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    _, b64 = defs[0]["data"].split(",", 1)
+    img = Image.open(io.BytesIO(base64.b64decode(b64)))
+    # the source is 2x4, the square box keeps the middle 2x2 of it
+    assert img.size == (2, 2)
+    assert _pixels(img) == [(B, K), (R, G)]
+
+
+def test_image_that_already_matches_its_box_is_untouched():
+    job = jobimport.convert(
+        _page("100mm", "100mm", "0 0 100 100", body=_wide_image(box=(10, 10, 20, 40)))
+    )
+    defs = [d for d in job["defs"] if d["kind"] == "image"]
+    assert defs[0]["pos"] == pytest.approx([10.0, 10.0])
+    assert defs[0]["size"] == pytest.approx([20.0, 40.0])
+
+
+def test_pattern_viewbox_takes_its_preserve_aspect_ratio():
+    """The tile is square and the viewBox is not, so the fit decides where the
+    content sits inside the tile."""
+    content = '<rect x="0" y="0" width="100" height="50" fill="none" stroke="#0000ff"/>'
+    defs = (
+        "<defs>"
+        f'<pattern id="p" patternUnits="userSpaceOnUse" x="0" y="0" width="40" height="40" '
+        f'viewBox="0 0 100 50" preserveAspectRatio="xMinYMin meet">{content}</pattern>'
+        "</defs>"
+    )
+    body = defs + '<rect x="0" y="0" width="40" height="40" fill="url(#p)" stroke="none"/>'
+    job = jobimport.convert(_page("100mm", "100mm", "0 0 100 100", body=body), optimize=False)
+    # 100x50 fitted into a 40x40 tile is 40x20, pinned to the tile's corner
+    assert _path_bbox(job) == pytest.approx([0.0, 0.0, 40.0, 20.0])
+
+
 @pytest.mark.parametrize(
     "d",
     [
@@ -1137,8 +1293,8 @@ def test_clipped_source_ships_downscaled_but_def_data_stays_full_size():
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
         '<defs><clipPath id="c1"><rect x="10" y="50" width="20" height="10"/></clipPath></defs>'
-        f'<image x="10" y="20" width="40" height="20" xlink:href="{uri}"/>'
-        f'<image x="10" y="50" width="40" height="20" clip-path="url(#c1)" xlink:href="{uri}"/>'
+        f'<image x="10" y="20" width="40" height="20" preserveAspectRatio="none" xlink:href="{uri}"/>'
+        f'<image x="10" y="50" width="40" height="20" preserveAspectRatio="none" clip-path="url(#c1)" xlink:href="{uri}"/>'
         "</svg>"
     )
     job = jobimport.convert(svg, optimize=False)

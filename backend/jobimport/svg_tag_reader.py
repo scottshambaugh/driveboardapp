@@ -6,7 +6,7 @@ import re
 
 from .svg_attribute_reader import SVGAttributeReader
 from .svg_path_reader import SVGPathReader
-from .utilities import matrixMult
+from .utilities import matrixMult, parseFloats, parsePreserveAspectRatio, viewboxMatrix
 
 # from PIL import Image
 
@@ -31,6 +31,7 @@ class SVGTagReader:
             "circle": self.circle,
             "ellipse": self.ellipse,
             "image": self.image,
+            "svg": self.svg,
             "use": self.use,
             "symbol": self.symbol,
             "defs": self.defs,
@@ -379,12 +380,37 @@ class SVGTagReader:
         raster = {}
         raster["pos"] = [x, y]
         raster["size"] = [width, height]
+        raster["par"] = node.get("preserveAspectRatio")
         # raster['image'] = converted_image
         raster["data"] = image
         raster["source"] = source
         # kept so the original survives clip cropping, same string until then
         raster["source_data"] = image
         node["rasters"].append(raster)
+
+    def svg(self, node):
+        # http://www.w3.org/TR/SVG11/struct.html#NewDocument
+        # a nested viewport: x/y/width/height place it in the parent frame,
+        # and viewBox with preserveAspectRatio map its content into that box.
+        # Content reaching past the viewport is drawn rather than clipped,
+        # which is how the outermost viewport is treated too.
+        x = node.get("x") or 0
+        y = node.get("y") or 0
+        width = node.get("width")
+        height = node.get("height")
+        vb = node.get("viewBox")
+        if vb and width and height:
+            nums = parseFloats(vb)
+            if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
+                align, meet_or_slice = parsePreserveAspectRatio(node.get("preserveAspectRatio"))
+                node["xformToWorld"] = matrixMult(
+                    node["xformToWorld"],
+                    viewboxMatrix(nums, (x, y, width, height), align, meet_or_slice),
+                )
+                return
+            log.error(f"nested svg viewBox '{vb}' is not a positive rectangle; ignored")
+        if x or y:
+            node["xformToWorld"] = matrixMult(node["xformToWorld"], [1, 0, 0, 1, x, y])
 
     def use(self, node):
         # http://www.w3.org/TR/SVG11/struct.html#UseElement

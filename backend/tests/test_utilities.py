@@ -66,6 +66,57 @@ def test_matrix_apply(mat, vec, expected):
     assert math.isclose(vec[1], expected[1], abs_tol=1e-9)
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (None, ("xMidYMid", "meet")),  # the default when nothing is said
+        ("", ("xMidYMid", "meet")),
+        ("none", ("none", "meet")),
+        ("xMinYMax", ("xMinYMax", "meet")),  # meet is the default half
+        ("xMaxYMin slice", ("xMaxYMin", "slice")),
+        ("  xMidYMid   slice  ", ("xMidYMid", "slice")),
+        ("defer xMinYMin meet", ("xMinYMin", "meet")),  # defer is for images
+        ("XMINYMIN", ("xMinYMin", "meet")),  # miscased, but unambiguous
+        ("bogus", ("xMidYMid", "meet")),  # unreadable falls back to default
+        ("xMinYMin bogus", ("xMinYMin", "meet")),
+    ],
+)
+def test_parse_preserve_aspect_ratio(text, expected):
+    assert utilities.parsePreserveAspectRatio(text) == expected
+
+
+@pytest.mark.parametrize(
+    "align,meet_or_slice,expected",
+    [
+        # a 100x100 viewBox into a 100x50 box
+        ("none", "meet", (1.0, 0.5, 0.0, 0.0)),  # stretched, so no slack
+        ("xMinYMin", "meet", (0.5, 0.5, 0.0, 0.0)),  # 50 wide, pinned left
+        ("xMidYMid", "meet", (0.5, 0.5, 25.0, 0.0)),  # centered
+        ("xMaxYMax", "meet", (0.5, 0.5, 50.0, 0.0)),  # pinned right
+        ("xMidYMid", "slice", (1.0, 1.0, 0.0, -25.0)),  # covers, hangs over y
+        ("xMinYMin", "slice", (1.0, 1.0, 0.0, 0.0)),
+        ("xMaxYMax", "slice", (1.0, 1.0, 0.0, -50.0)),
+    ],
+)
+def test_viewbox_fit(align, meet_or_slice, expected):
+    assert utilities.viewboxFit(100, 100, 100, 50, align, meet_or_slice) == pytest.approx(expected)
+
+
+def test_viewbox_fit_ignores_an_empty_viewbox():
+    assert utilities.viewboxFit(0, 100, 50, 50) == (1.0, 1.0, 0.0, 0.0)
+
+
+def test_viewbox_matrix_takes_the_box_origin_and_the_viewbox_origin():
+    # the viewBox corner (10, 10) has to land on the box corner (5, 5)
+    mat = utilities.viewboxMatrix([10, 10, 100, 100], (5, 5, 50, 50))
+    vec = [10.0, 10.0]
+    utilities.matrixApply(mat, vec)
+    assert vec == pytest.approx([5.0, 5.0])
+    vec = [110.0, 110.0]
+    utilities.matrixApply(mat, vec)
+    assert vec == pytest.approx([55.0, 55.0])
+
+
 def test_matrix_apply_does_not_use_stale_x():
     # Regression: y must be computed from the original x, not the updated one.
     scale_and_skew = [2, 1, 0, 1, 0, 0]

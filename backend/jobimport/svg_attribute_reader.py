@@ -45,6 +45,8 @@ class SVGAttributeReader:
             "cx": self.dimensionAttrib,
             "cy": self.dimensionAttrib,
             "href": self.stringAttrib,
+            "preserveAspectRatio": self.stringAttrib,
+            "viewBox": self.stringAttrib,
             "clip-path": self.clipPathAttrib,
         }
 

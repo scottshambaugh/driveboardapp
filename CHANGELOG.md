@@ -5,9 +5,13 @@
 - Instead of the total duration, a running job now shows the time left for the pass, and for the whole job
 - dba files with repeated raster data now only hold one copy of that data, for reduced filesize and faster run init
 - Exact paths with the same color and raster copies exactly overlaying itself are now deduplicated on import, to avoid surprise double-engraving
+- SVG `preserveAspectRatio` is now supported, for the page, nested `svg` viewports, images and pattern tiles
+- Nested SVG viewports are now drawn instead of dropped
 
 ### Bug Fixes
 - Fixed SVG `transform="translate(x)"` also moving the content down by x
+- Fixed an SVG viewBox with a non-zero origin shifting the job by twice the origin
+- Fixed SVG numbers written as `.5`, `1E2` or `1e+2` being misread
 - Requests are now served concurrently, so a slow one no longer holds up the rest
 - The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns

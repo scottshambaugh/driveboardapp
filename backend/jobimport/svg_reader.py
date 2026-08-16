@@ -7,7 +7,16 @@ import math
 
 from .svg_tag_reader import SVGTagReader
 from .svg_text_converter import convert_text_to_paths, get_conversion_warnings
-from .utilities import matrixApply, matrixMult, parseFloats, parseScalar, vertexScale
+from .utilities import (
+    matrixApply,
+    matrixMult,
+    parseFloats,
+    parsePreserveAspectRatio,
+    parseScalar,
+    vertexScale,
+    viewboxFit,
+    viewboxMatrix,
+)
 
 try:
     from PIL import Image
@@ -41,7 +50,8 @@ except ImportError:
 # boundarys = SVGReader.parse(svgstring, config)
 #
 # Features:
-#   * <svg> width and height, viewBox clipping.
+#   * <svg> width, height and viewBox, fitted by 'preserveAspectRatio'
+#   * nested <svg> viewports, with a viewBox of their own
 #   * paths, rectangles, ellipses, circles, lines, polylines and polygons
 #   * nested transforms
 #   * transform lists (transform="rotate(30) translate(2,2) scale(4)")
@@ -59,6 +69,8 @@ except ImportError:
 #   * masking
 #   * em, ex, % units
 #   * style sheets
+#   * clipping to a viewport, so content reaching past a page or a nested
+#     <svg> is still cut rather than dropped
 #
 # ToDo:
 #   * check for out of bounds geometry
@@ -134,6 +146,7 @@ class SVGReader:
         # per parse image caches, see _decode_image and _apply_image_ops
         self._image_uris = {}
         self._decoded_images = {}
+        self._image_sizes = {}
         self._decoded_px = 0
         self._derived_images = {}
 
@@ -189,6 +202,27 @@ class SVGReader:
             dropped = self._decoded_images.pop(next(iter(self._decoded_images)))[1]
             self._decoded_px -= dropped.width * dropped.height
         return entry
+
+    def _image_size(self, data_uri):
+        """The pixel size of an embedded image, read from its header alone.
+
+        Placement needs the proportions an image comes in at, which is a
+        header read rather than a decode, and one image is commonly placed
+        many times over, so the answer is kept for the parse.
+        """
+        if Image is None or not data_uri or "," not in data_uri:
+            return None
+        size = self._image_sizes.get(data_uri)
+        if size is None:
+            try:
+                _, b64data = data_uri.split(",", 1)
+                with Image.open(io.BytesIO(base64.b64decode(b64data))) as img:
+                    size = img.size
+            except Exception as e:
+                log.warning(f"Failed to read image size: {e}")
+                size = (0, 0)
+            self._image_sizes[data_uri] = size
+        return size
 
     # ceiling on the pixel count of a resampled image, so an extreme skew
     # cannot blow up memory (24 megapixels is past any engravable detail)
@@ -321,6 +355,44 @@ class SVGReader:
         self._derived_images[key] = result
         return result
 
+    def _fit_raster_box(self, raster):
+        """Fit an image inside the box its tag gave it, per its
+        'preserveAspectRatio'.
+
+        An image whose own proportions differ from its box is not stretched to
+        fill it unless the tag says so. The default fit keeps the proportions
+        and leaves the box short in one direction ('meet'), 'slice' fills the
+        box and crops what hangs over, and 'none' is the stretch.
+        """
+        align, meet_or_slice = parsePreserveAspectRatio(raster.pop("par", None))
+        if align == "none":
+            return
+        size = self._image_size(raster["data"])
+        if not size or not size[0] or not size[1]:
+            return
+        src_w, src_h = size
+        box_w, box_h = raster["size"]
+        if box_w <= 0 or box_h <= 0:
+            return
+        scale_x, scale_y, tx, ty = viewboxFit(src_w, src_h, box_w, box_h, align, meet_or_slice)
+        if meet_or_slice == "slice":
+            # the box keeps its extent and the pixels beyond it are dropped,
+            # in the image's own frame, before any reorienting of the grid
+            if Image is None or not raster["data"]:
+                return
+            raster.setdefault("ops", []).append(
+                (
+                    "crop",
+                    -tx / (scale_x * src_w),
+                    -ty / (scale_y * src_h),
+                    (-tx + box_w) / (scale_x * src_w),
+                    (-ty + box_h) / (scale_y * src_h),
+                )
+            )
+        else:
+            raster["pos"] = [raster["pos"][0] + tx, raster["pos"][1] + ty]
+            raster["size"] = [src_w * scale_x, src_h * scale_y]
+
     def _place_raster(self, raster, mat):
         """Place a raster in mm space, given its element's transform to world.
 
@@ -331,6 +403,9 @@ class SVGReader:
         return `raster['pos']` is the top-left mm corner and `raster['size']`
         the positive mm extent.
         """
+        # the image's own proportions have first say over the box it was given
+        self._fit_raster_box(raster)
+
         # where the image's box lands in mm: its (0,0) pixel corner, plus the
         # vectors along a pixel row (local +x) and down a pixel column (local +y)
         origin = [raster["pos"][0], raster["pos"][1]]
@@ -458,6 +533,7 @@ class SVGReader:
         "patternContentUnits",
         "patternTransform",
         "viewBox",
+        "preserveAspectRatio",
     )
 
     def _resolve_pattern(self, pid):
@@ -560,18 +636,11 @@ class SVGReader:
         origin, honoring 'viewBox' and 'patternContentUnits'."""
         vb = attribs.get("viewBox")
         if vb:
-            vb_x, vb_y, vb_w, vb_h = parseFloats(vb)
-            if vb_w > 0 and vb_h > 0:
-                # preserveAspectRatio defaults to xMidYMid meet
-                scale = min(tile[2] / vb_w, tile[3] / vb_h)
-                return [
-                    scale,
-                    0,
-                    0,
-                    scale,
-                    0.5 * (tile[2] - vb_w * scale) - vb_x * scale,
-                    0.5 * (tile[3] - vb_h * scale) - vb_y * scale,
-                ]
+            nums = parseFloats(vb)
+            if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
+                align, meet_or_slice = parsePreserveAspectRatio(attribs.get("preserveAspectRatio"))
+                return viewboxMatrix(nums, (0, 0, tile[2], tile[3]), align, meet_or_slice)
+            log.error(f"pattern viewBox '{vb}' is not a positive rectangle; ignored")
         if attribs.get("patternContentUnits") == "objectBoundingBox":
             return [bbox[2] - bbox[0], 0, 0, bbox[3] - bbox[1], 0, 0]
         return [1, 0, 0, 1, 0, 0]
@@ -781,6 +850,7 @@ class SVGReader:
         self.rasters = []
         self._image_uris = {}
         self._decoded_images = {}
+        self._image_sizes = {}
         self._decoded_px = 0
         self._derived_images = {}
         self._clip_rects = {}
@@ -814,49 +884,74 @@ class SVGReader:
             self.px2mm = 25.4 / force_dpi
             log.info(f"SVG import forced to {force_dpi} dpi.")
 
-        # Get width, height, viewBox for further processing
-        if not self.px2mm:
-            width = None
-            height = None
-            vb_x = None
-            vb_y = None
-            vb_w = None
-            vb_h = None
-            unit = ""
+        # Get width, height, viewBox for further processing. This is read even
+        # when the scale is already settled, since the viewBox also says where
+        # the content sits and how it is fitted to the page.
+        width = None
+        height = None
+        vb_x = 0.0
+        vb_y = 0.0
+        vb_w = None
+        vb_h = None
+        unit = ""
 
-            # get width, height, unit
-            width_str = svgRootElement.attrib.get("width")
-            height_str = svgRootElement.attrib.get("height")
-            if width_str and height_str:
-                width, width_unit = parseScalar(width_str)
-                height, height_unit = parseScalar(height_str)
-                if width_unit != height_unit:
-                    log.error("Conflicting units found.")
-                unit = width_unit
-                log.info(f"SVG w,h (unit) is {width},{height} ({unit}).")
+        # get width, height, unit
+        width_str = svgRootElement.attrib.get("width")
+        height_str = svgRootElement.attrib.get("height")
+        if width_str and height_str:
+            width, width_unit = parseScalar(width_str)
+            height, height_unit = parseScalar(height_str)
+            if width_unit != height_unit:
+                log.error("Conflicting units found.")
+            unit = width_unit
+            log.info(f"SVG w,h (unit) is {width},{height} ({unit}).")
 
-            # get viewBox
-            # http://www.w3.org/TR/SVG11/coords.html#ViewBoxAttribute
-            vb = svgRootElement.attrib.get("viewBox")
-            if vb:
-                vb_x, vb_y, vb_w, vb_h = parseFloats(vb)
+        # get viewBox
+        # http://www.w3.org/TR/SVG11/coords.html#ViewBoxAttribute
+        vb = svgRootElement.attrib.get("viewBox")
+        if vb:
+            nums = parseFloats(vb)
+            if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
+                vb_x, vb_y, vb_w, vb_h = nums
                 log.info(f"SVG viewBox ({vb_x},{vb_y},{vb_w},{vb_h}).")
+            else:
+                log.error(f"SVG viewBox '{vb}' is not a positive rectangle; ignored")
+                vb = None
+
+        # how the viewBox is fitted to the page, which is what
+        # preserveAspectRatio has a say over
+        # http://www.w3.org/TR/SVG11/coords.html#PreserveAspectRatioAttribute
+        yscale = 1.0  # the y scale relative to x, which only a stretch moves
+        tx = -vb_x  # where the viewBox origin lands, in user units
+        ty = -vb_y
+        if (width and height) or vb:
+            if not (width and height):
+                # default to viewBox
+                width = vb_w
+                height = vb_h
+            if not vb:
+                # default to width, height, and no offset
+                vb_x = 0.0
+                vb_y = 0.0
+                vb_w = width
+                vb_h = height
+
+            align, meet_or_slice = parsePreserveAspectRatio(
+                self._attrib(svgRootElement, "preserveAspectRatio")
+            )
+            scale_x, scale_y, align_x, align_y = viewboxFit(
+                vb_w, vb_h, width, height, align, meet_or_slice
+            )
+            yscale = scale_y / scale_x
+            tx = align_x / scale_x - vb_x
+            ty = (align_y - scale_y * vb_y) / scale_x
+            if align != "none" and meet_or_slice == "slice":
+                log.info("preserveAspectRatio 'slice' is honored, but nothing is clipped away")
 
         # 2. Get px2mm from width, height, viewBox
         if not self.px2mm:
             if (width and height) or vb:
-                if not (width and height):
-                    # default to viewBox
-                    width = vb_w
-                    height = vb_h
-                if not vb:
-                    # default to width, height, and no offset
-                    vb_x = 0.0
-                    vb_y = 0.0
-                    vb_w = width
-                    vb_h = height
-
-                self.px2mm = width / vb_w
+                self.px2mm = scale_x
 
                 if unit == "mm":
                     # great, the svg file already uses mm
@@ -914,21 +1009,13 @@ class SVGReader:
         # adjust tolerances to px units
         self.tolerance2_px = (self.tolerance / self.px2mm) * (self.tolerance / self.px2mm)
 
-        # translation from viewbox
-        if vb_x:
-            tx = vb_x
-        else:
-            tx = 0.0
-        if vb_y:
-            ty = vb_y
-        else:
-            ty = 0.0
-
         # let the fun begin
         # recursively parse children
         # output will be in self.boundarys
+        # the root frame carries the viewBox origin and, where the page asks
+        # for a stretch, the one axis px2mm cannot express on its own
         node = {
-            "xformToWorld": [1, 0, 0, 1, tx, ty],
+            "xformToWorld": [1, 0, 0, yscale, tx, ty],
             "display": "visible",
             "visibility": "visible",
             "fill": "#000000",

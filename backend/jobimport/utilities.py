@@ -32,6 +32,83 @@ def parseScalar(scalar_unit_string):
     return (num, unit)
 
 
+# the nine alignments preserveAspectRatio can name, plus 'none' for a fit
+# that stretches. Keyed by lower case so a miscased attribute still reads.
+PAR_ALIGNS = {
+    a.lower(): a
+    for a in (
+        "none",
+        "xMinYMin",
+        "xMidYMin",
+        "xMaxYMin",
+        "xMinYMid",
+        "xMidYMid",
+        "xMaxYMid",
+        "xMinYMax",
+        "xMidYMax",
+        "xMaxYMax",
+    )
+}
+
+
+def parsePreserveAspectRatio(text):
+    """Read a 'preserveAspectRatio' attribute into (align, meetOrSlice).
+
+    Anything missing or unreadable comes back as the default the spec gives,
+    which is the fit every renderer falls back on. The optional leading
+    'defer' only means anything on an image and is dropped here.
+    """
+    align, meet_or_slice = "xMidYMid", "meet"
+    parts = (text or "").split()
+    if parts and parts[0] == "defer":
+        parts = parts[1:]
+    if parts:
+        align = PAR_ALIGNS.get(parts[0].lower(), align)
+    if len(parts) > 1 and parts[1] in ("meet", "slice"):
+        meet_or_slice = parts[1]
+    return align, meet_or_slice
+
+
+def viewboxFit(vb_w, vb_h, box_w, box_h, align="xMidYMid", meet_or_slice="meet"):
+    """Fit a viewBox of vb_w x vb_h into a box of box_w x box_h.
+
+    Returns (scale_x, scale_y, tx, ty). 'none' stretches to fill the box, so
+    the two scales part ways there. 'meet' takes the smaller scale and leaves
+    the box short in one direction, 'slice' takes the larger and runs over it,
+    and the alignment says where the difference goes.
+    """
+    if not vb_w or not vb_h:
+        return 1.0, 1.0, 0.0, 0.0
+    scale_x = box_w / vb_w
+    scale_y = box_h / vb_h
+    if align != "none":
+        if meet_or_slice == "slice":
+            scale_x = scale_y = max(scale_x, scale_y)
+        else:
+            scale_x = scale_y = min(scale_x, scale_y)
+    align = align.lower()
+    x_align, y_align = align[:4], align[4:]
+    tx = box_w - vb_w * scale_x
+    ty = box_h - vb_h * scale_y
+    tx = tx / 2 if x_align == "xmid" else (tx if x_align == "xmax" else 0.0)
+    ty = ty / 2 if y_align == "ymid" else (ty if y_align == "ymax" else 0.0)
+    return scale_x, scale_y, tx, ty
+
+
+def viewboxMatrix(viewbox, box, align="xMidYMid", meet_or_slice="meet"):
+    """The transform from viewBox coordinates into the box (x, y, w, h)."""
+    vb_x, vb_y, vb_w, vb_h = viewbox
+    scale_x, scale_y, tx, ty = viewboxFit(vb_w, vb_h, box[2], box[3], align, meet_or_slice)
+    return [
+        scale_x,
+        0,
+        0,
+        scale_y,
+        box[0] + tx - vb_x * scale_x,
+        box[1] + ty - vb_y * scale_y,
+    ]
+
+
 def matrixMult(mA, mB):
     return [
         mA[0] * mB[0] + mA[2] * mB[1],
