@@ -643,7 +643,7 @@ _load_pending_lock = threading.Lock()
 def _pending_register(future, out_path, tmpdir):
     """Track a still-optimizing load, finish it on a watcher thread."""
     token = uuid.uuid4().hex
-    entry = {"event": threading.Event(), "name": None, "error": None}
+    entry = {"event": threading.Event(), "name": None, "error": None, "stale": False}
     with _load_pending_lock:
         _load_pending[token] = entry
 
@@ -652,8 +652,12 @@ def _pending_register(future, out_path, tmpdir):
             future.result(timeout=CONVERT_TIMEOUT)
             with open(out_path) as fp:
                 entry["result"] = fp.read()
-            # the queue entry gets the optimized job under the same name
-            if entry["name"]:
+            # the queue entry gets the optimized job under the same name,
+            # unless that name has been written since (running a job saves it
+            # back with its passes, and this optimize predates them)
+            with _load_pending_lock:
+                stale = entry["stale"]
+            if entry["name"] and not stale:
                 _add(entry["result"], entry["name"])
         except Exception as e:
             entry["error"] = str(e)
@@ -767,18 +771,33 @@ def load():
     if job is None or name is None:
         raise bottle.HTTPResponse("Invalid request data.", 400)
     progressive = bool(load_request.get("progressive"))
-    # convert, off this process so the serial thread keeps its timing
-    try:
-        job, pending = _convert_job(job, optimize, matrix, progressive)  # a .dba string
-    except TypeError:
-        if DEBUG:
-            traceback.print_exc()
-        raise bottle.HTTPResponse("Invalid file type.", 400) from None
-    except ValueError as e:
-        raise bottle.HTTPResponse(str(e), 422) from e
+    # A dba posted back with nothing to do to it is already what convert()
+    # would hand back, so it goes to the queue as it stands. This is the run
+    # button's path, where the job is the one the frontend was given and can
+    # be tens of megabytes: converting it would copy it to the worker and
+    # back, re-encode every raster, and queue behind whatever that single
+    # worker is still busy with, all to arrive at the same bytes.
+    if not optimize and matrix is None and not progressive and jobimport.get_type(job) == "dba":
+        job, pending = (job.decode("utf-8") if isinstance(job, bytes) else job), None
+    else:
+        # convert, off this process so the serial thread keeps its timing
+        try:
+            job, pending = _convert_job(job, optimize, matrix, progressive)  # a .dba string
+        except TypeError:
+            if DEBUG:
+                traceback.print_exc()
+            raise bottle.HTTPResponse("Invalid file type.", 400) from None
+        except ValueError as e:
+            raise bottle.HTTPResponse(str(e), 422) from e
 
     if not overwrite:
         name = _unique_name(name)
+    # an optimize still running against this name would land on top of what is
+    # about to be written, so it is told to stand down first
+    with _load_pending_lock:
+        for entry in _load_pending.values():
+            if entry.get("name") == name:
+                entry["stale"] = True
     _add(job, name)
     if pending:
         with _load_pending_lock:

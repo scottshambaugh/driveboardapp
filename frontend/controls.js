@@ -179,12 +179,12 @@ function controls_ready() {
     $("#boundary_btn").prop("disabled", true);
     $("#pulse_btn").addClass("disabled");
     status_cache.ready = true; // prevent ready update
-    // save job to queue, in-place
+    // save job to queue, in-place. The job on screen was optimized on its way
+    // in, so running it asks for no second pass
     var load_request = {
       job: jobhandler.getJson(),
       name: jobhandler.name,
-      optimize: true,
-      // 'optimize':false,
+      optimize: false,
       overwrite: true,
     };
     request_post({

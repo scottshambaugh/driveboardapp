@@ -673,3 +673,48 @@ def test_load_reports_a_truncated_svg_readably(auth_app):
     assert resp.status_int == 422
     assert "well-formed" in resp.body.decode("utf-8")
     assert "truncated" in resp.body.decode("utf-8")
+
+
+def test_load_stores_an_unchanged_dba_without_reconverting(auth_app, isolated_config, monkeypatch):
+    # the run button posts the job back only so it lands in the queue, and
+    # converting it again would copy tens of megabytes through the import
+    # worker to arrive at the same bytes
+    called = []
+    monkeypatch.setattr(web, "_convert_job", lambda *a, **k: called.append(a) or ("{}", None))
+    body = {
+        "load_request": json.dumps(
+            {"job": MINIMAL_DBA, "name": "asis", "optimize": False, "overwrite": True}
+        )
+    }
+    resp = auth_app.post("/load", body)
+    assert json.loads(resp.body) == "asis"
+    assert called == []  # never reached the converter
+    assert _stored_job(isolated_config, "asis")["defs"][0]["kind"] == "path"
+
+
+def test_load_still_converts_when_optimizing(auth_app, isolated_config):
+    body = {
+        "load_request": json.dumps(
+            {"job": MINIMAL_DBA, "name": "opt", "optimize": True, "overwrite": True}
+        )
+    }
+    resp = auth_app.post("/load", body)
+    assert json.loads(resp.body) == "opt"
+    # convert() stamps the tolerance it optimized to
+    assert _stored_job(isolated_config, "opt")["head"]["optimized"] == conf["tolerance"]
+
+
+def test_load_still_converts_an_svg_with_optimize_off(auth_app, isolated_config):
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" '
+        'viewBox="0 0 100 100"><path d="M 10,10 L 20,20" stroke="#000"/></svg>'
+    )
+    body = {
+        "load_request": json.dumps(
+            {"job": "upload_raw", "name": "svg", "optimize": False, "overwrite": True}
+        )
+    }
+    resp = auth_app.post("/load", body, upload_files=[("job", "a.svg", svg.encode())])
+    assert json.loads(resp.body) == "svg"
+    assert _stored_job(isolated_config, "svg")["defs"]  # actually parsed
