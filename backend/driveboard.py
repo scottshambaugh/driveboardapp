@@ -258,13 +258,7 @@ class MachineBusy(ValueError):
 
 
 def _dispatch_elsewhere():
-    """Whether another thread is part way through queueing a job.
-
-    Requests are served concurrently, so a jog, a pulse or a feed rate change
-    can arrive while a job is being written into the send buffer. Appending it
-    would splice that command into the middle of the job, and the machine
-    would run it mid-cut.
-    """
+    """Whether another thread is part way through queueing a job."""
     owner = _dispatch_thread
     return owner is not None and owner != threading.get_ident()
 
@@ -301,6 +295,10 @@ class SerialLoopClass(threading.Thread):
 
         # used for calculating percentage done
         self.job_size = 0
+        # True from the moment a job starts being queued until the last of it
+        # has gone out or a stop drops it, so a jog or any other manual move
+        # arriving meanwhile can be told apart from the job itself.
+        self.job_active = False
         # A stop empties the buffer, but whatever was still queueing the job
         # goes on emitting into it, and the resume that follows would run the
         # remainder. Set by stop(), cleared by unstop() and by the next job.
@@ -365,14 +363,30 @@ class SerialLoopClass(threading.Thread):
         }
         self._s = copy.deepcopy(self._status)
 
+    def _guard_foreign_write(self):
+        """Refuse anything that is not part of the job on the wire.
+
+        Requests are served concurrently, so a jog, a pulse or a rate change
+        can arrive while a job is being queued, or while one is still
+        streaming. Queued mid-dispatch it would be spliced into the middle of
+        the job and run mid-cut; queued behind a streaming one it would run
+        the moment that job ended. Neither is what whoever pressed the button
+        meant, and both move the head unbidden.
+
+        The thread doing the queueing is writing the job itself, so it passes.
+        """
+        if _dispatch_elsewhere():
+            raise MachineBusy("a job is being sent to the machine")
+        if self.job_active and _dispatch_thread is None:
+            raise MachineBusy("a job is running on the machine")
+
     def mark_pass(self):
         self.timer.mark_pass(self.job_size)
 
     def send_command(self, command):
         if self.discard_writes:
             return  # stopped, see discard_writes
-        if _dispatch_elsewhere():
-            raise MachineBusy("a job is being sent to the machine")
+        self._guard_foreign_write()
         self.tx_buffer.append(ord(command))
         self.job_size += 1
         self.timer.command(command, self.job_size)
@@ -380,8 +394,7 @@ class SerialLoopClass(threading.Thread):
     def send_param(self, param, val):
         if self.discard_writes:
             return  # stopped, see discard_writes
-        if _dispatch_elsewhere():
-            raise MachineBusy("a job is being sent to the machine")
+        self._guard_foreign_write()
         # num to be [-134217.728, 134217.727], [-2**27, 2**27-1]
         # three decimals are retained
         num = int(round((val + 134217.728) * 1000))
@@ -407,8 +420,7 @@ class SerialLoopClass(threading.Thread):
     def send_raster_data(self, data, start, end):
         if self.discard_writes:
             return  # stopped, see discard_writes
-        if _dispatch_elsewhere():
-            raise MachineBusy("a job is being sent to the machine")
+        self._guard_foreign_write()
         # Build the whole chunk first, then splice it in under a single lock.
         # Locking per-pixel here meant thousands of acquire/release cycles per
         # raster line on the hot path.
@@ -570,6 +582,7 @@ class SerialLoopClass(threading.Thread):
                 self.tx_buffer = bytearray()
                 self.tx_pos = 0
                 self.job_size = 0
+                self.job_active = False
                 self.timer.reset()
                 self._paused = False
                 self.device.flushOutput()
@@ -796,6 +809,7 @@ class SerialLoopClass(threading.Thread):
         else:
             if self.tx_buffer:  # job finished sending
                 self.job_size = 0
+                self.job_active = False
                 self.tx_buffer = bytearray()
                 self.tx_pos = 0
                 self.timer.reset()
@@ -1360,6 +1374,7 @@ def stop():
         SerialLoop.tx_pos = 0
         SerialLoop.job_size = 0
         SerialLoop.timer.reset()
+        SerialLoop.job_active = False
         # a job still being queued would otherwise refill what was just emptied
         SerialLoop.discard_writes = True
         SerialLoop.request_stop = True
@@ -1486,6 +1501,7 @@ def job(jobdict):
         if SerialLoop is not None:
             with SerialLoop.lock:
                 SerialLoop.discard_writes = False  # a new job starts clean
+                SerialLoop.job_active = True
         # placements of one picture share its payload on disk, dispatch reads
         # each def's own data
         resolve_image_data(jobdict)

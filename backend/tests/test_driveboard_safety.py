@@ -2884,9 +2884,43 @@ def test_the_dispatching_thread_itself_is_not_blocked(loop):
     assert loop.tx_buffer  # the job got all the way out
 
 
-def test_manual_moves_work_again_once_the_job_is_queued(loop):
+def test_manual_moves_are_refused_while_the_job_is_still_running(loop):
+    # queued behind a streaming job, a jog would run the moment the job ended
     loop._status["offset"] = [0.0, 0.0, 0.0]
     driveboard.job(_duration_job())
+    queued = bytes(loop.tx_buffer)
+    for call in (
+        lambda: driveboard.move(5.0, 5.0),
+        lambda: driveboard.supermove(5.0, 5.0),
+        lambda: driveboard.feedrate(1000),
+        lambda: driveboard.intensity(80),
+        lambda: driveboard.pulse(),
+        lambda: driveboard.air_on(),
+    ):
+        with pytest.raises(driveboard.MachineBusy):
+            call()
+    driveboard.homing()  # has a guard of its own, and declines quietly
+    assert bytes(loop.tx_buffer) == queued  # none of it reached the wire
+
+
+def test_manual_moves_work_again_once_the_job_has_gone_out(loop):
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_duration_job())
+    with pytest.raises(driveboard.MachineBusy):
+        driveboard.move(5.0, 5.0)
+    loop.job_active = False  # the serial loop clears this as the last goes out
     before = len(loop.tx_buffer)
     driveboard.move(5.0, 5.0)
     assert len(loop.tx_buffer) > before
+
+
+def test_a_stop_lets_the_machine_be_driven_again(loop):
+    # a stop drops the job, so the machine is free even though one was running
+    loop._status["offset"] = [0.0, 0.0, 0.0]
+    driveboard.job(_duration_job())
+    driveboard.stop()
+    assert loop.job_active is False
+    loop._status["stops"].clear()
+    driveboard.unstop()
+    driveboard.move(5.0, 5.0)
+    assert loop.tx_buffer
