@@ -174,11 +174,11 @@ function controls_ready() {
       $().uxmessage("error", "No machine.");
       return false;
     }
-    // button feedback
-    app_run_btn.start();
+    // button feedback: the job has to be saved, checked and queued before the
+    // machine has anything to run, so say so until it starts
+    status_set_waiting(true);
     $("#boundary_btn").prop("disabled", true);
     $("#pulse_btn").addClass("disabled");
-    status_cache.ready = true; // prevent ready update
     // save job to queue, in-place. The job on screen was optimized on its way
     // in, so running it asks for no second pass
     var load_request = {
@@ -201,20 +201,24 @@ function controls_ready() {
           error: function (data) {
             $().uxmessage("error", "/run error.");
             $().uxmessage("error", data.responseText, false);
+            status_set_waiting(false);
             app_run_btn.stop();
           },
           complete: function (data) {
-            // console.log("complete run")
+            // the whole job is queued by the time this answers, so either it
+            // is running or it never will be. A job short enough to have
+            // finished in between also ends the wait here.
+            status_set_waiting(false);
           },
         });
       },
       error: function (data) {
         $().uxmessage("error", "/load error.");
         $().uxmessage("error", data.responseText, false);
+        status_set_waiting(false);
         app_run_btn.stop();
       },
       complete: function (data) {
-        status_cache.ready = undefined; // allow ready update
         // console.log("complete load")
       },
     });

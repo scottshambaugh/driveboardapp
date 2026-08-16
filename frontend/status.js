@@ -153,6 +153,23 @@ function status_check_new(data1, data2) {
   return flag;
 }
 
+// True from hitting run until the machine picks the job up. The job is saved,
+// checked and queued first, which on a big one takes a while, and the head
+// does not move for any of it.
+var job_waiting = false;
+
+function status_set_waiting(waiting) {
+  job_waiting = waiting;
+  if (waiting) {
+    app_run_btn.start();
+    app_run_btn.setProgress(0);
+    $("#run_btn span.ladda-label").html("Waiting");
+  } else {
+    $("#run_btn span.ladda-label").html("Run");
+  }
+  status_set_refresh(); // waiting polls at the busy rate, to catch the start
+}
+
 function status_set_main_button(status) {
   if (!status.server) {
     // disconnected
@@ -188,8 +205,9 @@ function status_set_refresh() {
   status_every = status_every_default; // focused and busy
   if (app_visibility) {
     // app focused
-    if (!status_cache.serial || status_cache.ready) {
-      // focused and ready -> idle
+    if (!status_cache.serial || (status_cache.ready && !job_waiting)) {
+      // focused and ready -> idle. A job on its way to the machine is not
+      // idle, and polling slowly there would sit on "waiting" after it started
       status_every = 4000;
     }
   } else {
@@ -246,6 +264,11 @@ var status_handlers = {
   ready: function (status) {
     // hardware sends this when idle but not in a "stop mode" (e.g. error)
     if (status.ready) {
+      if (job_waiting) {
+        // the job is still on its way to the machine, so idle here means it
+        // has not started yet rather than that it is over
+        return;
+      }
       app_run_btn.stop();
       $("#boundary_btn").removeClass("disabled");
       $("#boundary_btn").prop("disabled", false); // required
@@ -258,6 +281,7 @@ var status_handlers = {
       $("#motion_btn").removeClass("disabled");
       $("#jog_btn").removeClass("disabled");
     } else {
+      status_set_waiting(false); // the machine has the job, it is running now
       app_run_btn.start();
       $("#boundary_btn").addClass("disabled");
       $("#pulse_btn").addClass("disabled");
@@ -344,6 +368,10 @@ var status_handlers = {
     }
   },
   progress: function (status) {
+    if (job_waiting) {
+      // whatever the last job left behind is not this job's progress
+      return;
+    }
     app_run_btn.setProgress(status.progress);
   },
   remaining: function (status) {
