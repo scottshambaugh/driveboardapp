@@ -1,7 +1,14 @@
 import re
 
-re_findall_floats = re.compile(r"(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)").findall
-re_scalar_unit = re.compile(r"(-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)([a-z]*)").findall
+# The number grammar svg uses, see the BNF in the spec's "Basic Data Types".
+# A sign may be either, the decimal point may lead or trail the digits, and an
+# exponent takes either case of e and a sign of its own. Writers that shorten
+# their output lean on all of it, so a pattern that only reads 1.0 style
+# numbers silently misreads their coordinates.
+NUMBER = r"[+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?"
+
+re_findall_floats = re.compile(NUMBER).findall
+re_scalar_unit = re.compile(rf"({NUMBER})([a-z]*)").findall
 
 
 def parseFloats(float_strings):

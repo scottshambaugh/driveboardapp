@@ -4,7 +4,7 @@ import logging
 import math
 import re
 
-from .utilities import matrixMult, parseFloats
+from .utilities import NUMBER, matrixMult, parseFloats
 from .webcolors import css3_names_to_hex, normalize_hex, rgb_to_hex
 
 log = logging.getLogger("svg_reader")
@@ -49,12 +49,8 @@ class SVGAttributeReader:
         }
 
         self.re_findall_transforms = re.compile(r"(([a-z]+)\s*\(([^)]*)\))", re.IGNORECASE).findall
-        self.re_findall_pathelems = re.compile(
-            r"([A-Za-z]|-?[0-9]+\.?[0-9]*(?:e-?[0-9]*)?)"
-        ).findall
-        self.re_findall_unitparts = re.compile(
-            r"(-?[0-9]*\.?[0-9]*(?:e-?[0-9]+)?)(cm|mm|pt|pc|in|%|em|ex)?"
-        ).findall
+        self.re_findall_pathelems = re.compile(rf"([A-Za-z]|{NUMBER})").findall
+        self.re_findall_unitparts = re.compile(rf"({NUMBER})(cm|mm|pt|pc|in|%|em|ex)?").findall
         self.re_match_painturl = re.compile(r"url\(\s*['\"]?#([^)'\"\s]+)['\"]?\s*\)").match
 
     def read_attrib(self, node, attr, value):
@@ -125,7 +121,8 @@ class SVGAttributeReader:
             # translate
             if xformKind == "translate":
                 if len(params) == 1:
-                    xforms.append([1, 0, 0, 1, params[0], params[0]])
+                    # a translate with no y does not move in y
+                    xforms.append([1, 0, 0, 1, params[0], 0])
                 elif len(params) == 2:
                     xforms.append([1, 0, 0, 1, params[0], params[1]])
                 else:

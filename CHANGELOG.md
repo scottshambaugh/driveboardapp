@@ -7,6 +7,7 @@
 - Exact paths with the same color and raster copies exactly overlaying itself are now deduplicated on import, to avoid surprise double-engraving
 
 ### Bug Fixes
+- Fixed SVG `transform="translate(x)"` also moving the content down by x
 - Requests are now served concurrently, so a slow one no longer holds up the rest
 - The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns

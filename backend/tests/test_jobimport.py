@@ -172,6 +172,10 @@ def _pixels(img):
     "transform,pos,size,pixels",
     [
         ("", [10.0, 20.0], [40.0, 20.0], [(R, G), (B, K)]),
+        # a translate with no y given moves in x only, and y only moves with
+        # the second parameter, which is the only way svg can ask for it
+        ("translate(30)", [40.0, 20.0], [40.0, 20.0], [(R, G), (B, K)]),
+        ("translate(0,30)", [10.0, 50.0], [40.0, 20.0], [(R, G), (B, K)]),
         ("scale(2,3)", [20.0, 60.0], [80.0, 60.0], [(R, G), (B, K)]),
         # a quarter turn lands the 40x20 image as a 20x40 one
         ("translate(60,0) rotate(90)", [20.0, 10.0], [20.0, 40.0], [(B, R), (K, G)]),
@@ -182,7 +186,17 @@ def _pixels(img):
         ("translate(100,0) scale(-1,1)", [50.0, 20.0], [40.0, 20.0], [(G, R), (K, B)]),
         ("translate(0,100) scale(1,-1)", [10.0, 60.0], [40.0, 20.0], [(B, K), (R, G)]),
     ],
-    ids=["upright", "scaled", "cw", "ccw", "half-turn", "mirror-h", "mirror-v"],
+    ids=[
+        "upright",
+        "translate-x",
+        "translate-y",
+        "scaled",
+        "cw",
+        "ccw",
+        "half-turn",
+        "mirror-h",
+        "mirror-v",
+    ],
 )
 def test_raster_axis_aligned_placement(transform, pos, size, pixels):
     """Upright, quarter-turned and mirrored images keep their exact pixels and
@@ -951,6 +965,77 @@ def test_dedupe_keeps_a_raster_placed_differently(pos, size):
     jobimport.dedupe_job(job)
     assert len(job["defs"]) == 2
     assert len(job["items"]) == 2
+
+
+def _svg_body(body):
+    """A 100x100mm document, one user unit to the mm, holding `body`."""
+    return (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" '
+        f'viewBox="0 0 100 100">{body}</svg>'
+    )
+
+
+def _points(job):
+    """Every path coordinate in the job, in order, flat so approx can read it."""
+    return [
+        v for d in job["defs"] if d["kind"] == "path" for seg in d["data"] for p in seg for v in p
+    ]
+
+
+@pytest.mark.parametrize(
+    "d",
+    [
+        "M 10 20 L 30 20",  # the long way round, for reference
+        "M.1e2.2e2L.3e2.2e2",  # exponents, and no leading digit anywhere
+        "M 1e1 2e1 L 3e1 2e1",
+        "M 1E1 2E1 L 3E1 2E1",  # an upper case exponent
+        "M 1e+1 2e+1 L 3e+1 2e+1",  # a signed exponent
+        "M 10. 20. L 30. 20.",  # a trailing decimal point
+    ],
+)
+def test_path_data_reads_the_whole_number_grammar(d):
+    """Every spelling of the same two points has to land in the same place.
+    Editors that shorten their output write all of these."""
+    job = jobimport.convert(
+        _svg_body(f'<path d="{d}" fill="none" stroke="#ff0000"/>'), optimize=False
+    )
+    assert _points(job) == pytest.approx([10.0, 20.0, 30.0, 20.0])
+
+
+@pytest.mark.parametrize(
+    "transform",
+    ["translate(20,0)", "translate(2e1,0)", "translate(2E1,0)", "translate(2e+1,0)"],
+)
+def test_transform_numbers_read_the_whole_grammar(transform):
+    body = f'<g transform="{transform}"><path d="M 0 20 L 10 20" fill="none" stroke="#ff0000"/></g>'
+    job = jobimport.convert(_svg_body(body), optimize=False)
+    assert _points(job) == pytest.approx([20.0, 20.0, 30.0, 20.0])
+
+
+def test_dimensions_read_a_number_with_no_leading_digit():
+    body = '<rect x=".5" y=".5" width="10" height="10" fill="none" stroke="#ff0000"/>'
+    job = jobimport.convert(_svg_body(body), optimize=False)
+    xs = _points(job)[0::2]
+    ys = _points(job)[1::2]
+    assert (min(xs), min(ys)) == pytest.approx((0.5, 0.5))
+
+
+def test_a_translate_with_no_y_moves_in_x_only():
+    """A group copied sideways, as Inkscape writes it, has to land beside the
+    original rather than diagonally on top of another copy."""
+    rect = '<rect x="10" y="10" width="20" height="20" fill="none" stroke="#ff0000"/>'
+    svg = (
+        '<?xml version="1.0"?>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" '
+        'viewBox="0 0 100 100">'
+        f'<g>{rect}</g><g transform="translate(50)">{rect}</g></svg>'
+    )
+    job = jobimport.convert(svg, optimize=False)
+    segments = [seg for d in job["defs"] if d["kind"] == "path" for seg in d["data"]]
+    assert len(segments) == 2
+    corners = sorted((min(p[0] for p in s), min(p[1] for p in s)) for s in segments)
+    assert corners == pytest.approx([(10.0, 10.0), (60.0, 10.0)])
 
 
 def test_dedupe_drops_a_stacked_copy_from_an_svg():

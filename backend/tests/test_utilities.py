@@ -15,6 +15,30 @@ def test_parse_floats_empty():
     assert utilities.parseFloats("nonumbers") == []
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        (".5,.5", [0.5, 0.5]),  # a decimal point with no leading digit
+        ("-.5 -.5", [-0.5, -0.5]),
+        ("5.,3", [5.0, 3.0]),  # and with no trailing digit
+        ("+10,+20", [10.0, 20.0]),  # an explicit plus
+        ("1e2,3", [100.0, 3.0]),  # exponents in either case, signed or not
+        ("1E2,3", [100.0, 3.0]),
+        ("1e+2,3", [100.0, 3.0]),
+        ("1E-2,3", [0.01, 3.0]),
+        ("10-5", [10.0, -5.0]),  # a sign standing in for a separator
+    ],
+)
+def test_parse_floats_reads_the_whole_svg_number_grammar(text, expected):
+    """Writers that shorten their output use every corner of the grammar, and
+    a number read short is a coordinate in the wrong place."""
+    assert utilities.parseFloats(text) == expected
+
+
+def test_parse_scalar_without_leading_digit():
+    assert utilities.parseScalar(".5in") == (0.5, "in")
+
+
 def test_parse_scalar_with_unit():
     assert utilities.parseScalar("12mm") == (12.0, "mm")
     assert utilities.parseScalar("3.5in") == (3.5, "in")
