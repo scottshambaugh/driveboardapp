@@ -1416,7 +1416,12 @@ def jobfile(filepath):
 
 
 def job(jobdict):
+    from jobimport import resolve_image_data
+
     job_stop_guard()
+    # placements of one picture share its payload on disk, dispatch reads each
+    # def's own data
+    resolve_image_data(jobdict)
     if "head" in jobdict:
         if "kind" in jobdict["head"] and jobdict["head"]["kind"] == "mill":
             job_mill(jobdict)
@@ -2741,13 +2746,9 @@ def job_preview(jobdict):
     pixel data at all is read as engraving its whole extent. Purely
     computational, safe without a machine connection.
     """
-    from jobimport import pathoptimizer
+    from jobimport import pathoptimizer, resolve_image_data
 
-    defs = jobdict.get("defs") or []
-    for def_ in defs:
-        shared = def_.get("data_of")
-        if shared is not None and 0 <= shared < len(defs):
-            def_["data"] = defs[shared].get("data")
+    resolve_image_data(jobdict)
 
     def clamp(p, rect):
         return [min(max(p[0], rect[0]), rect[2]), min(max(p[1], rect[1]), rect[3])]

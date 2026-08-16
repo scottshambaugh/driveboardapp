@@ -6,6 +6,7 @@ is covered without any hardware.
 """
 
 import base64
+import copy
 import glob
 import io
 import json
@@ -943,3 +944,58 @@ def test_clipped_source_ships_downscaled_but_def_data_stays_full_size():
     assert list(job["sources"]) == [full["source"]]
     source = job["sources"][full["source"]]
     assert _decode_uri(source).size == (256, 128)
+
+
+def test_share_image_data_points_repeats_at_the_first_copy():
+    job = {
+        "defs": [
+            {"kind": "image", "pos": [0, 0], "size": [1, 1], "data": "AAA"},
+            {"kind": "path", "data": [[[0, 0]]]},
+            {"kind": "image", "pos": [2, 0], "size": [1, 1], "data": "AAA"},
+            {"kind": "image", "pos": [4, 0], "size": [1, 1], "data": "BBB"},
+            {"kind": "image", "pos": [6, 0], "size": [1, 1], "data": "AAA"},
+        ]
+    }
+    jobimport.share_image_data(job)
+    assert job["defs"][0]["data"] == "AAA"
+    assert "data" not in job["defs"][2] and job["defs"][2]["data_of"] == 0
+    assert job["defs"][3]["data"] == "BBB"  # a different picture keeps its own
+    assert job["defs"][4]["data_of"] == 0
+    assert job["defs"][1]["data"] == [[[0, 0]]]  # paths untouched
+
+
+def test_resolve_image_data_undoes_sharing():
+    job = {
+        "defs": [
+            {"kind": "image", "data": "AAA"},
+            {"kind": "image", "data_of": 0},
+            {"kind": "image", "data_of": 0},
+        ]
+    }
+    jobimport.resolve_image_data(job)
+    assert [d["data"] for d in job["defs"]] == ["AAA", "AAA", "AAA"]
+    assert not any("data_of" in d for d in job["defs"])
+
+
+def test_sharing_round_trips_through_json():
+    job = {
+        "defs": [
+            {"kind": "image", "pos": [0, 0], "size": [1, 1], "data": "AAA"},
+            {"kind": "image", "pos": [2, 0], "size": [1, 1], "data": "AAA"},
+        ]
+    }
+    shared = json.dumps(jobimport.share_image_data(copy.deepcopy(job)))
+    assert len(shared) < len(json.dumps(job))
+    assert jobimport.resolve_image_data(json.loads(shared))["defs"] == job["defs"]
+
+
+def test_resolve_image_data_drops_a_reference_that_leads_nowhere():
+    job = {"defs": [{"kind": "image", "data_of": 7}, {"kind": "image", "data_of": "x"}]}
+    jobimport.resolve_image_data(job)
+    assert not any("data_of" in d for d in job["defs"])
+    assert not any("data" in d for d in job["defs"])
+
+
+def test_a_job_stored_without_sharing_still_loads():
+    job = {"defs": [{"kind": "image", "data": "AAA"}, {"kind": "image", "data": "AAA"}]}
+    assert jobimport.resolve_image_data(copy.deepcopy(job))["defs"] == job["defs"]

@@ -30,6 +30,9 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
             job = job.decode("utf-8")
         if type(job) is str:
             job = json.loads(job)
+        # a stored job may share one payload between defs, everything from
+        # here on expects each to carry its own
+        resolve_image_data(job)
         if optimize:
             optimize_job(job, tolerance)
     elif type_ == "svg":
@@ -59,6 +62,46 @@ def convert(job, optimize=True, tolerance=conf["tolerance"], matrix=None):
         if data not in previews:
             previews[data] = preview_image_data(data)
         job["sources"][key] = previews[data]
+    return job
+
+
+def share_image_data(job):
+    """Collapse repeated image payloads to a reference to the def that first
+    carries them, in place. Undone by resolve_image_data.
+
+    A job that places one picture many times otherwise writes that picture out
+    once per placement, so a sheet of copies is nearly all duplicate payload,
+    and pays for it again on every save, every load, and every run.
+    """
+    seen = {}
+    for i, def_ in enumerate(job.get("defs") or []):
+        if def_.get("kind") != "image":
+            continue
+        data = def_.get("data")
+        if data is None:
+            continue
+        first = seen.get(data)
+        if first is None:
+            seen[data] = i
+        else:
+            del def_["data"]
+            def_["data_of"] = first
+    return job
+
+
+def resolve_image_data(job):
+    """Give every image def its own pixel data back, in place, undoing
+    share_image_data. A job stored before defs could share has none to undo,
+    and a reference that leads nowhere is dropped rather than trusted."""
+    defs = job.get("defs") or []
+    for def_ in defs:
+        shared = def_.pop("data_of", None)
+        if shared is None:
+            continue
+        if isinstance(shared, int) and 0 <= shared < len(defs):
+            data = defs[shared].get("data")
+            if data is not None:
+                def_["data"] = data
     return job
 
 

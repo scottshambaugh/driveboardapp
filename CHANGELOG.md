@@ -3,12 +3,14 @@
 ## Unreleased
 ### New Features
 - Instead of the total duration, a running job now shows the time left for the pass, and for the whole job
+- dba files with repeated raster data now only hold one copy of that data, for reduced filesize and faster run init
 
 ### Bug Fixes
 - The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns
 - Raster lines no longer command z
 - Raster scanlines now advance y during the lead-out instead of as a standalone hop between scanlines, to avoid y acceleration jumps
+- Running a job no longer re-optimizes and re-encodes it on the way to the queue, which could leave it waiting on an import that was still finishing
 
 ## v26.08.1 (August 2026)
 ### New Features

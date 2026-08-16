@@ -126,6 +126,19 @@ jobhandler = {
       this.defs = job.defs;
       this.items = job.items;
 
+      // a stored job may point placements of one picture at the def that
+      // carries it, everything from here on wants each def to have its own
+      for (var i = 0; i < this.defs.length; i++) {
+        var shared = this.defs[i].data_of;
+        if (shared === undefined) {
+          continue;
+        }
+        delete this.defs[i].data_of;
+        if (this.defs[shared] && this.defs[shared].data !== undefined) {
+          this.defs[i].data = this.defs[shared].data;
+        }
+      }
+
       // group identical images while data is still base64
       this.groupIdenticalImages();
 
@@ -215,17 +228,26 @@ jobhandler = {
   // getters //////////////////////////////////
 
   get: function () {
-    // convert images back to base64
+    // convert images back to base64. Placements of one picture point at the
+    // def that carries it rather than repeating it, so a sheet of copies
+    // stays the size of the pictures in it
     var defs_out = [];
+    var data_seen = {};
     for (var i = 0; i < this.defs.length; i++) {
       var def = this.defs[i];
       if (def.kind == "image") {
+        var src = def.data.src;
         var def_out = {
           kind: "image",
           pos: def.pos,
           size: def.size,
-          data: def.data.src,
         };
+        if (src in data_seen) {
+          def_out.data_of = data_seen[src];
+        } else {
+          data_seen[src] = i;
+          def_out.data = src;
+        }
         if (def.source) {
           def_out.source = def.source;
         }
