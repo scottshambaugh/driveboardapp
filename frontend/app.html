@@ -103,7 +103,9 @@
         </form>
 
         <!-- open and align button -->
-        <div id="open_align_container" class="btn-group pull-left menu_btn">
+        <!-- shown only once the config says an alignment host is set, so it
+             starts hidden rather than flashing up until that config arrives -->
+        <div id="open_align_container" class="btn-group pull-left menu_btn" style="display:none">
             <button id="open_align_btn" class="btn btn-default" type="submit"
                     title="open with alignment" data-loading-text='<span class="glyphicon glyphicon-refresh spinning"></span>'>Open &amp; Align</button>
         </div>

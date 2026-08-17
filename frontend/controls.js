@@ -141,6 +141,7 @@ function controls_ready() {
   });
 
   if (app_config_main.alignment_host) {
+    $("#open_align_container").show();
     $("#open_align_btn").tooltip({
       placement: "bottom",
       delay: { show: 1000, hide: 100 },
