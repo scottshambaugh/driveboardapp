@@ -2,14 +2,15 @@
 
 The original codebase at [nortd/driveboardapp](https://github.com/nortd/driveboardapp) is no longer maintained. Here are some of the highlights in this fork, see [this thread](https://groups.google.com/g/lasersaur/c/n54LNN86H-c), [this blog post](https://theshamblog.com/software-mods-to-the-lasersaur/), or the [changelog](./CHANGELOG.md) for more info:
 * Upgrade from Python 2 to Python 3
-* Rastering completely rewritten: skips over large whitespace for speed, option for inverting, can select number of gray levels (set to 2-3 for dithering, max of 128), faster pathing Bidirectional option
+* Rastering completely rewritten: skips over large whitespace for speed, option for inverting, can select number of gray levels (set to 2-3 for dithering, max of 128)
 * Rastering supports svg-embedded PNG, JPEG, GIF, BMP, WebP, ICO, TIFF, PPM, PCX, TGA, JPEG 2000, AVIF
 * Added a 'pulse' functionality for the laser (all safety interlocks still work)
+* Faster pathing algorithms, and new faster Bidirectional and NearestNeighbor fill modes for rasters and fills
 * SVG text and area fills are imported as paths
-* Fills of the same color are nested to make holes in fill areas, and faster NearestNeighbor fill algorithm
+* Fills of the same color are nested to make holes in fill areas, to support text
 * The UI has new modals for saving and loading material preset laser settings, editing the configuration, jogging in smaller 1mm increments, and many tweaks for showing the head coordinates and setting offsets
 * Option for the head to auto-home when the machine is booted
-* Many small bugfixes
+* Many small bugfixes and safety improvements
 * Added an automated test suite (Python behavior, firmware compilation + behavior in a simulator, and a frontend smoke check) that runs in GitHub Actions
 * Tested on Windows and Linux
 
