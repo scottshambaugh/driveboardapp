@@ -4,6 +4,7 @@
 ### New Features
 - Instead of the total duration, a running job now shows the time left for the pass, and for the whole job
 - The run button now reads "Waiting" from hitting run until the machine picks the job up
+- Frontend tests, run by pytest and in CI, covering the status state machine and the job model
 - dba files with repeated raster data now only hold one copy of that data, for reduced filesize and faster run init
 - Exact paths with the same color and raster copies exactly overlaying itself are now deduplicated on import, to avoid surprise double-engraving
 - SVG `preserveAspectRatio` is now supported, for the page, nested `svg` viewports, images and pattern tiles

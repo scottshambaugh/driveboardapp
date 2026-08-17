@@ -15,8 +15,8 @@ beauty bugs
 
 testing
 -------
-- the frontend has no tests beyond "the file serves". Stop, pause and the run
-  state machine live in js, and the backend safety suite cannot see any of it
+- frontend tests cover status.js and jobhandler.js. controls.js, passes.js,
+  tools.js and jobview.js are still only covered by "the file parses"
 
 
 optimizations

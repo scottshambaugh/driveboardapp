@@ -89,7 +89,7 @@ jobs:
           backend/tests/test_firmware_safety.py
 
   frontend:
-    name: Frontend JS syntax check
+    name: Frontend JS checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -105,3 +105,5 @@ jobs:
           for f in "${files[@]}"; do
             node --check "$f"
           done
+      - name: Frontend test suite
+        run: node --test "frontend/tests/*.test.js"

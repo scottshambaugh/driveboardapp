@@ -288,7 +288,7 @@ jobhandler = {
   },
 
   getAllColors: function () {
-    colors = [];
+    var colors = [];
     this.loopItems(function (item, i) {
       if ("color" in item) {
         colors.push(item.color);
