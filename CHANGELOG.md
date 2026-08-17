@@ -1,14 +1,13 @@
 # DriveboardApp Changelog
 
 ## Unreleased
+
+## v26.08.1 (August 17, 2026)
 ### New Features
 - Instead of the total duration, a running job now shows the time left for the pass, and for the whole job
-- The run button now reads "Waiting" from hitting run until the machine picks the job up
-- Frontend tests, run by pytest and in CI, covering the status state machine and the job model
 - dba files with repeated raster data now only hold one copy of that data, for reduced filesize and faster run init
 - Exact paths with the same color and raster copies exactly overlaying itself are now deduplicated on import, to avoid surprise double-engraving
-- SVG `preserveAspectRatio` is now supported, for the page, nested `svg` viewports, images and pattern tiles
-- Nested SVG viewports are now drawn instead of dropped
+- SVG viewparts and `preserveAspectRatio` tags are now supported
 
 ### Bug Fixes
 - Fixed SVG `transform="translate(x)"` also moving the content down by x
@@ -18,12 +17,12 @@
 - The job duration estimate is now more accurate, and takes into account acceleration ramps and the actual seeking and pathing
 - SVG import now supports Inkscape cloned objects and patterns
 - Raster lines no longer command z
-- Raster scanlines now advance y during the lead-out instead of as a standalone hop between scanlines, to avoid y acceleration jumps
+- Raster scanlines now smoothly advance y during the lead-out, to avoid sharp y acceleration jumps for each scanline
 - Running a job no longer re-optimizes and re-encodes it on the way to the queue, which could leave it waiting on an import that was still finishing
 
 ### Safety
-- The stop button is no longer blocked during initial dispatch, and fix a race condition where the job could have resumed after. The pause command was similarly fixed
-- Jogs and other manual moves are now refused while a job is running, and block duplicate job submissions
+- The stop button is no longer blocked during initial dispatch, and fixed a race condition where the job could have resumed after. The pause command was similarly fixed
+- Jogs and other manual moves are now refused while a job is running, and duplicate job submissions are blocked
 - Fixed several latent race conditions and concurrency issues
 
 ## v26.08.1 (August 7, 2026)
