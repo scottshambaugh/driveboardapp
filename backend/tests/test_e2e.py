@@ -151,7 +151,8 @@ def test_clipped_raster_engraves_only_the_cropped_region(loop):
         'xmlns:xlink="http://www.w3.org/1999/xlink" '
         'width="100mm" height="100mm" viewBox="0 0 100 100">'
         '<defs><clipPath id="c"><rect x="10" y="20" width="20" height="10"/></clipPath></defs>'
-        f'<image x="10" y="20" width="40" height="20" clip-path="url(#c)" xlink:href="{uri}"/>'
+        f'<image x="10" y="20" width="40" height="20" preserveAspectRatio="none" '
+        f'clip-path="url(#c)" xlink:href="{uri}"/>'
         "</svg>"
     )
 
