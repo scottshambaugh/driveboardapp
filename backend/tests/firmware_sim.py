@@ -3,6 +3,9 @@
 Used by test_simavr.py (boot/protocol) and test_firmware_safety.py (interlocks,
 limits, stop/watchdog). Everything self-skips unless avr-gcc and libsimavr-dev
 are present, and the firmware ELF + harness binary are built once per session.
+
+Set DRIVEBOARD_REQUIRE_FIRMWARE where the toolchain is installed on purpose,
+and a missing one fails instead of skipping.
 """
 
 import functools
@@ -31,6 +34,24 @@ AVR_FLAGS = [
 
 AVR_GCC = shutil.which("avr-gcc")
 CC = shutil.which("cc") or shutil.which("gcc")
+
+# CI's firmware job installs the toolchain on purpose, so a skip there means
+# the install broke rather than that the machine cannot build firmware. With
+# this set the skips become failures, so that job cannot go green having run
+# none of the firmware safety suite.
+REQUIRE = bool(os.environ.get("DRIVEBOARD_REQUIRE_FIRMWARE"))
+
+
+def unavailable(reason):
+    """Skip for want of the toolchain, or fail where it was meant to be there."""
+    if REQUIRE:
+        pytest.fail(
+            f"{reason} (DRIVEBOARD_REQUIRE_FIRMWARE is set, so this is a broken "
+            "environment rather than a machine that cannot run these tests)",
+            pytrace=False,
+        )
+    pytest.skip(reason)
+
 
 # Firmware protocol/sense constants (mirrors firmware/src/protocol.h + config).
 INFO_HELLO = 0x7E
@@ -108,8 +129,10 @@ def available():
     return AVR_GCC is not None and CC is not None and SIMAVR_INC is not None
 
 
+# where the toolchain is required, the tests run and report what is missing
+# through unavailable() below, rather than quietly dropping out here
 skip_unless_available = pytest.mark.skipif(
-    not available(), reason="requires avr-gcc and libsimavr-dev"
+    not available() and not REQUIRE, reason="requires avr-gcc and libsimavr-dev"
 )
 
 
@@ -121,6 +144,8 @@ def _build_dir():
 @functools.cache
 def firmware_elf(variant="config.driveboardusb.h"):
     """Compile + link a firmware variant to an ELF (cached per session)."""
+    if AVR_GCC is None:
+        unavailable("avr-gcc is not installed")
     build = os.path.join(_build_dir(), "fw_" + variant)
     shutil.copytree(SRC_DIR, build)
     shutil.copy(os.path.join(build, variant), os.path.join(build, "config.h"))
@@ -148,6 +173,8 @@ def firmware_elf(variant="config.driveboardusb.h"):
 @functools.cache
 def harness():
     """Compile the simavr harness (cached per session), or skip if it won't link."""
+    if CC is None or SIMAVR_INC is None:
+        unavailable("libsimavr-dev or a host compiler is not installed")
     out = os.path.join(_build_dir(), "simavr_runner")
     last = ""
     for extra in (["-lelf"], []):
@@ -159,7 +186,7 @@ def harness():
         if r.returncode == 0:
             return out
         last = r.stderr
-    pytest.skip(f"could not link against libsimavr: {last.strip()[:300]}")
+    unavailable(f"could not link against libsimavr: {last.strip()[:300]}")
 
 
 def double(cmd_bytes):

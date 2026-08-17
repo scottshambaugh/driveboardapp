@@ -39,6 +39,19 @@ filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 
+[tool.coverage.run]
+source = ["backend"]
+omit = [
+    "*/tests/*",
+    # vendored, not ours to cover
+    "*/jobimport/png.py",
+    "*/jobimport/webcolors.py",
+    "*/jobimport/dxfgrabber/*",
+]
+
+[tool.coverage.report]
+skip_empty = true
+
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]
 

@@ -44,7 +44,10 @@ jobs:
       # avr-gcc / simavr are absent here, so the firmware + simavr tests
       # self-skip; this job covers all Python behavior on every OS.
       - name: Run tests
-        run: uv run pytest backend/tests -v
+        run: uv run coverage run -m pytest backend/tests -v
+      - name: Coverage report
+        if: always()
+        run: uv run coverage report
 
   coverage:
     name: Safety coverage report
@@ -60,7 +63,7 @@ jobs:
         run: uv sync --dev
       - name: Coverage for the driveboard safety driver
         run: |
-          uv run coverage run --source=backend -m pytest backend/tests -q
+          uv run coverage run -m pytest backend/tests -q
           uv run coverage report -m --include="*/driveboard.py"
 
   firmware:
@@ -70,6 +73,11 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       UV_PYTHON: "3.12"
+      # the toolchain is installed below on purpose, so a test that cannot find
+      # it is a broken job rather than a machine that cannot run these, and it
+      # fails instead of skipping. Without this the job could go green having
+      # run none of the firmware safety suite.
+      DRIVEBOARD_REQUIRE_FIRMWARE: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install AVR toolchain + simavr

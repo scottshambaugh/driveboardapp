@@ -14,6 +14,7 @@ import re
 import shutil
 import subprocess
 
+import firmware_sim as fw
 import pytest
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -55,7 +56,7 @@ def _avr_gcc_version():
 
 AVR_GCC_VERSION = _avr_gcc_version()
 
-pytestmark = pytest.mark.skipif(AVR_GCC is None, reason="avr-gcc not installed")
+pytestmark = pytest.mark.skipif(AVR_GCC is None and not fw.REQUIRE, reason="avr-gcc not installed")
 
 
 def _config_variants():
@@ -69,6 +70,8 @@ def _designator(config_file):
 
 def _build_main_elf(build_dir, config_file):
     """Compile + link a variant in build_dir, returning the main.elf path."""
+    if AVR_GCC is None:
+        fw.unavailable("avr-gcc is not installed")
     shutil.copytree(SRC_DIR, build_dir)
     # Activate this hardware variant as config.h.
     shutil.copy(build_dir / config_file, build_dir / "config.h")
@@ -139,7 +142,7 @@ def test_firmware_variant_compiles(config_file, tmp_path):
     _build_main_elf(tmp_path / "src", config_file)
 
 
-@pytest.mark.skipif(AVR_OBJCOPY is None, reason="avr-objcopy not installed")
+@pytest.mark.skipif(AVR_OBJCOPY is None and not fw.REQUIRE, reason="avr-objcopy not installed")
 @pytest.mark.parametrize("config_file", _config_variants())
 def test_firmware_variant_matches_committed_hex(config_file, tmp_path):
     """A fresh build of the source must reproduce the committed .hex.
@@ -152,6 +155,8 @@ def test_firmware_variant_matches_committed_hex(config_file, tmp_path):
     committed = os.path.join(FIRMWARE_DIR, f"firmware.{_designator(config_file)}.hex")
     assert os.path.exists(committed), f"no committed hex for {config_file}: {committed}"
 
+    if AVR_OBJCOPY is None:
+        fw.unavailable("avr-objcopy is not installed")
     elf = _build_main_elf(tmp_path / "src", config_file)
     fresh = tmp_path / "fresh.hex"
     result = subprocess.run(
